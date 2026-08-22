@@ -4,6 +4,7 @@ import {
   childrenOf,
   filterByProject,
   hideChildrenOfVisibleParents,
+  nextThreadAfterParking,
   parentOf,
   partitionPinned,
   searchThreadsByTitle,
@@ -152,6 +153,20 @@ describe("filtering", () => {
     ]);
     expect(pinned.map((t) => t.id)).toEqual(["b"]);
     expect(inbox.map((t) => t.id)).toEqual(["a", "c"]);
+  });
+});
+
+describe("nextThreadAfterParking", () => {
+  const threads = [{ id: "first" }, { id: "middle" }, { id: "last" }];
+
+  it("prefers the next row and falls back to the previous row", () => {
+    expect(nextThreadAfterParking(threads, "middle")?.id).toBe("last");
+    expect(nextThreadAfterParking(threads, "last")?.id).toBe("middle");
+  });
+
+  it("returns the first row for an unknown id and null for an empty list", () => {
+    expect(nextThreadAfterParking(threads, "missing")?.id).toBe("first");
+    expect(nextThreadAfterParking([], "missing")).toBeNull();
   });
 });
 

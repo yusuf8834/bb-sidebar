@@ -18,6 +18,12 @@ afterEach(async () => {
 async function loadPlugin() {
   const { bb, harness } = createFakePluginHost({
     pluginId: "t3chat-sidebar",
+    sdk: {
+      threads: {
+        unpin: async ({ threadId }) =>
+          makeThreadResponse({ id: threadId }),
+      },
+    },
   });
   await plugin(bb);
   disposers.push(() => harness.lifecycle.dispose());
@@ -42,6 +48,9 @@ describe("lifecycle RPC", () => {
     const harness = await loadPlugin();
 
     await harness.behavior.callRpc("settle", { threadId: "thr_1" });
+    expect(harness.inspection.sdk.callsTo("threads.unpin")).toEqual([
+      [{ threadId: "thr_1" }],
+    ]);
     const settled = (await harness.behavior.callRpc(
       "listLifecycle",
       {},
@@ -92,6 +101,28 @@ describe("lifecycle RPC", () => {
       thread: makeThreadResponse({ id: "thr_1" }),
     });
 
+    await expect(
+      harness.behavior.callRpc("listLifecycle", {}),
+    ).resolves.toEqual({ rows: [] });
+  });
+
+  it("does not settle when native unpinning fails", async () => {
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "t3chat-sidebar",
+      sdk: {
+        threads: {
+          unpin: async () => {
+            throw new Error("pin update failed");
+          },
+        },
+      },
+    });
+    await plugin(bb);
+    disposers.push(() => harness.lifecycle.dispose());
+
+    await expect(
+      harness.behavior.callRpc("settle", { threadId: "thr_1" }),
+    ).rejects.toThrow("pin update failed");
     await expect(
       harness.behavior.callRpc("listLifecycle", {}),
     ).resolves.toEqual({ rows: [] });

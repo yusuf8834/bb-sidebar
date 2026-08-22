@@ -114,6 +114,10 @@ export default function plugin(bb: BbPluginApi) {
       return { rows: readAll() };
     },
     async settle({ threadId }) {
+      // Native pinning and this plugin's settled shelf are competing ways to
+      // keep a thread out of the ordinary inbox. Settling wins, and a failed
+      // unpin leaves the lifecycle row untouched instead of half-applying it.
+      await bb.sdk.threads.unpin({ threadId });
       // Settling clears any snooze: they are two answers to the same
       // question, and holding both would make the shelf order ambiguous.
       write({

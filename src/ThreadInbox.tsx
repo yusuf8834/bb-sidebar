@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  experimental_useSidebarThreadActions as useSidebarThreadActions,
   experimental_useSidebarThreads as useSidebarThreads,
   type PluginSidebarThread,
   type PluginThreadListProps,
@@ -22,6 +23,7 @@ import { TRAILING_GLYPH_BOX_CLASS } from "./StatusSlot";
 import {
   filterByProject,
   hideChildrenOfVisibleParents,
+  nextThreadAfterParking,
   partitionPinned,
   searchThreadsByTitle,
   sortByCreatedAtDescending,
@@ -48,8 +50,11 @@ export function ThreadInbox({
   searchQuery,
 }: PluginThreadListProps) {
   const { status, threads, projects } = useSidebarThreads();
+  const actions = useSidebarThreadActions();
   const { values: settings } = useSettings();
   const lifecycle = useLifecycle(threads);
+  const activeThreadIdRef = useRef(activeThreadId);
+  activeThreadIdRef.current = activeThreadId;
   const configuredSnoozePresets =
     typeof settings?.snoozePresets === "string"
       ? settings.snoozePresets
@@ -125,6 +130,28 @@ export function ThreadInbox({
       ? "All projects"
       : (projectNameById.get(scope) ?? "All projects");
 
+  const parkActiveThread = async (
+    thread: PluginSidebarThread,
+    mutation: () => Promise<boolean>,
+  ) => {
+    const parked = await mutation();
+    if (!parked || activeThreadIdRef.current !== thread.id) return;
+
+    const nextThread = nextThreadAfterParking(
+      [...pinned, ...inbox],
+      thread.id,
+    );
+    if (nextThread) {
+      actions.open(nextThread.id);
+    } else {
+      actions.openNewThread({
+        projectId: thread.projectId,
+        focusPrompt: true,
+      });
+    }
+    onNavigate();
+  };
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* The one control the host has no equivalent for. Everything else in
@@ -195,8 +222,16 @@ export function ThreadInbox({
                     canPark={lifecycle.canPark(thread)}
                     snoozePresets={snoozePresets}
                     onNavigate={onNavigate}
-                    onSettle={() => lifecycle.settle(thread.id)}
-                    onSnooze={(until) => lifecycle.snooze(thread.id, until)}
+                    onSettle={() =>
+                      void parkActiveThread(thread, () =>
+                        lifecycle.settle(thread.id),
+                      )
+                    }
+                    onSnooze={(until) =>
+                      void parkActiveThread(thread, () =>
+                        lifecycle.snooze(thread.id, until),
+                      )
+                    }
                     now={now}
                   />
                 ))}
@@ -213,8 +248,16 @@ export function ThreadInbox({
                     canPark={lifecycle.canPark(thread)}
                     snoozePresets={snoozePresets}
                     onNavigate={onNavigate}
-                    onSettle={() => lifecycle.settle(thread.id)}
-                    onSnooze={(until) => lifecycle.snooze(thread.id, until)}
+                    onSettle={() =>
+                      void parkActiveThread(thread, () =>
+                        lifecycle.settle(thread.id),
+                      )
+                    }
+                    onSnooze={(until) =>
+                      void parkActiveThread(thread, () =>
+                        lifecycle.snooze(thread.id, until),
+                      )
+                    }
                     now={now}
                   />
                 ))}
@@ -312,12 +355,12 @@ function ParkedShelf({
               wakeAt={lifecycle.wakeAtFor(thread)}
               now={now}
               snoozePresets={snoozePresets}
-              onSnooze={(until) => lifecycle.snooze(thread.id, until)}
+              onSnooze={(until) => void lifecycle.snooze(thread.id, until)}
               onNavigate={onNavigate}
               onRestore={() =>
                 shelf === "snoozed"
-                  ? lifecycle.unsnooze(thread.id)
-                  : lifecycle.unsettle(thread.id)
+                  ? void lifecycle.unsnooze(thread.id)
+                  : void lifecycle.unsettle(thread.id)
               }
             />
           ))}

@@ -169,6 +169,19 @@ export function snoozeWakeLabel(snoozedUntil: number, now: number): string {
   return `${Math.ceil(remaining / DAY_MS)}d`;
 }
 
+/** Full local wake time for confirmation feedback after a snooze. */
+export function formatSnoozeWakeTime(
+  snoozedUntil: number,
+  locale?: string,
+  timeZone?: string,
+): string {
+  return new Intl.DateTimeFormat(locale, {
+    dateStyle: "medium",
+    timeStyle: "short",
+    ...(timeZone ? { timeZone } : {}),
+  }).format(new Date(snoozedUntil));
+}
+
 export type SnoozePresetId = "hour" | "evening" | "tomorrow" | "next-week";
 
 export interface SnoozePreset {

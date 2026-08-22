@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
+import { toast } from "sonner";
 import type { t3chatSidebarRpcContract } from "./server";
 import {
   canPark,
+  formatSnoozeWakeTime,
   nextWakeDelayMs,
   resolveShelf,
   type ThreadLifecycleRow,
@@ -28,10 +30,37 @@ export interface LifecycleApi {
   shelfFor(thread: PluginSidebarThread): ThreadShelf;
   canPark(thread: PluginSidebarThread): boolean;
   wakeAtFor(thread: PluginSidebarThread): number | null;
-  settle(threadId: string): void;
-  unsettle(threadId: string): void;
-  snooze(threadId: string, snoozedUntil: number): void;
-  unsnooze(threadId: string): void;
+  settle(threadId: string): Promise<boolean>;
+  unsettle(threadId: string): Promise<boolean>;
+  snooze(threadId: string, snoozedUntil: number): Promise<boolean>;
+  unsnooze(threadId: string): Promise<boolean>;
+}
+
+type LifecycleMutation = "settle" | "unsettle" | "snooze" | "unsnooze";
+type LifecycleMutationRequest =
+  | { method: "snooze"; threadId: string; snoozedUntil: number }
+  | {
+      method: Exclude<LifecycleMutation, "snooze">;
+      threadId: string;
+    };
+
+const SUCCESS_MESSAGE: Record<Exclude<LifecycleMutation, "snooze">, string> = {
+  settle: "Thread settled",
+  unsettle: "Thread returned to the inbox",
+  unsnooze: "Thread woke up",
+};
+
+const ERROR_MESSAGE: Record<LifecycleMutation, string> = {
+  settle: "Could not settle thread",
+  unsettle: "Could not un-settle thread",
+  snooze: "Could not snooze thread",
+  unsnooze: "Could not wake thread",
+};
+
+function errorDescription(error: unknown): string | undefined {
+  if (!(error instanceof Error)) return undefined;
+  const message = error.message.trim();
+  return message.length > 0 ? message : undefined;
 }
 
 /**
@@ -54,6 +83,7 @@ export function useLifecycle(
   // one), and an older list would silently restore state the user just
   // changed. Only the newest request may write.
   const requestSeq = useRef(0);
+  const inFlightThreadIds = useRef(new Set<string>());
   const refresh = useCallback(async () => {
     const seq = ++requestSeq.current;
     const result = await rpc.call("listLifecycle", {});
@@ -94,25 +124,55 @@ export function useLifecycle(
       isUnread: thread.isUnread,
       latestAttentionAt: thread.latestAttentionAt,
     });
-    // One read per mutation: the write publishes on the realtime channel, and
-    // that subscription already triggers a refresh for every client.
+    // One mutation per thread at a time. The write publishes on the realtime
+    // channel, and that subscription refreshes every client after success.
     const mutate = async (
-      method: "settle" | "unsettle" | "unsnooze",
-      threadId: string,
-    ) => {
-      await rpc.call(method, { threadId });
+      request: LifecycleMutationRequest,
+    ): Promise<boolean> => {
+      const { method, threadId } = request;
+      if (inFlightThreadIds.current.has(threadId)) return false;
+      inFlightThreadIds.current.add(threadId);
+      try {
+        if (method === "snooze") {
+          await rpc.call("snooze", {
+            threadId,
+            snoozedUntil: request.snoozedUntil,
+          });
+        } else {
+          await rpc.call(method, { threadId });
+        }
+      } catch (error) {
+        toast.error(ERROR_MESSAGE[method], {
+          description: errorDescription(error),
+        });
+        return false;
+      } finally {
+        inFlightThreadIds.current.delete(threadId);
+      }
+
+      if (method === "snooze") {
+        toast.success("Thread snoozed", {
+          description: `Wakes ${formatSnoozeWakeTime(request.snoozedUntil)}`,
+          action: {
+            label: "Undo",
+            onClick: () => void mutate({ method: "unsnooze", threadId }),
+          },
+        });
+      } else {
+        toast.success(SUCCESS_MESSAGE[method]);
+      }
+      return true;
     };
     return {
       shelfFor: (thread) =>
         resolveShelf(rows.get(thread.id), signalsFor(thread), now),
       canPark: (thread) => canPark(signalsFor(thread)),
       wakeAtFor: (thread) => rows.get(thread.id)?.snoozedUntil ?? null,
-      settle: (threadId) => void mutate("settle", threadId),
-      unsettle: (threadId) => void mutate("unsettle", threadId),
-      unsnooze: (threadId) => void mutate("unsnooze", threadId),
-      snooze: (threadId, snoozedUntil) => {
-        void rpc.call("snooze", { threadId, snoozedUntil });
-      },
+      settle: (threadId) => mutate({ method: "settle", threadId }),
+      unsettle: (threadId) => mutate({ method: "unsettle", threadId }),
+      unsnooze: (threadId) => mutate({ method: "unsnooze", threadId }),
+      snooze: (threadId, snoozedUntil) =>
+        mutate({ method: "snooze", threadId, snoozedUntil }),
     };
-  }, [now, refresh, rows, rpc]);
+  }, [now, rows, rpc]);
 }

@@ -9,6 +9,14 @@ import {
 } from "@testing-library/react";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
+import { formatSnoozeWakeTime } from "./lifecycle";
+
+const toastMocks = vi.hoisted(() => ({
+  success: vi.fn(),
+  error: vi.fn(),
+}));
+
+vi.mock("sonner", () => ({ toast: toastMocks }));
 
 // Load through the harness so the plugin's `@get-bb/plugin-sdk/app` import binds
 // to the test runtime; importing the component directly would bind it to an
@@ -73,7 +81,21 @@ function render(
   });
 }
 
-afterEach(cleanup);
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+afterEach(() => {
+  cleanup();
+  toastMocks.success.mockReset();
+  toastMocks.error.mockReset();
+});
 
 describe("t3chat-sidebar registration", () => {
   it("registers exactly one thread list", () => {
@@ -526,6 +548,187 @@ describe("row context menu", () => {
     fireEvent.contextMenu(await screen.findByText("Settle from menu"));
     fireEvent.click(within(await screen.findByRole("menu")).getByText("Settle"));
     await waitFor(() => expect(settled).toBe("thr_settle"));
+  });
+
+  it("moves away from the active thread after parking it", async () => {
+    let navigated = 0;
+    const rendered = renderSlot(
+      inbox,
+      {
+        ...listProps,
+        activeThreadId: "current",
+        onNavigate: () => (navigated += 1),
+      },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "current", title: "Current", createdAt: 20 }),
+            thread({ id: "next", title: "Next", createdAt: 10 }),
+          ],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+        rpc: {
+          listLifecycle: () => ({ rows: [] }),
+          settle: () => ({ ok: true }),
+        },
+      },
+    );
+
+    fireEvent.contextMenu(await screen.findByText("Current"));
+    fireEvent.click(within(await screen.findByRole("menu")).getByText("Settle"));
+    await waitFor(() =>
+      expect(rendered.sidebarActionCalls).toContainEqual({
+        method: "open",
+        threadId: "next",
+      }),
+    );
+    expect(navigated).toBe(1);
+  });
+
+  it("opens a project-scoped composer when parking the last active thread", async () => {
+    const rendered = renderSlot(
+      inbox,
+      { ...listProps, activeThreadId: "only" },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [thread({ id: "only", title: "Only thread" })],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+        rpc: {
+          listLifecycle: () => ({ rows: [] }),
+          settle: () => ({ ok: true }),
+        },
+      },
+    );
+
+    fireEvent.click(await screen.findByLabelText("Settle thread"));
+    await waitFor(() =>
+      expect(rendered.sidebarActionCalls).toContainEqual({
+        method: "openNewThread",
+        options: { projectId: "proj_1", focusPrompt: true },
+      }),
+    );
+  });
+
+  it("does not override navigation that happens while parking is in flight", async () => {
+    const pendingSettle = deferred<{ ok: true }>();
+    const props = { ...listProps, activeThreadId: "slow" };
+    const rendered = renderSlot(inbox, props, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "slow", title: "Slow settle", createdAt: 20 }),
+          thread({ id: "elsewhere", title: "Elsewhere", createdAt: 10 }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: [] }),
+        settle: () => pendingSettle.promise,
+      },
+    });
+
+    fireEvent.contextMenu(await screen.findByText("Slow settle"));
+    fireEvent.click(within(await screen.findByRole("menu")).getByText("Settle"));
+    await waitFor(() =>
+      expect(rendered.rpcCalls.filter((call) => call.method === "settle"))
+        .toHaveLength(1),
+    );
+    const InboxComponent = inbox.component;
+    rendered.rerender(
+      <InboxComponent {...props} activeThreadId="elsewhere" />,
+    );
+    pendingSettle.resolve({ ok: true });
+    await waitFor(() => expect(toastMocks.success).toHaveBeenCalled());
+    expect(
+      rendered.sidebarActionCalls.filter(
+        (call) => call.method === "open" || call.method === "openNewThread",
+      ),
+    ).toEqual([]);
+  });
+
+  it("deduplicates snooze, confirms the wake time, and supports Undo", async () => {
+    const pendingSnooze = deferred<{ ok: true }>();
+    let wakeAt = 0;
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ id: "dedupe", title: "Dedupe snooze" })],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: [] }),
+        snooze: (input) => {
+          wakeAt = (input as { snoozedUntil: number }).snoozedUntil;
+          return pendingSnooze.promise;
+        },
+        unsnooze: () => ({ ok: true }),
+      },
+    });
+
+    const snooze = await screen.findByLabelText("Snooze for 30 minutes");
+    fireEvent.click(snooze);
+    fireEvent.click(snooze);
+    await waitFor(() =>
+      expect(rendered.rpcCalls.filter((call) => call.method === "snooze"))
+        .toHaveLength(1),
+    );
+
+    pendingSnooze.resolve({ ok: true });
+    await waitFor(() =>
+      expect(toastMocks.success).toHaveBeenCalledWith(
+        "Thread snoozed",
+        expect.objectContaining({
+          description: `Wakes ${formatSnoozeWakeTime(wakeAt)}`,
+        }),
+      ),
+    );
+    const toastOptions = toastMocks.success.mock.calls.find(
+      ([message]) => message === "Thread snoozed",
+    )![1] as { action: { label: string; onClick: () => void } };
+    expect(toastOptions.action.label).toBe("Undo");
+    toastOptions.action.onClick();
+    await waitFor(() =>
+      expect(rendered.rpcCalls).toContainEqual({
+        method: "unsnooze",
+        input: { threadId: "dedupe" },
+      }),
+    );
+  });
+
+  it("reports mutation failures and leaves the active route alone", async () => {
+    const rendered = renderSlot(
+      inbox,
+      { ...listProps, activeThreadId: "broken" },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [thread({ id: "broken", title: "Broken settle" })],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+        rpc: {
+          listLifecycle: () => ({ rows: [] }),
+          settle: () => {
+            throw new Error("database offline");
+          },
+        },
+      },
+    );
+
+    fireEvent.click(await screen.findByLabelText("Settle thread"));
+    await waitFor(() =>
+      expect(toastMocks.error).toHaveBeenCalledWith(
+        "Could not settle thread",
+        { description: "database offline" },
+      ),
+    );
+    expect(
+      rendered.sidebarActionCalls.some(
+        (call) => call.method === "open" || call.method === "openNewThread",
+      ),
+    ).toBe(false);
   });
 
   it("offers Un-settle on settled rows and Wake now on snoozed rows", async () => {

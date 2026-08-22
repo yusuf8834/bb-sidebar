@@ -72,6 +72,21 @@ export function partitionPinned(threads: readonly PluginSidebarThread[]): {
 }
 
 /**
+ * Prefer the row below a parked thread, then the row above it. This keeps
+ * navigation close to where the user was instead of jumping to the top.
+ */
+export function nextThreadAfterParking<T extends { readonly id: string }>(
+  threads: readonly T[],
+  parkedThreadId: string,
+): T | null {
+  const parkedIndex = threads.findIndex(
+    (thread) => thread.id === parkedThreadId,
+  );
+  if (parkedIndex < 0) return threads[0] ?? null;
+  return threads[parkedIndex + 1] ?? threads[parkedIndex - 1] ?? null;
+}
+
+/**
  * Child threads leave the flat list and live in their parent's header chip
  * instead — a flat inbox has nowhere to nest them.
  *

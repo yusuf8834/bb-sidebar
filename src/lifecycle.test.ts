@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   canPark,
+  formatSnoozeWakeTime,
   DEFAULT_SNOOZE_PRESET_CONFIG,
   nextWakeDelayMs,
   parseConfiguredSnoozePresets,
@@ -139,6 +140,15 @@ describe("snoozeWakeLabel", () => {
 
   it("reads 'now' once the wake time has passed", () => {
     expect(snoozeWakeLabel(500, 1_000)).toBe("now");
+  });
+});
+
+describe("formatSnoozeWakeTime", () => {
+  it("includes the exact date and local time", () => {
+    const wakeAt = Date.UTC(2026, 7, 23, 1, 30);
+    expect(formatSnoozeWakeTime(wakeAt, "en-US", "UTC")).toBe(
+      "Aug 23, 2026, 1:30 AM",
+    );
   });
 });
 
