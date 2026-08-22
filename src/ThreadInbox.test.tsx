@@ -165,8 +165,154 @@ describe("ThreadInbox", () => {
         rpc: { listLifecycle: () => ({ rows: [] }) },
       },
     );
-    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+    expect(screen.getAllByRole("option")).toHaveLength(1);
     expect(screen.getByText("Sidebar work")).toBeDefined();
+  });
+
+  it("shows matching threads from every shelf in one flat result list", async () => {
+    const rendered = renderSlot(
+      inbox,
+      { ...listProps, searchQuery: "match" },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "pin", title: "Pinned match", isPinned: true }),
+            thread({ id: "active", title: "Active match" }),
+            thread({ id: "snoozed", title: "Snoozed match" }),
+            thread({ id: "settled", title: "Settled match" }),
+          ],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+        rpc: {
+          listLifecycle: () => ({
+            rows: [
+              {
+                threadId: "snoozed",
+                settledAt: null,
+                snoozedUntil: Date.now() + 3_600_000,
+                snoozedAt: Date.now(),
+              },
+              {
+                threadId: "settled",
+                settledAt: Date.now(),
+                snoozedUntil: null,
+                snoozedAt: null,
+              },
+            ],
+          }),
+        },
+      },
+    );
+
+    await waitFor(() =>
+      expect(
+        rendered.inspection.rpcCalls.some(
+          (call) => call.method === "listLifecycle",
+        ),
+      ).toBe(true),
+    );
+    await waitFor(() => expect(screen.getAllByRole("option")).toHaveLength(4));
+
+    const results = screen.getByRole("listbox", {
+      name: "Thread search results",
+    });
+    expect(within(results).getByText("Snoozed match")).toBeDefined();
+    expect(within(results).getByText("Settled match")).toBeDefined();
+    expect(screen.queryByRole("region", { name: "Snoozed" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Settled" })).toBeNull();
+  });
+
+  it("keeps project scope active while searching", async () => {
+    renderSlot(
+      inbox,
+      { ...listProps, searchQuery: "match" },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "a", title: "First match", projectId: "proj_1" }),
+            thread({ id: "b", title: "Second match", projectId: "proj_2" }),
+          ],
+          projects: [
+            { id: "proj_1", name: "bb", isPersonal: false },
+            { id: "proj_2", name: "other", isPersonal: false },
+          ],
+        },
+        rpc: { listLifecycle: () => ({ rows: [] }) },
+      },
+    );
+
+    fireEvent.keyDown(screen.getByLabelText(/Project scope/), { key: "Enter" });
+    fireEvent.click(screen.getByRole("option", { name: "other" }));
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("option", { name: /Second match/ }),
+      ).toHaveLength(1),
+    );
+    expect(screen.queryByText("First match")).toBeNull();
+  });
+
+  it("moves through results with arrows and opens the highlighted row", async () => {
+    let navigated = 0;
+    const rendered = renderSlot(
+      inbox,
+      {
+        ...listProps,
+        searchQuery: "thread",
+        onNavigate: () => (navigated += 1),
+      },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "newer", title: "Newer thread", createdAt: 2 }),
+            thread({ id: "older", title: "Older thread", createdAt: 1 }),
+          ],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+        rpc: { listLifecycle: () => ({ rows: [] }) },
+      },
+    );
+
+    const results = await screen.findAllByRole("option");
+    results[0]!.focus();
+    fireEvent.keyDown(results[0]!, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(results[1]);
+    expect(results[1]!.getAttribute("aria-selected")).toBe("true");
+
+    fireEvent.keyDown(results[1]!, { key: "Enter" });
+    expect(rendered.sidebarActionCalls).toContainEqual({
+      method: "open",
+      threadId: "older",
+      options: { split: false },
+    });
+    expect(navigated).toBe(1);
+  });
+
+  it("asks the host to clear search when Escape is pressed in results", async () => {
+    let cleared = 0;
+    renderSlot(
+      inbox,
+      {
+        ...listProps,
+        searchQuery: "thread",
+        onNavigate: () => (cleared += 1),
+      },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [thread({ title: "A thread" })],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+        rpc: { listLifecycle: () => ({ rows: [] }) },
+      },
+    );
+
+    const result = await screen.findByRole("option");
+    result.focus();
+    fireEvent.keyDown(result, { key: "Escape" });
+    expect(cleared).toBe(1);
   });
 
   it("ships no search field of its own", () => {

@@ -16,6 +16,7 @@ import {
 } from "./components/Select";
 import { ThreadCard } from "./ThreadCard";
 import { SlimRow } from "./SlimRow";
+import { SearchResults } from "./SearchResults";
 import { useLifecycle } from "./useLifecycle";
 import { TRAILING_GLYPH_BOX_CLASS } from "./StatusSlot";
 import {
@@ -86,14 +87,11 @@ export function ThreadInbox({
     );
     // Children live in their parent's header chip instead of the flat list;
     // an orphan whose parent is not on screen stays here.
-    const matched = searchThreadsByTitle(
-      hideChildrenOfVisibleParents(scoped),
-      searchQuery,
-    );
-    const active: typeof matched = [];
-    const onSnoozeShelf: typeof matched = [];
-    const onSettledShelf: typeof matched = [];
-    for (const thread of matched) {
+    const visible = hideChildrenOfVisibleParents(scoped);
+    const active: typeof visible = [];
+    const onSnoozeShelf: typeof visible = [];
+    const onSettledShelf: typeof visible = [];
+    for (const thread of visible) {
       const shelf = lifecycle.shelfFor(thread);
       if (shelf === "snoozed") onSnoozeShelf.push(thread);
       else if (shelf === "settled") onSettledShelf.push(thread);
@@ -110,7 +108,17 @@ export function ThreadInbox({
       ),
       settled: sortByCreatedAtDescending(onSettledShelf),
     };
-  }, [lifecycle, scope, searchQuery, threads]);
+  }, [lifecycle, scope, threads]);
+
+  const isSearching = searchQuery.trim().length > 0;
+  const searchResults = useMemo(
+    () =>
+      searchThreadsByTitle(
+        [...pinned, ...inbox, ...snoozed, ...settled],
+        searchQuery,
+      ),
+    [inbox, pinned, searchQuery, settled, snoozed],
+  );
 
   const scopeLabel =
     scope === ALL_PROJECTS
@@ -156,14 +164,24 @@ export function ThreadInbox({
           >
             Could not load threads.
           </p>
-        ) : pinned.length + inbox.length + snoozed.length + settled.length ===
+        ) : (isSearching
+            ? searchResults.length
+            : pinned.length + inbox.length + snoozed.length + settled.length) ===
           0 ? (
           <p
             role="status"
             className="px-2 py-6 text-center text-xs text-muted-foreground"
           >
-            {searchQuery.trim() ? "No threads found" : "No threads yet"}
+            {isSearching ? "No threads found" : "No threads yet"}
           </p>
+        ) : isSearching ? (
+          <SearchResults
+            threads={searchResults}
+            projectNameById={projectNameById}
+            activeThreadId={activeThreadId}
+            now={now}
+            onNavigate={onNavigate}
+          />
         ) : (
           <>
             {pinned.length > 0 ? (
