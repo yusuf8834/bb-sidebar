@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   experimental_useSidebarThreadActions as useSidebarThreadActions,
   type PluginSidebarThread,
@@ -9,6 +10,7 @@ import { STATUS_SLOT_CLASS, StatusOrTime } from "./StatusSlot";
 import { threadDisplayTitle } from "./inbox";
 import { snoozeWakeLabel } from "./lifecycle";
 import type { ConfiguredSnoozePreset } from "./lifecycle";
+import { InlineThreadTitle } from "./InlineThreadTitle";
 
 /**
  * A parked thread: one line instead of a card. Density comes from the user
@@ -40,6 +42,7 @@ export function SlimRow({
 }) {
   const actions = useSidebarThreadActions();
   const title = threadDisplayTitle(thread);
+  const [isRenaming, setIsRenaming] = useState(false);
 
   return (
     <RowContextMenu
@@ -48,6 +51,8 @@ export function SlimRow({
       snoozePresets={snoozePresets}
       onSnooze={onSnooze}
       onWake={shelf === "snoozed" ? onRestore : undefined}
+      onUnsettle={shelf === "settled" ? onRestore : undefined}
+      onRename={() => setIsRenaming(true)}
     >
       <li className="list-none">
         <div
@@ -63,21 +68,32 @@ export function SlimRow({
             aria-label={title}
             onClick={(event) => {
               event.preventDefault();
+              if (isRenaming || event.detail > 1) return;
               actions.open(thread.id, {
                 split: event.metaKey || event.ctrlKey,
               });
               onNavigate();
+            }}
+            onDoubleClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setIsRenaming(true);
             }}
             className="absolute inset-0 cursor-pointer rounded-md"
           />
           <span
             className={cn(
               "pointer-events-none relative min-w-0 flex-1 truncate",
+              isRenaming && "pointer-events-auto",
               isActive ? "text-foreground" : "text-muted-foreground/70",
               "group-hover/slim:text-foreground",
             )}
           >
-            {title}
+            <InlineThreadTitle
+              thread={thread}
+              editing={isRenaming}
+              onEditingChange={setIsRenaming}
+            />
           </span>
           {/* The same slot as a card, so a shelf keeps the card's column. A
               snoozed row spends it on the wake time: when the thread comes

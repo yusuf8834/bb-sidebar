@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   experimental_useSidebarThreadPullRequest as useSidebarThreadPullRequest,
   experimental_useSidebarThreadSplit as useSidebarThreadSplit,
@@ -10,6 +11,7 @@ import { RowContextMenu } from "./RowContextMenu";
 import { ProviderGlyph } from "./ProviderGlyph";
 import { STATUS_SLOT_CLASS, StatusOrTime } from "./StatusSlot";
 import { threadDisplayTitle } from "./inbox";
+import { InlineThreadTitle } from "./InlineThreadTitle";
 import type { ConfiguredSnoozePreset } from "./lifecycle";
 
 /**
@@ -49,6 +51,7 @@ export function ThreadCard({
   // Opt-in per row: this costs a git-host lookup, and threads sharing a
   // worktree share one.
   const { pullRequest } = useSidebarThreadPullRequest(thread.id);
+  const [isRenaming, setIsRenaming] = useState(false);
 
   const quickSnooze = snoozePresets[0];
 
@@ -56,8 +59,11 @@ export function ThreadCard({
     <RowContextMenu
       thread={thread}
       canSnooze={canPark}
+      canArchive={canPark}
       snoozePresets={snoozePresets}
       onSnooze={onSnooze}
+      onSettle={canPark ? onSettle : undefined}
+      onRename={() => setIsRenaming(true)}
     >
       <li className="list-none">
         <div
@@ -78,10 +84,16 @@ export function ThreadCard({
             {...splitProps}
             onClick={(event) => {
               event.preventDefault();
+              if (isRenaming || event.detail > 1) return;
               actions.open(thread.id, {
                 split: event.metaKey || event.ctrlKey,
               });
               onNavigate();
+            }}
+            onDoubleClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setIsRenaming(true);
             }}
             className="absolute inset-0 cursor-pointer rounded-md"
           />
@@ -120,10 +132,15 @@ export function ThreadCard({
               // card — makes a thread at rest read as disabled, and at rest is
               // what most of the list is most of the time.
               "pointer-events-none relative mt-0.5 truncate text-sm text-foreground",
+              isRenaming && "pointer-events-auto",
               thread.isUnread && "font-medium",
             )}
           >
-            {threadDisplayTitle(thread)}
+            <InlineThreadTitle
+              thread={thread}
+              editing={isRenaming}
+              onEditingChange={setIsRenaming}
+            />
           </div>
           <div className="pointer-events-none relative mt-0.5 flex h-4 items-center gap-1.5 text-2xs text-muted-foreground">
             {/* A thread without a worktree still runs somewhere, so the

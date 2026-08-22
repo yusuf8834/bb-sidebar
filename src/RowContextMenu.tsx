@@ -21,16 +21,24 @@ export function RowContextMenu({
   thread,
   children,
   canSnooze = false,
+  canArchive = true,
   snoozePresets = [],
   onSnooze,
+  onSettle,
+  onUnsettle,
   onWake,
+  onRename,
 }: {
   thread: PluginSidebarThread;
   children: ReactNode;
   canSnooze?: boolean;
+  canArchive?: boolean;
   snoozePresets?: readonly ConfiguredSnoozePreset[];
   onSnooze?: (snoozedUntil: number) => void;
+  onSettle?: () => void;
+  onUnsettle?: () => void;
   onWake?: () => void;
+  onRename?: () => void;
 }) {
   const actions = useSidebarThreadActions();
 
@@ -47,27 +55,78 @@ export function RowContextMenu({
           </Item>
           <Separator />
           <Item
-            onSelect={() => void actions.setRead(thread.id, thread.isUnread)}
-          >
-            {thread.isUnread ? "Mark read" : "Mark unread"}
-          </Item>
-          <Item
             onSelect={() => void actions.setPinned(thread.id, !thread.isPinned)}
           >
             {thread.isPinned ? "Unpin" : "Pin"}
           </Item>
+          {onSettle ? <Item onSelect={onSettle}>Settle</Item> : null}
+          {onUnsettle ? <Item onSelect={onUnsettle}>Un-settle</Item> : null}
           {canSnooze && onSnooze && snoozePresets.length > 0 ? (
             <SnoozeSubmenu presets={snoozePresets} onSnooze={onSnooze} />
           ) : null}
           {onWake ? <Item onSelect={onWake}>Wake now</Item> : null}
           <Separator />
-          <Item onSelect={() => actions.archive(thread.id)}>Archive</Item>
+          {onRename ? (
+            <Item onSelect={() => globalThis.setTimeout(onRename, 0)}>
+              Rename
+            </Item>
+          ) : null}
+          <Item
+            onSelect={() => void actions.setRead(thread.id, thread.isUnread)}
+          >
+            {thread.isUnread ? "Mark read" : "Mark unread"}
+          </Item>
+          <Separator />
+          <CopySubmenu thread={thread} />
+          <Separator />
+          <Item
+            disabled={!canArchive}
+            onSelect={() => actions.archive(thread.id)}
+          >
+            Archive
+          </Item>
           <Item destructive onSelect={() => actions.requestDelete(thread.id)}>
             Delete
           </Item>
         </ContextMenu.Content>
       </ContextMenu.Portal>
     </ContextMenu.Root>
+  );
+}
+
+function CopySubmenu({ thread }: { thread: PluginSidebarThread }) {
+  const branchName = thread.environment?.branchName;
+  const copy = (text: string) => {
+    if (typeof navigator === "undefined" || !navigator.clipboard) return;
+    void navigator.clipboard.writeText(text);
+  };
+
+  return (
+    <ContextMenu.Sub>
+      <ContextMenu.SubTrigger
+        className={cn(
+          "flex cursor-pointer items-center rounded-md px-2 py-1.5 text-sm outline-none",
+          "data-[state=open]:bg-accent data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground",
+        )}
+      >
+        Copy
+        <Icon name="ChevronRight" className="ml-auto size-4 opacity-60" />
+      </ContextMenu.SubTrigger>
+      <ContextMenu.Portal>
+        <ContextMenu.SubContent
+          aria-label="Copy thread data"
+          sideOffset={4}
+          className="z-50 min-w-40 rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md"
+        >
+          {branchName ? (
+            <Item onSelect={() => copy(branchName)}>
+              Copy branch
+            </Item>
+          ) : null}
+          <Item onSelect={() => copy(thread.id)}>Copy thread ID</Item>
+        </ContextMenu.SubContent>
+      </ContextMenu.Portal>
+    </ContextMenu.Sub>
   );
 }
 
@@ -112,18 +171,22 @@ function SnoozeSubmenu({
 function Item({
   children,
   destructive = false,
+  disabled = false,
   onSelect,
 }: {
   children: ReactNode;
   destructive?: boolean;
+  disabled?: boolean;
   onSelect: () => void;
 }) {
   return (
     <ContextMenu.Item
+      disabled={disabled}
       onSelect={onSelect}
       className={cn(
         "cursor-pointer rounded-md px-2 py-1.5 text-sm outline-none",
         "data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground",
+        "data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50",
         destructive && "text-destructive-text",
       )}
     >

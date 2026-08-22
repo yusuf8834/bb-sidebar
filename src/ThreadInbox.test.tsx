@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   cleanup,
   fireEvent,
@@ -494,12 +494,218 @@ describe("row context menu", () => {
         .map((item) => item.textContent),
     ).toEqual([
       "Open in split",
-      "Mark unread",
       "Pin",
+      "Settle",
       "Snooze",
+      "Rename",
+      "Mark unread",
+      "Copy",
       "Archive",
       "Delete",
     ]);
+    expect(within(menu).getAllByRole("separator")).toHaveLength(4);
+  });
+
+  it("settles an active thread from the context menu", async () => {
+    let settled: string | null = null;
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ id: "thr_settle", title: "Settle from menu" })],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: [] }),
+        settle: (input) => {
+          settled = (input as { threadId: string }).threadId;
+          return { ok: true };
+        },
+      },
+    });
+
+    fireEvent.contextMenu(await screen.findByText("Settle from menu"));
+    fireEvent.click(within(await screen.findByRole("menu")).getByText("Settle"));
+    await waitFor(() => expect(settled).toBe("thr_settle"));
+  });
+
+  it("offers Un-settle on settled rows and Wake now on snoozed rows", async () => {
+    const calls: string[] = [];
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "settled", title: "Settled row" }),
+          thread({ id: "snoozed", title: "Snoozed row" }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: {
+        listLifecycle: () => ({
+          rows: [
+            {
+              threadId: "settled",
+              settledAt: Date.now(),
+              snoozedUntil: null,
+              snoozedAt: null,
+            },
+            {
+              threadId: "snoozed",
+              settledAt: null,
+              snoozedUntil: Date.now() + 3_600_000,
+              snoozedAt: Date.now(),
+            },
+          ],
+        }),
+        unsettle: (input) => {
+          calls.push(`unsettle:${(input as { threadId: string }).threadId}`);
+          return { ok: true };
+        },
+        unsnooze: (input) => {
+          calls.push(`unsnooze:${(input as { threadId: string }).threadId}`);
+          return { ok: true };
+        },
+      },
+    });
+
+    await waitFor(() =>
+      expect(
+        rendered.inspection.rpcCalls.some(
+          (call) => call.method === "listLifecycle",
+        ),
+      ).toBe(true),
+    );
+    const settledShelf = await screen.findByRole("region", { name: "Settled" });
+    const snoozedShelf = await screen.findByRole("region", { name: "Snoozed" });
+    fireEvent.click(within(settledShelf).getByRole("button"));
+    fireEvent.click(within(snoozedShelf).getByRole("button"));
+
+    fireEvent.contextMenu(within(settledShelf).getByText("Settled row"));
+    let menu = await screen.findByRole("menu", { name: "Thread actions" });
+    expect(within(menu).getByText("Un-settle")).toBeDefined();
+    expect(within(menu).getByText("Rename")).toBeDefined();
+    expect(within(menu).queryByText("Wake now")).toBeNull();
+    fireEvent.click(within(menu).getByText("Un-settle"));
+    await waitFor(() => expect(calls).toContain("unsettle:settled"));
+
+    fireEvent.contextMenu(within(snoozedShelf).getByText("Snoozed row"));
+    menu = await screen.findByRole("menu", { name: "Thread actions" });
+    expect(within(menu).getByText("Wake now")).toBeDefined();
+    expect(within(menu).getByText("Rename")).toBeDefined();
+    expect(within(menu).queryByText("Un-settle")).toBeNull();
+    fireEvent.click(within(menu).getByText("Wake now"));
+    await waitFor(() => expect(calls).toContain("unsnooze:snoozed"));
+  });
+
+  for (const busyThread of [
+    thread({ id: "running", title: "Running row", indicator: "runtime" }),
+    thread({
+      id: "pending",
+      title: "Pending row",
+      hasPendingInteraction: true,
+    }),
+  ]) {
+    it(`disables Archive while ${busyThread.id}`, async () => {
+      const rendered = render([busyThread]);
+      fireEvent.contextMenu(await screen.findByText(busyThread.title!));
+      const archive = within(
+        await screen.findByRole("menu", { name: "Thread actions" }),
+      ).getByText("Archive");
+      expect(archive.getAttribute("data-disabled")).not.toBeNull();
+      fireEvent.click(archive);
+      expect(rendered.sidebarActionCalls).not.toContainEqual({
+        method: "archive",
+        threadId: busyThread.id,
+      });
+    });
+  }
+
+  it("renames from the menu and saves with Enter", async () => {
+    const rendered = render([
+      thread({ id: "thr_rename", title: "Original title" }),
+    ]);
+    fireEvent.contextMenu(await screen.findByText("Original title"));
+    fireEvent.click(within(await screen.findByRole("menu")).getByText("Rename"));
+
+    const input = await screen.findByRole("textbox", {
+      name: "Rename Original title",
+    });
+    fireEvent.change(input, { target: { value: "Updated title" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() =>
+      expect(rendered.sidebarActionCalls).toContainEqual({
+        method: "rename",
+        threadId: "thr_rename",
+        title: "Updated title",
+      }),
+    );
+  });
+
+  it("supports double-click rename, Escape cancel, and blur save", async () => {
+    const rendered = render([
+      thread({ id: "thr_inline", title: "Inline title" }),
+    ]);
+    const row = await screen.findByRole("link", { name: "Inline title" });
+
+    fireEvent.doubleClick(row);
+    let input = await screen.findByRole("textbox", {
+      name: "Rename Inline title",
+    });
+    fireEvent.change(input, { target: { value: "Canceled title" } });
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(
+      rendered.sidebarActionCalls.some((call) => call.method === "rename"),
+    ).toBe(false);
+
+    fireEvent.doubleClick(row);
+    input = await screen.findByRole("textbox", { name: "Rename Inline title" });
+    fireEvent.change(input, { target: { value: "Blurred title" } });
+    fireEvent.blur(input);
+    await waitFor(() =>
+      expect(rendered.sidebarActionCalls).toContainEqual({
+        method: "rename",
+        threadId: "thr_inline",
+        title: "Blurred title",
+      }),
+    );
+  });
+
+  it("copies the branch and thread ID", async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    render([
+      thread({
+        id: "thr_copy",
+        title: "Copy data",
+        environment: {
+          id: "env_1",
+          name: "Worktree",
+          branchName: "feature/context-menu",
+          workspaceDisplayKind: "managed-worktree",
+        },
+      }),
+    ]);
+
+    const openCopyMenu = async () => {
+      fireEvent.contextMenu(await screen.findByText("Copy data"));
+      const menu = await screen.findByRole("menu", { name: "Thread actions" });
+      const copy = within(menu).getByRole("menuitem", { name: "Copy" });
+      fireEvent.click(copy);
+      const firstCopyAction = await screen.findByText("Copy branch");
+      return firstCopyAction.closest<HTMLElement>('[role="menu"]')!;
+    };
+
+    let copyMenu = await openCopyMenu();
+    fireEvent.click(within(copyMenu).getByText("Copy branch"));
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith("feature/context-menu"),
+    );
+
+    copyMenu = await openCopyMenu();
+    fireEvent.click(within(copyMenu).getByText("Copy thread ID"));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("thr_copy"));
   });
 
   it("routes deletion through the host's confirmation", async () => {
