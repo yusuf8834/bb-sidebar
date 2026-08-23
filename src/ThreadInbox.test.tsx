@@ -946,7 +946,14 @@ describe("parking threads", () => {
     // Rendered (not merely accepted as props): a card whose park controls
     // never mount leaves the whole feature unreachable.
     expect(await screen.findByLabelText("Settle thread")).toBeDefined();
-    expect(screen.getByLabelText("Snooze for 30 minutes")).toBeDefined();
+    const snooze = screen.getByRole("combobox", { name: "Snooze thread" });
+    fireEvent.keyDown(snooze, { key: "Enter" });
+    expect(
+      await screen.findByRole("option", { name: "30 minutes" }),
+    ).toBeDefined();
+    expect(screen.getByRole("option", { name: "2 hours" })).toBeDefined();
+    expect(screen.getByRole("option", { name: "1 day" })).toBeDefined();
+    expect(screen.getByRole("option", { name: "1 week" })).toBeDefined();
   });
 
   it("settles a thread when the user clicks Settle", async () => {
@@ -1351,9 +1358,15 @@ describe("row context menu", () => {
       },
     });
 
-    const snooze = await screen.findByLabelText("Snooze for 30 minutes");
-    fireEvent.click(snooze);
-    fireEvent.click(snooze);
+    const snooze = await screen.findByRole("combobox", {
+      name: "Snooze thread",
+    });
+    fireEvent.keyDown(snooze, { key: "Enter" });
+    fireEvent.click(
+      await screen.findByRole("option", { name: "30 minutes" }),
+    );
+    fireEvent.keyDown(snooze, { key: "Enter" });
+    fireEvent.click(await screen.findByRole("option", { name: "2 hours" }));
     await waitFor(() =>
       expect(rendered.rpcCalls.filter((call) => call.method === "snooze"))
         .toHaveLength(1),
@@ -1626,8 +1639,12 @@ describe("row context menu", () => {
     });
 
     const before = Date.now();
+    const snooze = await screen.findByRole("combobox", {
+      name: "Snooze thread",
+    });
+    fireEvent.keyDown(snooze, { key: "Enter" });
     fireEvent.click(
-      await screen.findByRole("button", { name: "Snooze for 15 minutes" }),
+      await screen.findByRole("option", { name: "15 minutes" }),
     );
     await waitFor(() => expect(snoozed).not.toBeNull());
     expect(snoozed!.threadId).toBe("thr_snooze");

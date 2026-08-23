@@ -11,8 +11,9 @@ import {
   type PluginSidebarThread,
 } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
-import { Icon, type IconName } from "./components/Icon";
+import { Icon } from "./components/Icon";
 import { Tooltip } from "./components/Tooltip";
+import { SnoozeSelect } from "./SnoozeSelect";
 import { cn } from "./lib/utils";
 import { RowContextMenu } from "./RowContextMenu";
 import { ProviderGlyph } from "./ProviderGlyph";
@@ -80,8 +81,6 @@ export function ThreadCard({
   // worktree share one.
   const { pullRequest } = useSidebarThreadPullRequest(thread.id);
   const [isRenaming, setIsRenaming] = useState(false);
-
-  const quickSnooze = snoozePresets[0];
 
   return (
     <RowContextMenu
@@ -180,16 +179,16 @@ export function ThreadCard({
             ) : null}
             {/* Status at rest, park actions on hover. Only the status yields,
                 so the project name never shifts. */}
-            {canPark && quickSnooze && !isWoke ? (
+            {canPark && snoozePresets.length > 0 && !isWoke ? (
               <span className="pointer-events-auto hidden items-center gap-0.5 group-hover/card:flex">
-                <ParkButton
-                  label={`Snooze for ${quickSnooze.label}`}
-                  icon="Clock"
-                  onActivate={() => onSnooze(Date.now() + quickSnooze.durationMs)}
+                <SnoozeSelect
+                  label="Snooze thread"
+                  snoozePresets={snoozePresets}
+                  triggerClassName="h-5 w-8 border-0 px-0.5 py-0 shadow-none hover:bg-transparent focus:ring-0 [&>svg:last-child]:size-3"
+                  onSnooze={onSnooze}
                 />
                 <ParkButton
                   label="Settle thread"
-                  icon="Check"
                   onActivate={onSettle}
                 />
               </span>
@@ -299,11 +298,9 @@ export function ThreadCard({
 
 function ParkButton({
   label,
-  icon,
   onActivate,
 }: {
   label: string;
-  icon: Extract<IconName, "Clock" | "Check">;
   onActivate: () => void;
 }) {
   return (
@@ -318,7 +315,7 @@ function ParkButton({
         }}
         className="rounded p-0.5 text-muted-foreground hover:text-foreground"
       >
-        <Icon name={icon} className="size-3.5" />
+        <Icon name="Check" className="size-3.5" />
       </button>
     </Tooltip>
   );

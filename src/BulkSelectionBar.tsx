@@ -1,11 +1,6 @@
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "./components/Select";
 import { Icon } from "./components/Icon";
 import { Tooltip } from "./components/Tooltip";
+import { SnoozeSelect } from "./SnoozeSelect";
 import type { ConfiguredSnoozePreset } from "./lifecycle";
 
 export function BulkSelectionBar({
@@ -42,29 +37,13 @@ export function BulkSelectionBar({
         disabled={busy}
         onClick={onSettle}
       />
-      <Select
+      <SnoozeSelect
+        label="Snooze selected threads"
+        snoozePresets={snoozePresets}
         disabled={busy || snoozePresets.length === 0}
-        onValueChange={(presetId) => {
-          const preset = snoozePresets.find((item) => item.id === presetId);
-          if (preset) onSnooze(Date.now() + preset.durationMs);
-        }}
-      >
-        <Tooltip label="Snooze selected threads">
-          <SelectTrigger
-            aria-label="Snooze selected threads"
-            className="h-7 w-9 border-0 px-1.5 py-1 shadow-none hover:bg-sidebar-accent focus:ring-0 [&>svg:last-child]:size-3"
-          >
-            <Icon name="Clock" className="size-3.5" />
-          </SelectTrigger>
-        </Tooltip>
-        <SelectContent>
-          {snoozePresets.map((preset) => (
-            <SelectItem key={preset.id} value={preset.id} className="text-xs">
-              {preset.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        triggerClassName="h-7 w-9 border-0 px-1.5 py-1 shadow-none hover:bg-sidebar-accent focus:ring-0 [&>svg:last-child]:size-3"
+        onSnooze={onSnooze}
+      />
       <ActionButton
         label="Mark selected threads read"
         icon="MailOpen"
