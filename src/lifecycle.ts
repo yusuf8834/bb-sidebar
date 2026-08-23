@@ -10,6 +10,8 @@ export interface ThreadLifecycleRow {
   threadId: string;
   /** When the user settled it; null when it is active. */
   settledAt: number | null;
+  /** Explicit user choice. Null or absent means policy-owned state. */
+  settledOverride?: "active" | "settled" | null;
   /** Wake time for a snooze; null when it is not snoozed. */
   snoozedUntil: number | null;
   /** When the snooze was set — used to detect activity since. */

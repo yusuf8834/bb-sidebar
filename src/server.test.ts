@@ -11,6 +11,41 @@ interface LifecycleListResult {
 
 const disposers: Array<() => Promise<void>> = [];
 
+function availablePullRequest(
+  state: "closed" | "draft" | "merged" | "open",
+  updatedAt = new Date().toISOString(),
+) {
+  return {
+    outcome: "available" as const,
+    pullRequest: {
+      attention: state === "merged" ? ("merged" as const) : ("none" as const),
+      baseRefName: "main",
+      checks: {
+        failedCount: 0,
+        passedCount: 1,
+        pendingCount: 0,
+        state: "passing" as const,
+        totalCount: 1,
+      },
+      headRefName: "feature",
+      mergeability: {
+        mergeStateStatus: "CLEAN" as const,
+        mergeable: "MERGEABLE" as const,
+        state: "mergeable" as const,
+      },
+      number: 12,
+      review: {
+        reviewRequestCount: 0,
+        state: "approved" as const,
+      },
+      state,
+      title: "Pull request",
+      updatedAt,
+      url: "https://example.com/pr/12",
+    },
+  };
+}
+
 afterEach(async () => {
   await Promise.all(disposers.splice(0).map((dispose) => dispose()));
 });
@@ -20,6 +55,7 @@ async function loadPlugin() {
     pluginId: "t3chat-sidebar",
     sdk: {
       threads: {
+        list: async () => [],
         unpin: async ({ threadId }) =>
           makeThreadResponse({ id: threadId }),
         reorderPinned: async ({ threadId }) => [
@@ -48,6 +84,16 @@ describe("lifecycle RPC", () => {
     await expect(
       harness.behavior.setSettings({ snoozePresets: "10m, 4h" }),
     ).resolves.toBeUndefined();
+    expect(
+      harness.inspection.registrations.settingsDescriptors,
+    ).toMatchObject({
+      autoSettleInactive: { type: "boolean", default: true },
+      autoSettleAfterDays: { type: "string", default: "3" },
+      autoSettleOnMerge: { type: "boolean", default: true },
+    });
+    expect(harness.inspection.registrations.schedules).toContainEqual(
+      expect.objectContaining({ name: "auto-settle", cron: "*/5 * * * *" }),
+    );
   });
 
   it("settles and restores a thread", async () => {
@@ -72,7 +118,15 @@ describe("lifecycle RPC", () => {
     await harness.behavior.callRpc("unsettle", { threadId: "thr_1" });
     await expect(
       harness.behavior.callRpc("listLifecycle", {}),
-    ).resolves.toEqual({ rows: [] });
+    ).resolves.toEqual({
+      rows: [
+        expect.objectContaining({
+          threadId: "thr_1",
+          settledAt: null,
+          settledOverride: "active",
+        }),
+      ],
+    });
   });
 
   it("keeps settle and snooze mutually exclusive", async () => {
@@ -220,6 +274,195 @@ describe("lifecycle RPC", () => {
     await expect(
       harness.behavior.callRpc("settle", { threadId: "thr_1" }),
     ).rejects.toThrow("pin update failed");
+    await expect(
+      harness.behavior.callRpc("listLifecycle", {}),
+    ).resolves.toEqual({ rows: [] });
+  });
+});
+
+describe("automatic settle evaluation", () => {
+  it("settles inactive threads and publishes one batched refresh", async () => {
+    const old = Date.now() - 4 * 24 * 60 * 60 * 1_000;
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "t3chat-sidebar",
+      sdk: {
+        threads: {
+          list: async () => [
+            makeThreadResponse({
+              id: "thr_old",
+              createdAt: old,
+              updatedAt: old,
+              latestAttentionAt: old,
+              status: "idle",
+            }),
+          ],
+        },
+      },
+    });
+    await plugin(bb);
+    disposers.push(() => harness.lifecycle.dispose());
+
+    await expect(
+      harness.behavior.callRpc("evaluateAutoSettle", {}),
+    ).resolves.toEqual({ changedThreadIds: ["thr_old"] });
+    const result = (await harness.behavior.callRpc(
+      "listLifecycle",
+      {},
+    )) as LifecycleListResult;
+    expect(result.rows).toEqual([
+      expect.objectContaining({
+        threadId: "thr_old",
+        settledAt: expect.any(Number),
+        settledOverride: null,
+      }),
+    ]);
+    expect(harness.inspection.realtimeSignals).toContainEqual({
+      channel: "lifecycle",
+      payload: { threadIds: ["thr_old"] },
+    });
+  });
+
+  it("keeps manual un-settle active until real work clears the override", async () => {
+    const old = Date.now() - 4 * 24 * 60 * 60 * 1_000;
+    const thread = makeThreadResponse({
+      id: "thr_override",
+      createdAt: old,
+      updatedAt: old,
+      latestAttentionAt: old,
+      status: "idle",
+    });
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "t3chat-sidebar",
+      sdk: {
+        threads: {
+          list: async () => [thread],
+        },
+      },
+    });
+    await plugin(bb);
+    disposers.push(() => harness.lifecycle.dispose());
+
+    await harness.behavior.callRpc("unsettle", {
+      threadId: "thr_override",
+    });
+    await expect(
+      harness.behavior.callRpc("evaluateAutoSettle", {}),
+    ).resolves.toEqual({ changedThreadIds: [] });
+
+    await harness.behavior.emitThreadEvent("thread.active", { thread });
+    await expect(
+      harness.behavior.callRpc("listLifecycle", {}),
+    ).resolves.toEqual({ rows: [] });
+  });
+
+  it("looks up a shared environment once and settles merged PR threads together", async () => {
+    const old = Date.now() - 60_000;
+    const environmentId = "env_shared";
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "t3chat-sidebar",
+      sdk: {
+        threads: {
+          list: async () => [
+            makeThreadResponse({
+              id: "thr_a",
+              environmentId,
+              createdAt: old,
+              updatedAt: old,
+              latestAttentionAt: old,
+              status: "idle",
+            }),
+            makeThreadResponse({
+              id: "thr_b",
+              environmentId,
+              createdAt: old,
+              updatedAt: old,
+              latestAttentionAt: old,
+              status: "idle",
+            }),
+          ],
+        },
+        environments: {
+          pullRequest: async () => availablePullRequest("merged"),
+        },
+      },
+    });
+    await plugin(bb);
+    disposers.push(() => harness.lifecycle.dispose());
+
+    await expect(
+      harness.behavior.callRpc("evaluateAutoSettle", {}),
+    ).resolves.toEqual({ changedThreadIds: ["thr_a", "thr_b"] });
+    expect(
+      harness.inspection.sdk.callsTo("environments.pullRequest"),
+    ).toHaveLength(1);
+  });
+
+  it("returns a policy-settled thread when its PR reopens", async () => {
+    const recent = Date.now() - 60_000;
+    let pullRequestState: "merged" | "open" = "merged";
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "t3chat-sidebar",
+      sdk: {
+        threads: {
+          list: async () => [
+            makeThreadResponse({
+              id: "thr_pr",
+              environmentId: "env_pr",
+              createdAt: recent,
+              updatedAt: recent,
+              latestAttentionAt: recent,
+              status: "idle",
+            }),
+          ],
+        },
+        environments: {
+          pullRequest: async () => availablePullRequest(pullRequestState),
+        },
+      },
+    });
+    await plugin(bb);
+    disposers.push(() => harness.lifecycle.dispose());
+
+    await expect(
+      harness.behavior.callRpc("evaluateAutoSettle", {}),
+    ).resolves.toEqual({ changedThreadIds: ["thr_pr"] });
+    pullRequestState = "open";
+    await expect(
+      harness.behavior.callRpc("evaluateAutoSettle", {}),
+    ).resolves.toEqual({ changedThreadIds: ["thr_pr"] });
+    await expect(
+      harness.behavior.callRpc("listLifecycle", {}),
+    ).resolves.toEqual({ rows: [] });
+  });
+
+  it("clears policy-owned settled state when the user pins the thread", async () => {
+    const old = Date.now() - 4 * 24 * 60 * 60 * 1_000;
+    let pinnedAt: number | null = null;
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "t3chat-sidebar",
+      sdk: {
+        threads: {
+          list: async () => [
+            makeThreadResponse({
+              id: "thr_pin",
+              createdAt: old,
+              updatedAt: old,
+              latestAttentionAt: old,
+              pinnedAt,
+              status: "idle",
+            }),
+          ],
+        },
+      },
+    });
+    await plugin(bb);
+    disposers.push(() => harness.lifecycle.dispose());
+
+    await harness.behavior.callRpc("evaluateAutoSettle", {});
+    pinnedAt = Date.now();
+    await expect(
+      harness.behavior.callRpc("evaluateAutoSettle", {}),
+    ).resolves.toEqual({ changedThreadIds: ["thr_pin"] });
     await expect(
       harness.behavior.callRpc("listLifecycle", {}),
     ).resolves.toEqual({ rows: [] });

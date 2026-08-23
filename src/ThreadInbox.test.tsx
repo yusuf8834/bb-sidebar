@@ -433,6 +433,48 @@ describe("ThreadInbox", () => {
     );
   });
 
+  it("keeps policy-settled pinned rows active but respects manual settle", async () => {
+    const now = Date.now();
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "auto", title: "Pinned auto", isPinned: true }),
+          thread({ id: "manual", title: "Pinned manual", isPinned: true }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: {
+        evaluateAutoSettle: () => ({ changedThreadIds: [] }),
+        listLifecycle: () => ({
+          rows: [
+            {
+              threadId: "auto",
+              settledAt: now,
+              settledOverride: null,
+              snoozedUntil: null,
+              snoozedAt: null,
+            },
+            {
+              threadId: "manual",
+              settledAt: now,
+              settledOverride: "settled" as const,
+              snoozedUntil: null,
+              snoozedAt: null,
+            },
+          ],
+        }),
+      },
+    });
+
+    const pinned = await screen.findByRole("region", { name: "Pinned" });
+    expect(within(pinned).getByText("Pinned auto")).toBeDefined();
+    expect(within(pinned).queryByText("Pinned manual")).toBeNull();
+    expect(
+      await screen.findByRole("region", { name: "Settled" }),
+    ).toBeDefined();
+  });
+
   // The host owns the search field; the plugin only filters by what it is
   // handed, so there is deliberately no second search box to type into.
   it("filters by the host's search query", () => {

@@ -17,6 +17,7 @@ jump away while you are about to click it.
 - Durable custom ordering for ordinary inbox threads
 - Hover controls for unpinning a pinned thread without opening its menu
 - Snoozed and Settled shelves backed by the plugin's SQLite database
+- Optional settling after inactivity, PR merge, or PR close
 - Right-click Snooze presets that can be changed in the plugin settings
 - Automatic wake-up when parked work becomes active or needs input
 - Header chips for navigating between parent and child threads
@@ -55,6 +56,15 @@ Snoozed and Settled belong to this plugin, not to bb's thread schema.
 Snoozing records a wake time. Settling records when the user filed the thread
 away. A pending question or any live work overrides both states and returns the
 thread to the inbox.
+
+Automatic settling follows T3 Code's defaults: inactive threads settle after
+three days, merged pull requests settle when that setting is on, and closed
+pull requests settle. Open and draft pull requests block inactivity settling.
+Pinning a policy-settled thread keeps it active. Manually choosing Un-settle
+also keeps it active until the thread starts real work again. Configure the
+inactivity toggle, day threshold, and merge behavior in the plugin settings.
+The backend checks all visible threads in one pass every five minutes and
+looks up each environment's pull request once per pass.
 
 The `Snooze presets` setting accepts comma-separated durations using `m`, `h`,
 `d`, or `w`. For example, `15m, 2h, 1d, 1w`. Add a custom menu label with

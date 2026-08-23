@@ -108,6 +108,21 @@ export function useLifecycle(
     void refresh();
   }, [refresh]);
 
+  // One policy pass per mounted sidebar gives a freshly opened client current
+  // state immediately. The backend coalesces concurrent clients and does the
+  // thread and PR work in one batch.
+  useEffect(() => {
+    void rpc
+      .call("evaluateAutoSettle", {})
+      .then(({ changedThreadIds }) => {
+        if (changedThreadIds.length > 0) void refresh();
+      })
+      .catch(() => {
+        // A backend generation can briefly lag the app bundle during reload.
+        // The scheduled evaluator and realtime refresh will reconcile later.
+      });
+  }, [refresh, rpc]);
+
   useRealtime("lifecycle", () => {
     void refresh();
   });
@@ -177,8 +192,15 @@ export function useLifecycle(
       return true;
     };
     return {
-      shelfFor: (thread) =>
-        resolveShelf(rows.get(thread.id), signalsFor(thread), now),
+      shelfFor: (thread) => {
+        const row = rows.get(thread.id);
+        // Pinning is an immediate keep-active choice for policy-owned rows.
+        // A deliberate manual settle remains authoritative.
+        if (thread.isPinned && row?.settledOverride !== "settled") {
+          return "active";
+        }
+        return resolveShelf(row, signalsFor(thread), now);
+      },
       canPark: (thread) => canPark(signalsFor(thread)),
       wakeAtFor: (thread) => rows.get(thread.id)?.snoozedUntil ?? null,
       settledAtFor: (thread) => rows.get(thread.id)?.settledAt ?? null,
