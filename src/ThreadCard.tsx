@@ -1,8 +1,8 @@
 import {
   useState,
-  type DragEventHandler,
   type KeyboardEventHandler,
   type MouseEvent as ReactMouseEvent,
+  type PointerEventHandler,
 } from "react";
 import {
   experimental_useSidebarThreadPullRequest as useSidebarThreadPullRequest,
@@ -26,11 +26,8 @@ import type { ConfiguredSnoozePreset } from "./lifecycle";
 export interface ThreadReorderControls {
   disabled: boolean;
   isDragging: boolean;
-  onDragStart: DragEventHandler<HTMLButtonElement>;
-  onDragEnd: DragEventHandler<HTMLButtonElement>;
-  onDragOver: DragEventHandler<HTMLLIElement>;
-  onDrop: DragEventHandler<HTMLLIElement>;
-  onKeyDown: KeyboardEventHandler<HTMLButtonElement>;
+  onPointerDown: PointerEventHandler<HTMLAnchorElement>;
+  onKeyDown: KeyboardEventHandler<HTMLAnchorElement>;
 }
 
 /**
@@ -102,8 +99,6 @@ export function ThreadCard({
     >
       <li
         className={cn("list-none", reorder?.isDragging && "opacity-50")}
-        onDragOver={reorder?.onDragOver}
-        onDrop={reorder?.onDrop}
       >
         <div
           className={cn(
@@ -124,7 +119,15 @@ export function ThreadCard({
             aria-label={`${isSelected ? "Selected, " : ""}${threadDisplayTitle(thread)}`}
             aria-current={isActive ? "page" : undefined}
             data-selected={isSelected ? "true" : undefined}
-            {...splitProps}
+            draggable={false}
+            aria-keyshortcuts={
+              reorder ? "Alt+ArrowUp Alt+ArrowDown" : undefined
+            }
+            onPointerDown={(event) => {
+              splitProps.onPointerDown?.(event);
+              reorder?.onPointerDown(event);
+            }}
+            onKeyDown={reorder?.onKeyDown}
             onClick={(event) => {
               event.preventDefault();
               if (isRenaming || event.detail > 1) return;
@@ -138,32 +141,17 @@ export function ThreadCard({
               event.stopPropagation();
               setIsRenaming(true);
             }}
-            className="absolute inset-0 cursor-pointer rounded-md"
+            className={cn(
+              "absolute inset-0 rounded-md",
+              reorder && !reorder.disabled
+                ? "cursor-grab active:cursor-grabbing"
+                : "cursor-pointer",
+            )}
           />
           <div className="pointer-events-none relative flex h-5 items-center gap-1.5">
             <span className="min-w-0 flex-1 truncate text-2xs font-medium text-muted-foreground">
               {projectName ?? " "}
             </span>
-            {reorder ? (
-              <Tooltip label="Drag to reorder · Arrow keys also work">
-                <button
-                  type="button"
-                  draggable={!reorder.disabled}
-                  disabled={reorder.disabled}
-                  aria-label={`Reorder ${threadDisplayTitle(thread)}. Use Arrow Up or Arrow Down.`}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                  }}
-                  onDragStart={reorder.onDragStart}
-                  onDragEnd={reorder.onDragEnd}
-                  onKeyDown={reorder.onKeyDown}
-                  className="pointer-events-auto rounded p-0.5 text-muted-foreground opacity-0 hover:text-foreground focus-visible:opacity-100 disabled:cursor-not-allowed group-hover/card:opacity-100"
-                >
-                  <Icon name="GripVertical" className="size-3.5" />
-                </button>
-              </Tooltip>
-            ) : null}
             {thread.isPinned ? (
               <Tooltip label="Unpin thread">
                 <button

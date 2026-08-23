@@ -41,13 +41,13 @@ reloads the plugin when a source file changes.
 
 ## Reordering threads
 
-Hover a pinned or inbox card and drag its grip handle to move it within that
-shelf. Dragging anywhere else on the card keeps BB's normal drag-to-split
-behavior. Keyboard users can focus the same handle and press Arrow Up or Arrow
-Down. Pinned moves use BB's pinned-thread API; inbox moves are saved in the
-plugin's SQLite database. A project-scoped move preserves the hidden projects'
-positions. The plugin ignores another move while a save is running and restores
-the previous order if the save fails.
+Drag anywhere on a pinned or inbox card to move it within that shelf. If the
+pointer leaves the sidebar, BB takes over the same gesture for drag-to-split.
+Keyboard users can focus the card and press Option+Arrow Up or Option+Arrow Down
+on macOS (Alt+Arrow on other platforms). Pinned moves use BB's pinned-thread
+API; inbox moves are saved in the plugin's SQLite database. A project-scoped
+move preserves the hidden projects' positions. The plugin ignores another move
+while a save is running and restores the previous order if the save fails.
 
 Pinned cards also reveal an unpin button on hover or keyboard focus.
 

@@ -22,6 +22,10 @@ Object.defineProperty(Element.prototype, "scrollIntoView", {
   configurable: true,
   value: vi.fn(),
 });
+Object.defineProperty(Document.prototype, "elementFromPoint", {
+  configurable: true,
+  value: vi.fn(),
+});
 
 // Load through the harness so the plugin's `@get-bb/plugin-sdk/app` import binds
 // to the test runtime; importing the component directly would bind it to an
@@ -101,6 +105,7 @@ afterEach(() => {
   window.localStorage.clear();
   toastMocks.success.mockReset();
   toastMocks.error.mockReset();
+  vi.mocked(document.elementFromPoint).mockReset();
 });
 
 describe("BB Sidebar registration", () => {
@@ -382,10 +387,10 @@ describe("ThreadInbox", () => {
       },
     });
 
-    fireEvent.keyDown(
-      await screen.findByRole("button", { name: /Reorder Pin B/ }),
-      { key: "ArrowUp" },
-    );
+    const pinB = await screen.findByRole("link", { name: "Pin B" });
+    fireEvent.keyDown(pinB, { key: "ArrowUp" });
+    expect(reorderInput).toBeNull();
+    fireEvent.keyDown(pinB, { key: "ArrowUp", altKey: true });
     await waitFor(() =>
       expect(reorderInput).toEqual({
         threadId: "b",
@@ -403,7 +408,7 @@ describe("ThreadInbox", () => {
     ]);
   });
 
-  it("reorders from the grip without taking over the card's split-drag target", async () => {
+  it("reorders by dragging the card and exposes no grip control", async () => {
     let reorderInput: unknown = null;
     renderSlot(inbox, listProps, {
       sidebarThreads: {
@@ -424,13 +429,9 @@ describe("ThreadInbox", () => {
       },
     });
 
-    const handle = await screen.findByRole("button", { name: /Reorder Pin A/ });
+    const card = await screen.findByRole("link", { name: "Pin A" });
     const target = screen.getByText("Pin B").closest("li")!;
-    const dataTransfer = {
-      dropEffect: "none",
-      effectAllowed: "none",
-      setData: vi.fn(),
-    };
+    vi.mocked(document.elementFromPoint).mockReturnValue(target);
     vi.spyOn(target, "getBoundingClientRect").mockReturnValue({
       top: 0,
       bottom: 40,
@@ -443,11 +444,27 @@ describe("ThreadInbox", () => {
       toJSON: () => ({}),
     });
 
-    expect(handle.closest("a")).toBeNull();
-    expect(handle.closest("li")!.querySelector("a[data-sidebar-thread-id='a']")).not.toBeNull();
-    fireEvent.dragStart(handle, { dataTransfer });
-    fireEvent.dragOver(target, { dataTransfer, clientY: 30 });
-    fireEvent.drop(target, { dataTransfer, clientY: 30 });
+    expect(card.draggable).toBe(false);
+    expect(
+      screen.queryByRole("button", { name: /Reorder Pin A/ }),
+    ).toBeNull();
+    expect(card.dataset.sidebarThreadId).toBe("a");
+    fireEvent.pointerDown(card, {
+      button: 0,
+      clientX: 20,
+      clientY: 0,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(window, {
+      clientX: 20,
+      clientY: 30,
+      pointerId: 1,
+    });
+    fireEvent.pointerUp(window, {
+      clientX: 20,
+      clientY: 30,
+      pointerId: 1,
+    });
     await waitFor(() =>
       expect(reorderInput).toEqual({
         threadId: "a",
@@ -455,6 +472,72 @@ describe("ThreadInbox", () => {
         nextThreadId: "c",
       }),
     );
+  });
+
+  it("cancels shelf reordering when bb takes over a split drag", async () => {
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "a", title: "Pin A", isPinned: true }),
+          thread({ id: "b", title: "Pin B", isPinned: true }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: [] }),
+      },
+    });
+
+    const card = await screen.findByRole("link", { name: "Pin A" });
+    const target = screen.getByText("Pin B").closest("li")!;
+    vi.mocked(document.elementFromPoint).mockReturnValue(target);
+    vi.spyOn(target, "getBoundingClientRect").mockReturnValue({
+      top: 0,
+      bottom: 40,
+      left: 0,
+      right: 200,
+      width: 200,
+      height: 40,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+
+    fireEvent.pointerDown(card, {
+      button: 0,
+      clientX: 20,
+      clientY: 0,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(window, {
+      clientX: 20,
+      clientY: 30,
+      pointerId: 1,
+    });
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole("region", { name: "Pinned" }))
+          .getAllByRole("listitem")[0]!.textContent,
+      ).toContain("Pin B"),
+    );
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.pointerUp(window, {
+      clientX: 20,
+      clientY: 30,
+      pointerId: 1,
+    });
+
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole("region", { name: "Pinned" }))
+          .getAllByRole("listitem")[0]!.textContent,
+      ).toContain("Pin A"),
+    );
+    expect(
+      rendered.rpcCalls.filter((call) => call.method === "reorderPinned"),
+    ).toHaveLength(0);
   });
 
   it("rolls back a failed reorder and ignores another move while saving", async () => {
@@ -474,8 +557,8 @@ describe("ThreadInbox", () => {
       },
     });
 
-    const handleA = await screen.findByRole("button", { name: /Reorder Pin A/ });
-    fireEvent.keyDown(handleA, { key: "ArrowDown" });
+    const cardA = await screen.findByRole("link", { name: "Pin A" });
+    fireEvent.keyDown(cardA, { key: "ArrowDown", altKey: true });
     await waitFor(() =>
       expect(rendered.rpcCalls.filter((call) => call.method === "reorderPinned"))
         .toHaveLength(1),
@@ -483,7 +566,7 @@ describe("ThreadInbox", () => {
     const pinned = screen.getByRole("region", { name: "Pinned" });
     expect(within(pinned).getAllByRole("listitem")[0]!.textContent).toContain("Pin B");
 
-    fireEvent.keyDown(handleA, { key: "ArrowDown" });
+    fireEvent.keyDown(cardA, { key: "ArrowDown", altKey: true });
     expect(rendered.rpcCalls.filter((call) => call.method === "reorderPinned"))
       .toHaveLength(1);
 
@@ -542,8 +625,8 @@ describe("ThreadInbox", () => {
     });
 
     fireEvent.keyDown(
-      await screen.findByRole("button", { name: /Reorder Inbox B/ }),
-      { key: "ArrowUp" },
+      await screen.findByRole("link", { name: "Inbox B" }),
+      { key: "ArrowUp", altKey: true },
     );
     await waitFor(() =>
       expect(reorderInput).toEqual({ inboxThreadIds: ["b", "a"] }),
@@ -572,8 +655,8 @@ describe("ThreadInbox", () => {
     });
 
     fireEvent.keyDown(
-      await screen.findByRole("button", { name: /Reorder Inbox A/ }),
-      { key: "ArrowDown" },
+      await screen.findByRole("link", { name: "Inbox A" }),
+      { key: "ArrowDown", altKey: true },
     );
     await waitFor(() =>
       expect(screen.getAllByRole("listitem")[0]!.textContent).toContain(

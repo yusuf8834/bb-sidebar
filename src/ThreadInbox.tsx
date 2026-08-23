@@ -65,6 +65,28 @@ const SHELF_EXPANSION_STORAGE_KEY = "t3chat-sidebar:shelf-expansion:v1";
 const SETTLED_INITIAL_LIMIT = 10;
 const SETTLED_PAGE_SIZE = 25;
 
+function suppressNextClick(threadId: string): void {
+  let timeout = 0;
+  const suppress = (event: MouseEvent) => {
+    const clickedThreadId =
+      event.target instanceof Element
+        ? event.target
+            .closest("[data-sidebar-thread-id]")
+            ?.getAttribute("data-sidebar-thread-id")
+        : null;
+    if (clickedThreadId !== threadId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    window.removeEventListener("click", suppress, true);
+    window.clearTimeout(timeout);
+  };
+  window.addEventListener("click", suppress, true);
+  timeout = window.setTimeout(
+    () => window.removeEventListener("click", suppress, true),
+    300,
+  );
+}
+
 interface ShelfExpansionState {
   snoozed: boolean;
   settled: boolean;
@@ -220,6 +242,13 @@ export function ThreadInbox({
   } | null>(null);
   const dragOrderRef = useRef(dragOrder);
   dragOrderRef.current = dragOrder;
+  const activeReorderCancelRef = useRef<(() => void) | null>(null);
+  useEffect(
+    () => () => {
+      activeReorderCancelRef.current?.();
+    },
+    [],
+  );
   const pinned = useMemo(() => {
     const ordered = orderPinnedThreads(pinnedBase, pinnedReorder.ids);
     return orderPinnedThreads(
@@ -247,60 +276,141 @@ export function ThreadInbox({
       disabled: target.isReordering,
       isDragging:
         dragOrder?.shelf === shelf && dragOrder.movingId === thread.id,
-      onDragStart: (event) => {
-        if (target.isReordering) {
-          event.preventDefault();
-          return;
+      onPointerDown: (event) => {
+        if (target.isReordering || event.button !== 0) return;
+
+        activeReorderCancelRef.current?.();
+        const pointerId = event.pointerId;
+        const startX = event.clientX;
+        const startY = event.clientY;
+        const movingId = thread.id;
+        let engaged = false;
+        let finished = false;
+        let previousUserSelect = "";
+        let previousCursor = "";
+
+        function cleanup() {
+          window.removeEventListener("pointermove", onPointerMove);
+          window.removeEventListener("pointerup", onPointerUp);
+          window.removeEventListener("pointercancel", onPointerCancel);
+          window.removeEventListener("keydown", onKeyDown);
+          if (engaged) {
+            document.body.style.userSelect = previousUserSelect;
+            document.body.style.cursor = previousCursor;
+          }
+          if (activeReorderCancelRef.current === cancel) {
+            activeReorderCancelRef.current = null;
+          }
         }
-        event.dataTransfer.effectAllowed = "move";
-        event.dataTransfer.setData("text/plain", thread.id);
-        const next = { shelf, movingId: thread.id, ids: visibleIds };
-        dragOrderRef.current = next;
-        setDragOrder(next);
+
+        function cancel() {
+          if (finished) return;
+          finished = true;
+          cleanup();
+          if (engaged) {
+            dragOrderRef.current = null;
+            setDragOrder(null);
+          }
+        }
+
+        function engage() {
+          engaged = true;
+          previousUserSelect = document.body.style.userSelect;
+          previousCursor = document.body.style.cursor;
+          document.body.style.userSelect = "none";
+          document.body.style.cursor = "grabbing";
+          const next = { shelf, movingId, ids: visibleIds };
+          dragOrderRef.current = next;
+          setDragOrder(next);
+        }
+
+        function reorderAt(clientX: number, clientY: number) {
+          const hit = document.elementFromPoint(clientX, clientY);
+          const row = hit instanceof Element ? hit.closest("li") : null;
+          const targetId = row
+            ?.querySelector<HTMLAnchorElement>("[data-sidebar-thread-id]")
+            ?.getAttribute("data-sidebar-thread-id");
+          const current = dragOrderRef.current;
+          if (
+            !row ||
+            !targetId ||
+            !visibleIds.includes(targetId) ||
+            !current ||
+            current.shelf !== shelf ||
+            current.movingId === targetId
+          ) {
+            return;
+          }
+          const rect = row.getBoundingClientRect();
+          const placement =
+            clientY < rect.top + rect.height / 2 ? "before" : "after";
+          const ids = movePinnedId(
+            current.ids,
+            current.movingId,
+            targetId,
+            placement,
+          );
+          const next = { ...current, ids };
+          dragOrderRef.current = next;
+          setDragOrder(next);
+        }
+
+        function onPointerMove(moveEvent: PointerEvent) {
+          if (finished || moveEvent.pointerId !== pointerId) return;
+          if (!engaged) {
+            const deltaX = moveEvent.clientX - startX;
+            const deltaY = moveEvent.clientY - startY;
+            if (Math.abs(deltaY) < 6 || Math.abs(deltaY) <= Math.abs(deltaX)) {
+              return;
+            }
+            engage();
+          }
+          moveEvent.preventDefault();
+          reorderAt(moveEvent.clientX, moveEvent.clientY);
+        }
+
+        function onPointerUp(upEvent: PointerEvent) {
+          if (finished || upEvent.pointerId !== pointerId) return;
+          const current = dragOrderRef.current;
+          finished = true;
+          cleanup();
+          if (!engaged || !current || current.shelf !== shelf) return;
+
+          dragOrderRef.current = null;
+          setDragOrder(null);
+          suppressNextClick(current.movingId);
+          const globalIds = mergeVisibleOrder(target.ids, current.ids);
+          if (shelf === "pinned") {
+            void pinnedReorder.reorder(globalIds, current.movingId);
+          } else {
+            void inboxReorder.reorder(globalIds);
+          }
+        }
+
+        function onPointerCancel(cancelEvent: PointerEvent) {
+          if (cancelEvent.pointerId === pointerId) cancel();
+        }
+
+        function onKeyDown(keyEvent: KeyboardEvent) {
+          if (keyEvent.key === "Escape") cancel();
+        }
+
+        window.addEventListener("pointermove", onPointerMove, {
+          passive: false,
+        });
+        window.addEventListener("pointerup", onPointerUp);
+        window.addEventListener("pointercancel", onPointerCancel);
+        window.addEventListener("keydown", onKeyDown);
+        activeReorderCancelRef.current = cancel;
       },
-      onDragEnd: () => {
-        dragOrderRef.current = null;
-        setDragOrder(null);
-      },
-      onDragOver: (event) => {
-        const current = dragOrderRef.current;
+      onKeyDown: (event) => {
         if (
-          !current ||
-          current.shelf !== shelf ||
-          current.movingId === thread.id
+          !event.altKey ||
+          target.isReordering ||
+          (event.key !== "ArrowUp" && event.key !== "ArrowDown")
         ) {
           return;
         }
-        event.preventDefault();
-        event.dataTransfer.dropEffect = "move";
-        const rect = event.currentTarget.getBoundingClientRect();
-        const placement =
-          event.clientY < rect.top + rect.height / 2 ? "before" : "after";
-        const ids = movePinnedId(
-          current.ids,
-          current.movingId,
-          thread.id,
-          placement,
-        );
-        const next = { ...current, ids };
-        dragOrderRef.current = next;
-        setDragOrder(next);
-      },
-      onDrop: (event) => {
-        const current = dragOrderRef.current;
-        if (!current || current.shelf !== shelf) return;
-        event.preventDefault();
-        dragOrderRef.current = null;
-        setDragOrder(null);
-        const globalIds = mergeVisibleOrder(target.ids, current.ids);
-        if (shelf === "pinned") {
-          void pinnedReorder.reorder(globalIds, current.movingId);
-        } else {
-          void inboxReorder.reorder(globalIds);
-        }
-      },
-      onKeyDown: (event) => {
-        if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
         event.preventDefault();
         event.stopPropagation();
         const ids = movePinnedIdByOffset(
