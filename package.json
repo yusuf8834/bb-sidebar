@@ -1,16 +1,25 @@
 {
-  "name": "bb-plugin-t3chat-sidebar",
+  "name": "bb-plugin-bb-sidebar",
   "version": "0.1.0",
   "type": "module",
-  "description": "An inbox sidebar for bb, heavily inspired by the T3 Chat sidebar.",
+  "description": "A stable bb thread sidebar with manual ordering, snooze, settle, and bulk actions.",
   "license": "MIT",
+  "author": "Yusuf Akbulut",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yusuf8834/bb-t3sidebar.git"
+  },
+  "homepage": "https://github.com/yusuf8834/bb-t3sidebar#readme",
+  "bugs": {
+    "url": "https://github.com/yusuf8834/bb-t3sidebar/issues"
+  },
   "engines": {
     "bb": ">=0.39.0",
     "bbPluginSdk": ">=0.4.8"
   },
   "bb": {
     "name": "BB Sidebar",
-    "description": "A stable inbox sidebar for bb, heavily inspired by the T3 Chat sidebar.",
+    "description": "Keeps bb threads in a stable, manually ordered inbox with snooze, settle, and bulk actions.",
     "branding": {
       "icon": "PanelLeft"
     },
@@ -18,7 +27,11 @@
     "server": "./src/server.ts"
   },
   "keywords": [
-    "bb-plugin"
+    "bb-plugin",
+    "sidebar",
+    "threads",
+    "inbox",
+    "productivity"
   ],
   "files": [
     "dist",
@@ -26,7 +39,8 @@
     "app.tsx",
     "tsconfig.json",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "scripts": {
     "build": "bb plugin build",
@@ -42,7 +56,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@get-bb/plugin-sdk": "0.4.8",
+    "@get-bb/plugin-sdk": "0.4.14",
     "@radix-ui/react-context-menu": "^2.3.3",
     "@radix-ui/react-select": "^2.3.3",
     "@radix-ui/react-tooltip": "^1.2.16",

@@ -57,7 +57,7 @@ async function loadPlugin(
     makeThreadResponse({ id: threadId }),
 ) {
   const { bb, harness } = createFakePluginHost({
-    pluginId: "t3chat-sidebar",
+    pluginId: "bb-sidebar",
     sdk: {
       threads: {
         list: async () => [],
@@ -326,7 +326,7 @@ describe("lifecycle RPC", () => {
 
   it("does not settle when native unpinning fails", async () => {
     const { bb, harness } = createFakePluginHost({
-      pluginId: "t3chat-sidebar",
+      pluginId: "bb-sidebar",
       sdk: {
         threads: {
           unpin: async () => {
@@ -351,7 +351,7 @@ describe("automatic settle evaluation", () => {
   it("settles inactive threads and publishes one batched refresh", async () => {
     const old = Date.now() - 4 * 24 * 60 * 60 * 1_000;
     const { bb, harness } = createFakePluginHost({
-      pluginId: "t3chat-sidebar",
+      pluginId: "bb-sidebar",
       sdk: {
         threads: {
           list: async () => [
@@ -399,7 +399,7 @@ describe("automatic settle evaluation", () => {
       status: "idle",
     });
     const { bb, harness } = createFakePluginHost({
-      pluginId: "t3chat-sidebar",
+      pluginId: "bb-sidebar",
       sdk: {
         threads: {
           list: async () => [thread],
@@ -426,7 +426,7 @@ describe("automatic settle evaluation", () => {
     const old = Date.now() - 60_000;
     const environmentId = "env_shared";
     const { bb, harness } = createFakePluginHost({
-      pluginId: "t3chat-sidebar",
+      pluginId: "bb-sidebar",
       sdk: {
         threads: {
           list: async () => [
@@ -468,7 +468,7 @@ describe("automatic settle evaluation", () => {
     const recent = Date.now() - 60_000;
     let pullRequestState: "merged" | "open" = "merged";
     const { bb, harness } = createFakePluginHost({
-      pluginId: "t3chat-sidebar",
+      pluginId: "bb-sidebar",
       sdk: {
         threads: {
           list: async () => [
@@ -506,7 +506,7 @@ describe("automatic settle evaluation", () => {
     const old = Date.now() - 4 * 24 * 60 * 60 * 1_000;
     let pinnedAt: number | null = null;
     const { bb, harness } = createFakePluginHost({
-      pluginId: "t3chat-sidebar",
+      pluginId: "bb-sidebar",
       sdk: {
         threads: {
           list: async () => [

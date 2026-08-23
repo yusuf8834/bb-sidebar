@@ -5,7 +5,7 @@ import {
   useRpc,
 } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
-import type { t3chatSidebarRpcContract } from "./server";
+import type { bbSidebarRpcContract } from "./server";
 import { orderInboxThreads } from "./pinned-order";
 
 export interface InboxReorderApi {
@@ -23,7 +23,7 @@ function orderKey(ids: readonly string[]): string {
 export function useInboxReorder(
   inboxThreads: readonly PluginSidebarThread[],
 ): InboxReorderApi {
-  const rpc = useRpc<typeof t3chatSidebarRpcContract>();
+  const rpc = useRpc<typeof bbSidebarRpcContract>();
   const [storedIds, setStoredIds] = useState<readonly string[] | null>(null);
   const [optimisticIds, setOptimisticIds] = useState<
     readonly string[] | null

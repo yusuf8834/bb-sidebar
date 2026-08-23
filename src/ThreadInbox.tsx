@@ -63,7 +63,7 @@ import {
 } from "./selection";
 
 const ALL_PROJECTS = "__all__";
-const SHELF_EXPANSION_STORAGE_KEY = "t3chat-sidebar:shelf-expansion:v1";
+const SHELF_EXPANSION_STORAGE_KEY = "bb-sidebar:shelf-expansion:v1";
 const SETTLED_INITIAL_LIMIT = 10;
 const SETTLED_PAGE_SIZE = 25;
 

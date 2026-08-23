@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 import { toast } from "sonner";
-import type { t3chatSidebarRpcContract } from "./server";
+import type { bbSidebarRpcContract } from "./server";
 import type { BulkActionResult } from "./bulk-actions";
 import {
   canPark,
@@ -92,7 +92,7 @@ function errorDescription(error: unknown): string | undefined {
 export function useLifecycle(
   threads: readonly PluginSidebarThread[],
 ): LifecycleApi {
-  const rpc = useRpc<typeof t3chatSidebarRpcContract>();
+  const rpc = useRpc<typeof bbSidebarRpcContract>();
   const [rows, setRows] = useState<ReadonlyMap<string, ThreadLifecycleRow>>(
     () => new Map(),
   );

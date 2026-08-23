@@ -1778,17 +1778,17 @@ describe("card metadata", () => {
     render([
       thread({
         id: "thr_m",
-        host: { id: "host_1", name: "Sawyer's MacBook" },
+        host: { id: "host_1", name: "Dev MacBook" },
       }),
     ]);
-    expect(await screen.findByText("Sawyer's MacBook")).toBeDefined();
+    expect(await screen.findByText("Dev MacBook")).toBeDefined();
   });
 
   it("prefers the branch over the machine when both exist", async () => {
     render([
       thread({
         id: "thr_b",
-        host: { id: "host_1", name: "Sawyer's MacBook" },
+        host: { id: "host_1", name: "Dev MacBook" },
         environment: {
           id: "env_1",
           name: "Worktree",
@@ -1798,10 +1798,10 @@ describe("card metadata", () => {
       }),
     ]);
     expect(await screen.findByText("bb/feature")).toBeDefined();
-    expect(screen.queryByText("Sawyer's MacBook")).toBeNull();
+    expect(screen.queryByText("Dev MacBook")).toBeNull();
     expect(await screen.findByLabelText("Worktree branch")).toBeDefined();
     expect(
-      screen.getByLabelText("Machine: Sawyer's MacBook"),
+      screen.getByLabelText("Machine: Dev MacBook"),
     ).toBeDefined();
   });
 

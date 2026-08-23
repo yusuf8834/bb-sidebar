@@ -1,4 +1,4 @@
-// bb-plugin-t3chat-sidebar backend: the settled and snoozed store.
+// BB Sidebar backend: the settled and snoozed store.
 //
 // This state lives in the plugin's own SQLite database, never on bb's thread.
 // Putting it on the thread would mean a schema change, a wire change, and a
@@ -73,7 +73,7 @@ const bulkMutationOutputSchema = z
   })
   .strict();
 
-export const t3chatSidebarRpcContract = defineRpcContract({
+export const bbSidebarRpcContract = defineRpcContract({
   listLifecycle: {
     input: z.object({}),
     output: z.object({
@@ -447,7 +447,7 @@ export default function plugin(bb: BbPluginApi) {
     await evaluatePolicies();
   });
 
-  bb.rpc.register(t3chatSidebarRpcContract, {
+  bb.rpc.register(bbSidebarRpcContract, {
     async listLifecycle() {
       return { rows: readAll() };
     },

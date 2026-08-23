@@ -1,6 +1,6 @@
 # BB Sidebar
 
-A calmer thread list for [bb](https://github.com/get-bb/bb), inspired by T3 Code. Threads stay where you put them while status, snooze, settle, and bulk actions remain close at hand.
+A stable thread list for [bb](https://github.com/get-bb/bb). Threads stay where you put them while status, snooze, settle, and bulk actions remain close at hand.
 
 ![BB Sidebar running in bb](docs/screenshots/sidebar.png)
 
@@ -28,4 +28,8 @@ npm run build
 bb plugin install path:. --yes
 ```
 
-Directly inspired by [T3 Code](https://github.com/pingdotgg/t3code). See [LICENSE](LICENSE).
+## Credits
+
+This project includes code adapted from [bb-plugin-t3sidebar](https://github.com/SawyerHood/bb-plugin-t3sidebar). Its MIT copyright notice remains in [LICENSE](LICENSE).
+
+The sidebar design and interactions are directly inspired by [T3 Code](https://github.com/pingdotgg/t3code), which is also released under the MIT License. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for details.

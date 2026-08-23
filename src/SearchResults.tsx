@@ -151,7 +151,7 @@ function SearchResultRow({
     <li role="presentation" className="list-none">
       <a
         ref={anchorRef}
-        id={`t3chat-search-result-${thread.id}`}
+        id={`bb-sidebar-search-result-${thread.id}`}
         data-sidebar-thread-shortcut-target=""
         data-sidebar-thread-id={thread.id}
         href="#"

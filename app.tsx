@@ -1,4 +1,4 @@
-// bb-plugin-t3chat-sidebar: a T3 Chat-inspired replacement for bb's thread list.
+// BB Sidebar: a stable, manually ordered replacement for bb's thread list.
 // list, and the reference example for `app.slots.experimental_threadList`.
 //
 // The idea it is built around: the list NEVER re-orders itself. Threads sort

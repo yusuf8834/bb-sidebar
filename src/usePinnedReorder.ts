@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type PluginSidebarThread, useRpc } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
-import type { t3chatSidebarRpcContract } from "./server";
+import type { bbSidebarRpcContract } from "./server";
 import { orderPinnedThreads, pinnedNeighbors } from "./pinned-order";
 
 interface OptimisticOrder {
@@ -25,7 +25,7 @@ function orderKey(ids: readonly string[]): string {
 export function usePinnedReorder(
   pinnedThreads: readonly PluginSidebarThread[],
 ): PinnedReorderApi {
-  const rpc = useRpc<typeof t3chatSidebarRpcContract>();
+  const rpc = useRpc<typeof bbSidebarRpcContract>();
   const baseIds = useMemo(
     () => pinnedThreads.map((thread) => thread.id),
     [pinnedThreads],
