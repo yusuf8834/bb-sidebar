@@ -22,6 +22,7 @@ import { InlineThreadTitle } from "./InlineThreadTitle";
  */
 export function SlimRow({
   thread,
+  projectName,
   isActive,
   isSelected,
   shelf,
@@ -34,6 +35,7 @@ export function SlimRow({
   onSelectionClick,
 }: {
   thread: PluginSidebarThread;
+  projectName: string | null;
   isActive: boolean;
   isSelected: boolean;
   shelf: "snoozed" | "settled";
@@ -47,6 +49,7 @@ export function SlimRow({
 }) {
   const actions = useSidebarThreadActions();
   const title = threadDisplayTitle(thread);
+  const rowLabel = projectName ? `${projectName} · ${title}` : title;
   const [isRenaming, setIsRenaming] = useState(false);
 
   return (
@@ -72,7 +75,7 @@ export function SlimRow({
             data-sidebar-thread-shortcut-target=""
             data-sidebar-thread-id={thread.id}
             href="#"
-            aria-label={`${isSelected ? "Selected, " : ""}${title}`}
+            aria-label={`${isSelected ? "Selected, " : ""}${rowLabel}`}
             aria-current={isActive ? "page" : undefined}
             data-selected={isSelected ? "true" : undefined}
             onClick={(event) => {
@@ -91,16 +94,30 @@ export function SlimRow({
           />
           <span
             className={cn(
-              "pointer-events-none relative min-w-0 flex-1 truncate",
+              "pointer-events-none relative flex min-w-0 flex-1 items-center gap-1",
               isRenaming && "pointer-events-auto",
               isActive ? "text-foreground" : "text-muted-foreground/70",
               "group-hover/slim:text-foreground",
             )}
           >
+            {projectName && !isRenaming ? (
+              <>
+                <span className="max-w-[40%] shrink truncate text-muted-foreground/60">
+                  {projectName}
+                </span>
+                <span
+                  aria-hidden="true"
+                  className="shrink-0 text-muted-foreground/40"
+                >
+                  ·
+                </span>
+              </>
+            ) : null}
             <InlineThreadTitle
               thread={thread}
               editing={isRenaming}
               onEditingChange={setIsRenaming}
+              className="min-w-0 flex-1 truncate"
             />
           </span>
           {/* The same slot as a card, so a shelf keeps the card's column. A

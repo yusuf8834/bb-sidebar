@@ -853,6 +853,7 @@ export function ThreadInbox({
             <ParkedShelf
               label="Settled"
               threads={settled}
+              projectNameById={projectNameById}
               expanded={expandedShelves.settled}
               onToggle={() =>
                 setExpandedShelves((current) => ({
@@ -888,6 +889,7 @@ export function ThreadInbox({
 function ParkedShelf({
   label,
   threads,
+  projectNameById,
   expanded,
   onToggle,
   shelf,
@@ -903,6 +905,7 @@ function ParkedShelf({
 }: {
   label: string;
   threads: readonly PluginSidebarThread[];
+  projectNameById?: ReadonlyMap<string, string>;
   expanded: boolean;
   onToggle: () => void;
   shelf: "snoozed" | "settled";
@@ -954,6 +957,7 @@ function ParkedShelf({
           <SlimRow
             key={thread.id}
             thread={thread}
+            projectName={projectNameById?.get(thread.projectId) ?? null}
             isActive={thread.id === activeThreadId}
             isSelected={selectedThreadIds.has(thread.id)}
             shelf={shelf}

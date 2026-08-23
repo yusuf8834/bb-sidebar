@@ -983,6 +983,12 @@ describe("parking threads", () => {
     expect(screen.queryByText("Finished work")).toBeNull();
     fireEvent.click(within(shelf).getByRole("button"));
     expect(within(shelf).getByText("Finished work")).toBeDefined();
+    expect(
+      within(shelf).getByRole("listitem").textContent,
+    ).toMatch(/bb\s*·\s*Finished work/);
+    expect(
+      within(shelf).getByLabelText("bb · Finished work"),
+    ).toBeDefined();
   });
 
   it("keeps a working thread out of the shelves and offers no park action", async () => {
