@@ -1,4 +1,4 @@
-// bb-plugin-t3chat-sidebar: a T3 Code-style replacement for bb's thread list.
+// bb-plugin-t3chat-sidebar: a T3 Chat-inspired replacement for bb's thread list.
 // list, and the reference example for `app.slots.experimental_threadList`.
 //
 // The idea it is built around: the list NEVER re-orders itself. Threads sort
@@ -12,7 +12,7 @@ import { SubagentsChip } from "./src/SubagentsChip";
 export default definePluginApp((app) => {
   app.slots.experimental_threadList({
     id: "inbox",
-    title: "T3 Chat Sidebar",
+    title: "BB Sidebar",
     description: "One flat list of cards, newest first, that never re-orders.",
     component: ThreadInbox,
   });

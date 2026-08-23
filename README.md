@@ -1,8 +1,8 @@
-# T3 Chat Sidebar
+# BB Sidebar
 
-A T3 Code-style thread list for bb. It replaces the scrolling part of bb's
-sidebar while bb keeps its own search, New thread button, plugin navigation,
-and footer.
+A thread list for bb, heavily inspired by the T3 Chat sidebar. It replaces the
+scrolling part of bb's sidebar while bb keeps its own search, New thread button,
+plugin navigation, and footer.
 
 The list follows one opinionated rule: activity never moves a card. Active
 threads stay in creation order until you pin or park them, so a row cannot
@@ -32,7 +32,7 @@ npm run build
 bb plugin install path:. --yes
 ```
 
-Then choose **T3 Chat Sidebar** under **Settings -> Appearance -> Sidebar**.
+Then choose **BB Sidebar** under **Settings -> Appearance -> Sidebar**.
 bb's sidebar returns immediately if you select it again or disable this plugin.
 
 For development, use `bb plugin dev` after the path install. It rebuilds and

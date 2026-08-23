@@ -2,15 +2,15 @@
   "name": "bb-plugin-t3chat-sidebar",
   "version": "0.1.0",
   "type": "module",
-  "description": "A T3 Code-style inbox sidebar for bb.",
+  "description": "An inbox sidebar for bb, heavily inspired by the T3 Chat sidebar.",
   "license": "MIT",
   "engines": {
     "bb": ">=0.39.0",
     "bbPluginSdk": ">=0.4.8"
   },
   "bb": {
-    "name": "T3 Chat Sidebar",
-    "description": "A T3 Code-style inbox with stable cards, project filtering, and parked shelves.",
+    "name": "BB Sidebar",
+    "description": "A stable inbox sidebar for bb, heavily inspired by the T3 Chat sidebar.",
     "branding": {
       "icon": "PanelLeft"
     },
