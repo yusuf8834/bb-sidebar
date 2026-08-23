@@ -2,7 +2,7 @@
   "name": "bb-plugin-bb-sidebar",
   "version": "0.1.0",
   "type": "module",
-  "description": "A stable bb thread sidebar with manual ordering, snooze, settle, and bulk actions.",
+  "description": "A stable bb thread sidebar with manual ordering, snooze, settle, and bulk actions. Similar to T3Code Sidebar.",
   "license": "MIT",
   "author": "Yusuf Akbulut",
   "repository": {
@@ -19,7 +19,7 @@
   },
   "bb": {
     "name": "BB Sidebar",
-    "description": "Keeps bb threads in a stable, manually ordered inbox with snooze, settle, and bulk actions.",
+    "description": "Keeps bb threads in a stable, manually ordered inbox with snooze, settle, and bulk actions. Similar to T3Code Sidebar.",
     "branding": {
       "icon": "PanelLeft"
     },
