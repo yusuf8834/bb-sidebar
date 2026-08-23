@@ -6,6 +6,7 @@ import {
   type PluginThreadHeaderActionProps,
 } from "@get-bb/plugin-sdk/app";
 import { cn } from "./lib/utils";
+import { Tooltip } from "./components/Tooltip";
 import { Disc } from "./Disc";
 import { StatusGlyph } from "./StatusGlyph";
 import { childrenOf, threadDisplayTitle } from "./inbox";
@@ -36,20 +37,24 @@ export function SubagentsChip({
 
   return (
     <span className="relative">
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-label={`${children.length} child threads`}
-        onClick={() => setOpen((value) => !value)}
-        className={cn(
-          "flex h-7 items-center gap-1.5 rounded-full border border-border px-2 text-2xs text-muted-foreground",
-          "hover:bg-accent hover:text-foreground",
-          open && "bg-accent text-foreground",
-        )}
-      >
-        <DiscCluster threads={children} />
-        {isCompactViewport ? null : <span className="truncate">{label}</span>}
-      </button>
+      <Tooltip label={`${children.length} child threads`} side="bottom">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-label={`${children.length} child threads`}
+          onClick={() => setOpen((value) => !value)}
+          className={cn(
+            "flex h-7 items-center gap-1.5 rounded-full border border-border px-2 text-2xs text-muted-foreground",
+            "hover:bg-accent hover:text-foreground",
+            open && "bg-accent text-foreground",
+          )}
+        >
+          <DiscCluster threads={children} />
+          {isCompactViewport ? null : (
+            <span className="truncate">{label}</span>
+          )}
+        </button>
+      </Tooltip>
       {open ? (
         <>
           {/* Click-away. The header is a short row, so the list itself is

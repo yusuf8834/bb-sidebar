@@ -1,4 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import {
   experimental_useSidebarThreadActions as useSidebarThreadActions,
   experimental_useSidebarThreadSplit as useSidebarThreadSplit,
@@ -23,6 +28,8 @@ export function SearchResults({
   now,
   wokeThreadIds,
   onAcknowledgeWake,
+  selectedThreadIds,
+  onSelectionClick,
   onNavigate,
 }: {
   threads: readonly PluginSidebarThread[];
@@ -31,6 +38,11 @@ export function SearchResults({
   now: number;
   wokeThreadIds: ReadonlySet<string>;
   onAcknowledgeWake: (threadId: string) => void;
+  selectedThreadIds: ReadonlySet<string>;
+  onSelectionClick: (
+    threadId: string,
+    event: ReactMouseEvent<HTMLAnchorElement>,
+  ) => boolean;
   onNavigate: () => void;
 }) {
   const [highlightedIndex, setHighlightedIndex] = useState(0);
@@ -52,6 +64,7 @@ export function SearchResults({
     <ul
       role="listbox"
       aria-label="Thread search results"
+      aria-multiselectable="true"
       className="flex flex-col gap-px"
       onKeyDown={(event) => {
         if (event.nativeEvent.isComposing) return;
@@ -87,6 +100,7 @@ export function SearchResults({
           projectName={projectNameById.get(thread.projectId) ?? null}
           isActive={thread.id === activeThreadId}
           isHighlighted={highlightedIndex === index}
+          isSelected={selectedThreadIds.has(thread.id)}
           now={now}
           isWoke={wokeThreadIds.has(thread.id)}
           anchorRef={(node) => {
@@ -94,6 +108,7 @@ export function SearchResults({
           }}
           onHighlight={() => setHighlightedIndex(index)}
           onAcknowledgeWake={() => onAcknowledgeWake(thread.id)}
+          onSelectionClick={(event) => onSelectionClick(thread.id, event)}
           onNavigate={onNavigate}
         />
       ))}
@@ -106,22 +121,26 @@ function SearchResultRow({
   projectName,
   isActive,
   isHighlighted,
+  isSelected,
   now,
   isWoke,
   anchorRef,
   onHighlight,
   onAcknowledgeWake,
+  onSelectionClick,
   onNavigate,
 }: {
   thread: PluginSidebarThread;
   projectName: string | null;
   isActive: boolean;
   isHighlighted: boolean;
+  isSelected: boolean;
   now: number;
   isWoke: boolean;
   anchorRef: (node: HTMLAnchorElement | null) => void;
   onHighlight: () => void;
   onAcknowledgeWake: () => void;
+  onSelectionClick: (event: ReactMouseEvent<HTMLAnchorElement>) => boolean;
   onNavigate: () => void;
 }) {
   const actions = useSidebarThreadActions();
@@ -138,18 +157,18 @@ function SearchResultRow({
         href="#"
         role="option"
         tabIndex={isHighlighted ? 0 : -1}
-        aria-selected={isHighlighted}
+        aria-selected={isSelected}
         aria-current={isActive ? "page" : undefined}
+        data-selected={isSelected ? "true" : undefined}
         aria-label={projectName ? `${title}, ${projectName}` : title}
         {...splitProps}
         onFocus={onHighlight}
         onMouseMove={onHighlight}
         onClick={(event) => {
           event.preventDefault();
+          if (onSelectionClick(event)) return;
           if (isWoke) onAcknowledgeWake();
-          actions.open(thread.id, {
-            split: event.metaKey || event.ctrlKey,
-          });
+          actions.open(thread.id, { split: false });
           onNavigate();
         }}
         className={cn(
@@ -157,6 +176,7 @@ function SearchResultRow({
           isHighlighted || isActive
             ? "bg-sidebar-accent text-foreground"
             : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
+          isSelected && "ring-1 ring-inset ring-primary/60",
           !isActive && layout !== null && "bg-sidebar-accent/30",
         )}
       >

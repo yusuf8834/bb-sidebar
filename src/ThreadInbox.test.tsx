@@ -18,6 +18,11 @@ const toastMocks = vi.hoisted(() => ({
 
 vi.mock("sonner", () => ({ toast: toastMocks }));
 
+Object.defineProperty(Element.prototype, "scrollIntoView", {
+  configurable: true,
+  value: vi.fn(),
+});
+
 // Load through the harness so the plugin's `@get-bb/plugin-sdk/app` import binds
 // to the test runtime; importing the component directly would bind it to an
 // empty runtime first.
@@ -152,14 +157,185 @@ describe("ThreadInbox", () => {
     expect(navigated).toBe(1);
   });
 
-  it("opens in a split with the platform modifier held", () => {
+  it("uses the platform modifier to select without opening", () => {
     const rendered = render([thread({ id: "thr_split" })]);
     fireEvent.click(screen.getByRole("link"), { metaKey: true });
-    expect(rendered.sidebarActionCalls).toContainEqual({
-      method: "open",
-      threadId: "thr_split",
-      options: { split: true },
+    expect(rendered.sidebarActionCalls).toEqual([]);
+    expect(
+      screen.getByRole("toolbar", { name: "1 threads selected" }),
+    ).toBeDefined();
+  });
+
+  it("gives every bulk icon action a keyboard-visible clue", async () => {
+    render([thread({ id: "thr_selected" })]);
+    fireEvent.click(screen.getByRole("link"), { metaKey: true });
+
+    const actions = [
+      ["button", "Settle selected threads"],
+      ["combobox", "Snooze selected threads"],
+      ["button", "Mark selected threads read"],
+      ["button", "Mark selected threads unread"],
+      ["button", "Clear selection"],
+    ] as const;
+
+    for (const [role, label] of actions) {
+      const trigger = screen.getByRole(role, { name: label });
+      fireEvent.focus(trigger);
+      expect((await screen.findByRole("tooltip")).textContent).toBe(label);
+      fireEvent.blur(trigger);
+      await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
+    }
+  });
+
+  it("extends selection across the visible row order with Shift-click", () => {
+    render([
+      thread({ id: "a", title: "First", createdAt: 30 }),
+      thread({ id: "b", title: "Second", createdAt: 20 }),
+      thread({ id: "c", title: "Third", createdAt: 10 }),
+    ]);
+    const links = screen.getAllByRole("link");
+    fireEvent.click(links[0]!, { metaKey: true });
+    fireEvent.click(links[2]!, { shiftKey: true });
+
+    expect(document.querySelectorAll('[data-selected="true"]')).toHaveLength(
+      3,
+    );
+    expect(
+      screen.getByRole("toolbar", { name: "3 threads selected" }),
+    ).toBeDefined();
+  });
+
+  it("drops selected rows that leave filtered search results", async () => {
+    const rendered = render([
+      thread({ id: "keep", title: "Keep match", createdAt: 20 }),
+      thread({ id: "drop", title: "Drop row", createdAt: 10 }),
+    ]);
+    const links = screen.getAllByRole("link");
+    fireEvent.click(links[0]!, { metaKey: true });
+    fireEvent.click(links[1]!, { metaKey: true });
+    const InboxComponent = inbox.component;
+    rendered.rerender(
+      <InboxComponent {...listProps} searchQuery="keep" />,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("toolbar", { name: "1 threads selected" }),
+      ).toBeDefined(),
+    );
+    expect(document.querySelectorAll('[data-selected="true"]')).toHaveLength(
+      1,
+    );
+  });
+
+  it("marks selected rows read and clears successful selection", async () => {
+    const rendered = render([
+      thread({ id: "a", title: "First", isUnread: true, createdAt: 20 }),
+      thread({ id: "b", title: "Second", isUnread: true, createdAt: 10 }),
+    ]);
+    const links = screen.getAllByRole("link");
+    fireEvent.click(links[0]!, { metaKey: true });
+    fireEvent.click(links[1]!, { metaKey: true });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Mark selected threads read" }),
+    );
+
+    await waitFor(() =>
+      expect(
+        rendered.sidebarActionCalls.filter((call) => call.method === "setRead"),
+      ).toHaveLength(2),
+    );
+    expect(rendered.sidebarActionCalls).toEqual(
+      expect.arrayContaining([
+        { method: "setRead", threadId: "a", read: true },
+        { method: "setRead", threadId: "b", read: true },
+      ]),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("toolbar", { name: /threads selected/ }),
+      ).toBeNull(),
+    );
+  });
+
+  it("keeps failed rows selected after a partial bulk settle", async () => {
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "a", title: "First", createdAt: 20 }),
+          thread({ id: "b", title: "Second", createdAt: 10 }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: [] }),
+        bulkSettle: () => ({
+          succeededThreadIds: ["a"],
+          failures: [{ threadId: "b", error: "cannot unpin" }],
+        }),
+      },
     });
+    const links = screen.getAllByRole("link");
+    fireEvent.click(links[0]!, { metaKey: true });
+    fireEvent.click(links[1]!, { metaKey: true });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Settle selected threads" }),
+    );
+
+    await waitFor(() =>
+      expect(rendered.rpcCalls.some((call) => call.method === "bulkSettle")).toBe(
+        true,
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("toolbar", { name: "1 threads selected" }),
+      ).toBeDefined(),
+    );
+    expect(
+      document
+        .querySelector('[data-sidebar-thread-id="b"]')
+        ?.getAttribute("data-selected"),
+    ).toBe("true");
+    expect(toastMocks.error).toHaveBeenCalledWith(
+      "1 of 2 settle actions failed",
+      { description: "cannot unpin" },
+    );
+  });
+
+  it("bulk snoozes selected rows with a configured preset", async () => {
+    let bulkInput: { threadIds: string[]; snoozedUntil: number } | null = null;
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "a", title: "First", createdAt: 20 }),
+          thread({ id: "b", title: "Second", createdAt: 10 }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      settings: { snoozePresets: "15m, 2h" },
+      rpc: {
+        listLifecycle: () => ({ rows: [] }),
+        bulkSnooze: (input) => {
+          bulkInput = input as { threadIds: string[]; snoozedUntil: number };
+          return { succeededThreadIds: ["a", "b"], failures: [] };
+        },
+      },
+    });
+    const links = screen.getAllByRole("link");
+    fireEvent.click(links[0]!, { metaKey: true });
+    fireEvent.click(links[1]!, { metaKey: true });
+    fireEvent.keyDown(
+      screen.getByRole("combobox", { name: "Snooze selected threads" }),
+      { key: "Enter" },
+    );
+    fireEvent.click(await screen.findByRole("option", { name: "15 minutes" }));
+
+    await waitFor(() => expect(bulkInput).not.toBeNull());
+    expect(bulkInput!.threadIds).toEqual(["a", "b"]);
+    expect(bulkInput!.snoozedUntil).toBeGreaterThan(Date.now());
   });
 
   it("separates pinned threads from the inbox", () => {
@@ -442,6 +618,7 @@ describe("ThreadInbox", () => {
         threads: [
           thread({ id: "auto", title: "Pinned auto", isPinned: true }),
           thread({ id: "manual", title: "Pinned manual", isPinned: true }),
+          thread({ id: "snoozed", title: "Pinned snooze", isPinned: true }),
         ],
         projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
       },
@@ -463,6 +640,13 @@ describe("ThreadInbox", () => {
               snoozedUntil: null,
               snoozedAt: null,
             },
+            {
+              threadId: "snoozed",
+              settledAt: null,
+              settledOverride: null,
+              snoozedUntil: now + 60_000,
+              snoozedAt: now,
+            },
           ],
         }),
       },
@@ -471,8 +655,12 @@ describe("ThreadInbox", () => {
     const pinned = await screen.findByRole("region", { name: "Pinned" });
     expect(within(pinned).getByText("Pinned auto")).toBeDefined();
     expect(within(pinned).queryByText("Pinned manual")).toBeNull();
+    expect(within(pinned).queryByText("Pinned snooze")).toBeNull();
     expect(
       await screen.findByRole("region", { name: "Settled" }),
+    ).toBeDefined();
+    expect(
+      await screen.findByRole("region", { name: "Snoozed" }),
     ).toBeDefined();
   });
 
@@ -608,7 +796,7 @@ describe("ThreadInbox", () => {
     results[0]!.focus();
     fireEvent.keyDown(results[0]!, { key: "ArrowDown" });
     expect(document.activeElement).toBe(results[1]);
-    expect(results[1]!.getAttribute("aria-selected")).toBe("true");
+    expect(results[1]!.tabIndex).toBe(0);
 
     fireEvent.keyDown(results[1]!, { key: "Enter" });
     expect(rendered.sidebarActionCalls).toContainEqual({

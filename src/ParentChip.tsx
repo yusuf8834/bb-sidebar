@@ -4,6 +4,7 @@ import {
   type PluginThreadHeaderActionProps,
 } from "@get-bb/plugin-sdk/app";
 import { Icon } from "./components/Icon";
+import { Tooltip } from "./components/Tooltip";
 import { cn } from "./lib/utils";
 import { Disc } from "./Disc";
 import { parentOf, threadDisplayTitle } from "./inbox";
@@ -29,20 +30,21 @@ export function ParentChip({
   const title = threadDisplayTitle(parent);
 
   return (
-    <button
-      type="button"
-      aria-label={`Back to parent: ${title}`}
-      title={title}
-      onClick={() => actions.open(parent.id)}
-      className={cn(
-        "flex h-7 max-w-full items-center gap-1.5 rounded-full border border-border text-2xs text-muted-foreground",
-        "hover:bg-accent hover:text-foreground",
-        isCompactViewport ? "px-1.5" : "px-2",
-      )}
-    >
-      <Icon name="ChevronLeft" className="size-3 shrink-0" aria-hidden />
-      <Disc thread={parent} />
-      {isCompactViewport ? null : <span className="truncate">{title}</span>}
-    </button>
+    <Tooltip label={`Back to parent: ${title}`} side="bottom">
+      <button
+        type="button"
+        aria-label={`Back to parent: ${title}`}
+        onClick={() => actions.open(parent.id)}
+        className={cn(
+          "flex h-7 max-w-full items-center gap-1.5 rounded-full border border-border text-2xs text-muted-foreground",
+          "hover:bg-accent hover:text-foreground",
+          isCompactViewport ? "px-1.5" : "px-2",
+        )}
+      >
+        <Icon name="ChevronLeft" className="size-3 shrink-0" aria-hidden />
+        <Disc thread={parent} />
+        {isCompactViewport ? null : <span className="truncate">{title}</span>}
+      </button>
+    </Tooltip>
   );
 }

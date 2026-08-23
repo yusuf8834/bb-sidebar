@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, type MouseEvent as ReactMouseEvent } from "react";
 import {
   experimental_useSidebarThreadActions as useSidebarThreadActions,
   type PluginSidebarThread,
 } from "@get-bb/plugin-sdk/app";
 import { Icon } from "./components/Icon";
+import { Tooltip } from "./components/Tooltip";
 import { cn } from "./lib/utils";
 import { RowContextMenu } from "./RowContextMenu";
 import { STATUS_SLOT_CLASS, StatusOrTime } from "./StatusSlot";
@@ -22,6 +23,7 @@ import { InlineThreadTitle } from "./InlineThreadTitle";
 export function SlimRow({
   thread,
   isActive,
+  isSelected,
   shelf,
   wakeAt,
   now,
@@ -29,9 +31,11 @@ export function SlimRow({
   onNavigate,
   onRestore,
   onSnooze,
+  onSelectionClick,
 }: {
   thread: PluginSidebarThread;
   isActive: boolean;
+  isSelected: boolean;
   shelf: "snoozed" | "settled";
   wakeAt: number | null;
   now: number;
@@ -39,6 +43,7 @@ export function SlimRow({
   onNavigate: () => void;
   onRestore: () => void;
   onSnooze: (snoozedUntil: number) => void;
+  onSelectionClick: (event: ReactMouseEvent<HTMLAnchorElement>) => boolean;
 }) {
   const actions = useSidebarThreadActions();
   const title = threadDisplayTitle(thread);
@@ -59,19 +64,22 @@ export function SlimRow({
           className={cn(
             "group/slim relative flex h-8 items-center gap-2 rounded-md px-2.5 text-xs",
             isActive ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60",
+            isSelected &&
+              "bg-sidebar-accent ring-1 ring-inset ring-primary/60",
           )}
         >
           <a
             data-sidebar-thread-shortcut-target=""
             data-sidebar-thread-id={thread.id}
             href="#"
-            aria-label={title}
+            aria-label={`${isSelected ? "Selected, " : ""}${title}`}
+            aria-current={isActive ? "page" : undefined}
+            data-selected={isSelected ? "true" : undefined}
             onClick={(event) => {
               event.preventDefault();
               if (isRenaming || event.detail > 1) return;
-              actions.open(thread.id, {
-                split: event.metaKey || event.ctrlKey,
-              });
+              if (onSelectionClick(event)) return;
+              actions.open(thread.id, { split: false });
               onNavigate();
             }}
             onDoubleClick={(event) => {
@@ -117,25 +125,33 @@ export function SlimRow({
                 <StatusOrTime thread={thread} now={now} />
               )}
             </span>
-            <button
-              type="button"
-              aria-label={
+            <Tooltip
+              label={
                 shelf === "snoozed" ? "Wake thread now" : "Un-settle thread"
               }
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                onRestore();
-              }}
-              // Pulled right by its own padding, so the icon — not the hit
-              // area — lands on the column.
-              className="pointer-events-auto absolute -right-0.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground opacity-0 hover:text-foreground focus-visible:opacity-100 group-hover/slim:opacity-100"
             >
-              <Icon
-                name={shelf === "snoozed" ? "Clock" : "ArrowTurnBackward"}
-                className="size-3.5"
-              />
-            </button>
+              <button
+                type="button"
+                aria-label={
+                  shelf === "snoozed"
+                    ? "Wake thread now"
+                    : "Un-settle thread"
+                }
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onRestore();
+                }}
+                // Pulled right by its own padding, so the icon — not the hit
+                // area — lands on the column.
+                className="pointer-events-auto absolute -right-0.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground opacity-0 hover:text-foreground focus-visible:opacity-100 group-hover/slim:opacity-100"
+              >
+                <Icon
+                  name={shelf === "snoozed" ? "Clock" : "ArrowTurnBackward"}
+                  className="size-3.5"
+                />
+              </button>
+            </Tooltip>
           </span>
         </div>
       </li>

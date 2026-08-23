@@ -2,6 +2,7 @@ import {
   useState,
   type DragEventHandler,
   type KeyboardEventHandler,
+  type MouseEvent as ReactMouseEvent,
 } from "react";
 import {
   experimental_useSidebarThreadPullRequest as useSidebarThreadPullRequest,
@@ -11,6 +12,7 @@ import {
 } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
 import { Icon, type IconName } from "./components/Icon";
+import { Tooltip } from "./components/Tooltip";
 import { cn } from "./lib/utils";
 import { RowContextMenu } from "./RowContextMenu";
 import { ProviderGlyph } from "./ProviderGlyph";
@@ -42,6 +44,7 @@ export function ThreadCard({
   thread,
   projectName,
   isActive,
+  isSelected,
   isWoke,
   canPark,
   snoozePresets,
@@ -49,12 +52,14 @@ export function ThreadCard({
   onSettle,
   onSnooze,
   onAcknowledgeWake,
+  onSelectionClick,
   reorder,
   now,
 }: {
   thread: PluginSidebarThread;
   projectName: string | null;
   isActive: boolean;
+  isSelected: boolean;
   /** A snooze ended and has not yet been acknowledged. */
   isWoke: boolean;
   /** False while the thread is working or blocked on the user. */
@@ -64,6 +69,7 @@ export function ThreadCard({
   onSettle: () => void;
   onSnooze: (snoozedUntil: number) => void;
   onAcknowledgeWake: () => void;
+  onSelectionClick: (event: ReactMouseEvent<HTMLAnchorElement>) => boolean;
   reorder?: ThreadReorderControls;
   /** Quantized clock, so every card in one render agrees on "now". */
   now: number;
@@ -96,6 +102,8 @@ export function ThreadCard({
           className={cn(
             "group/card relative rounded-md px-2.5 py-2 transition-colors",
             isActive ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60",
+            isSelected &&
+              "bg-sidebar-accent ring-1 ring-inset ring-primary/60",
             // A thread open in another pane gets a weaker tint than the active
             // row, so the two states stay distinguishable.
             !isActive && layout !== null && "bg-sidebar-accent/30",
@@ -106,15 +114,16 @@ export function ThreadCard({
             data-sidebar-thread-shortcut-target=""
             data-sidebar-thread-id={thread.id}
             href="#"
-            aria-label={threadDisplayTitle(thread)}
+            aria-label={`${isSelected ? "Selected, " : ""}${threadDisplayTitle(thread)}`}
+            aria-current={isActive ? "page" : undefined}
+            data-selected={isSelected ? "true" : undefined}
             {...splitProps}
             onClick={(event) => {
               event.preventDefault();
               if (isRenaming || event.detail > 1) return;
+              if (onSelectionClick(event)) return;
               if (isWoke) onAcknowledgeWake();
-              actions.open(thread.id, {
-                split: event.metaKey || event.ctrlKey,
-              });
+              actions.open(thread.id, { split: false });
               onNavigate();
             }}
             onDoubleClick={(event) => {
@@ -129,43 +138,45 @@ export function ThreadCard({
               {projectName ?? " "}
             </span>
             {reorder ? (
-              <button
-                type="button"
-                draggable={!reorder.disabled}
-                disabled={reorder.disabled}
-                aria-label={`Reorder ${threadDisplayTitle(thread)}. Use Arrow Up or Arrow Down.`}
-                title="Drag to reorder. Arrow Up or Arrow Down also works."
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                }}
-                onDragStart={reorder.onDragStart}
-                onDragEnd={reorder.onDragEnd}
-                onKeyDown={reorder.onKeyDown}
-                className="pointer-events-auto rounded p-0.5 text-muted-foreground opacity-0 hover:text-foreground focus-visible:opacity-100 disabled:cursor-not-allowed group-hover/card:opacity-100"
-              >
-                <Icon name="GripVertical" className="size-3.5" />
-              </button>
+              <Tooltip label="Drag to reorder · Arrow keys also work">
+                <button
+                  type="button"
+                  draggable={!reorder.disabled}
+                  disabled={reorder.disabled}
+                  aria-label={`Reorder ${threadDisplayTitle(thread)}. Use Arrow Up or Arrow Down.`}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }}
+                  onDragStart={reorder.onDragStart}
+                  onDragEnd={reorder.onDragEnd}
+                  onKeyDown={reorder.onKeyDown}
+                  className="pointer-events-auto rounded p-0.5 text-muted-foreground opacity-0 hover:text-foreground focus-visible:opacity-100 disabled:cursor-not-allowed group-hover/card:opacity-100"
+                >
+                  <Icon name="GripVertical" className="size-3.5" />
+                </button>
+              </Tooltip>
             ) : null}
             {thread.isPinned ? (
-              <button
-                type="button"
-                aria-label={`Unpin ${threadDisplayTitle(thread)}`}
-                title="Unpin thread"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  void actions.setPinned(thread.id, false).catch((error) => {
-                    toast.error("Could not unpin thread", {
-                      description:
-                        error instanceof Error ? error.message : undefined,
+              <Tooltip label="Unpin thread">
+                <button
+                  type="button"
+                  aria-label={`Unpin ${threadDisplayTitle(thread)}`}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    void actions.setPinned(thread.id, false).catch((error) => {
+                      toast.error("Could not unpin thread", {
+                        description:
+                          error instanceof Error ? error.message : undefined,
+                      });
                     });
-                  });
-                }}
-                className="pointer-events-auto rounded p-0.5 text-muted-foreground opacity-0 hover:text-foreground focus-visible:opacity-100 group-hover/card:opacity-100"
-              >
-                <Icon name="PinOff" className="size-3.5" />
-              </button>
+                  }}
+                  className="pointer-events-auto rounded p-0.5 text-muted-foreground opacity-0 hover:text-foreground focus-visible:opacity-100 group-hover/card:opacity-100"
+                >
+                  <Icon name="PinOff" className="size-3.5" />
+                </button>
+              </Tooltip>
             ) : null}
             {/* Status at rest, park actions on hover. Only the status yields,
                 so the project name never shifts. */}
@@ -184,21 +195,23 @@ export function ThreadCard({
               </span>
             ) : null}
             {isWoke ? (
-              <button
-                type="button"
-                aria-label="Dismiss Woke marker"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  onAcknowledgeWake();
-                }}
-                className={cn(
-                  STATUS_SLOT_CLASS,
-                  "pointer-events-auto justify-end text-2xs font-medium text-primary hover:underline",
-                )}
-              >
-                Woke
-              </button>
+              <Tooltip label="Dismiss Woke marker">
+                <button
+                  type="button"
+                  aria-label="Dismiss Woke marker"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onAcknowledgeWake();
+                  }}
+                  className={cn(
+                    STATUS_SLOT_CLASS,
+                    "pointer-events-auto justify-end text-2xs font-medium text-primary hover:underline",
+                  )}
+                >
+                  Woke
+                </button>
+              </Tooltip>
             ) : (
               <span
                 className={cn(
@@ -294,18 +307,20 @@ function ParkButton({
   onActivate: () => void;
 }) {
   return (
-    <button
-      type="button"
-      aria-label={label}
-      onClick={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        onActivate();
-      }}
-      className="rounded p-0.5 text-muted-foreground hover:text-foreground"
-    >
-      <Icon name={icon} className="size-3.5" />
-    </button>
+    <Tooltip label={label}>
+      <button
+        type="button"
+        aria-label={label}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onActivate();
+        }}
+        className="rounded p-0.5 text-muted-foreground hover:text-foreground"
+      >
+        <Icon name={icon} className="size-3.5" />
+      </button>
+    </Tooltip>
   );
 }
 

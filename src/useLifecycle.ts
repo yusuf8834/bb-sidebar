@@ -3,6 +3,7 @@ import { useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 import { toast } from "sonner";
 import type { t3chatSidebarRpcContract } from "./server";
+import type { BulkActionResult } from "./bulk-actions";
 import {
   canPark,
   formatSnoozeWakeTime,
@@ -38,6 +39,11 @@ export interface LifecycleApi {
   unsettle(threadId: string): Promise<boolean>;
   snooze(threadId: string, snoozedUntil: number): Promise<boolean>;
   unsnooze(threadId: string): Promise<boolean>;
+  bulkSettle(threadIds: readonly string[]): Promise<BulkActionResult>;
+  bulkSnooze(
+    threadIds: readonly string[],
+    snoozedUntil: number,
+  ): Promise<BulkActionResult>;
 }
 
 type LifecycleMutation =
@@ -194,9 +200,13 @@ export function useLifecycle(
     return {
       shelfFor: (thread) => {
         const row = rows.get(thread.id);
-        // Pinning is an immediate keep-active choice for policy-owned rows.
-        // A deliberate manual settle remains authoritative.
-        if (thread.isPinned && row?.settledOverride !== "settled") {
+        // Pinning keeps policy-settled rows active. Explicit snooze and
+        // manual settle remain authoritative, then return to pinned on wake.
+        if (
+          thread.isPinned &&
+          row?.settledOverride !== "settled" &&
+          row?.snoozedUntil == null
+        ) {
           return "active";
         }
         return resolveShelf(row, signalsFor(thread), now);
@@ -213,6 +223,13 @@ export function useLifecycle(
       unsnooze: (threadId) => mutate({ method: "unsnooze", threadId }),
       snooze: (threadId, snoozedUntil) =>
         mutate({ method: "snooze", threadId, snoozedUntil }),
+      bulkSettle: (threadIds) =>
+        rpc.call("bulkSettle", { threadIds: [...threadIds] }),
+      bulkSnooze: (threadIds, snoozedUntil) =>
+        rpc.call("bulkSnooze", {
+          threadIds: [...threadIds],
+          snoozedUntil,
+        }),
     };
   }, [now, rows, rpc]);
 }

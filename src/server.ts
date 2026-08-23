@@ -12,6 +12,7 @@ import {
   type AutoSettlePullRequest,
   type SettledOverride,
 } from "./auto-settle";
+import { runBulkAction } from "./bulk-actions";
 
 const migrations = [
   `CREATE TABLE IF NOT EXISTS thread_lifecycle (
@@ -60,6 +61,17 @@ const orderedThreadIdsSchema = z
       });
     }
   });
+const bulkThreadIdsSchema = orderedThreadIdsSchema.min(1);
+const bulkMutationOutputSchema = z
+  .object({
+    succeededThreadIds: z.array(z.string()),
+    failures: z.array(
+      z
+        .object({ threadId: z.string(), error: z.string() })
+        .strict(),
+    ),
+  })
+  .strict();
 
 export const t3chatSidebarRpcContract = defineRpcContract({
   listLifecycle: {
@@ -85,6 +97,19 @@ export const t3chatSidebarRpcContract = defineRpcContract({
       snoozedUntil: z.number().int().positive(),
     }),
     output: z.object({ ok: z.boolean() }),
+  },
+  bulkSettle: {
+    input: z.object({ threadIds: bulkThreadIdsSchema }).strict(),
+    output: bulkMutationOutputSchema,
+  },
+  bulkSnooze: {
+    input: z
+      .object({
+        threadIds: bulkThreadIdsSchema,
+        snoozedUntil: z.number().int().positive(),
+      })
+      .strict(),
+    output: bulkMutationOutputSchema,
   },
   unsnooze: { input: threadIdSchema, output: z.object({ ok: z.boolean() }) },
   acknowledgeWake: {
@@ -203,6 +228,15 @@ export default function plugin(bb: BbPluginApi) {
     if (publish) {
       bb.realtime.publish(LIFECYCLE_CHANNEL, { threadId: row.threadId });
     }
+  };
+
+  const writeMany = db.transaction((rows: readonly StoredLifecycleRow[]) => {
+    for (const row of rows) write(row, false);
+  });
+
+  const publishLifecycleChanges = (threadIds: readonly string[]): void => {
+    if (threadIds.length === 0) return;
+    bb.realtime.publish(LIFECYCLE_CHANNEL, { threadIds });
   };
 
   const clear = (threadId: string): void => {
@@ -455,6 +489,41 @@ export default function plugin(bb: BbPluginApi) {
         snoozedAt: now,
       });
       return { ok: true };
+    },
+    async bulkSettle({ threadIds }) {
+      const unpinned = await runBulkAction(
+        threadIds,
+        async (threadId) => {
+          await bb.sdk.threads.unpin({ threadId });
+        },
+        4,
+      );
+      const now = Date.now();
+      writeMany(
+        unpinned.succeededThreadIds.map((threadId) => ({
+          threadId,
+          settledAt: now,
+          settledOverride: "settled",
+          snoozedUntil: null,
+          snoozedAt: null,
+        })),
+      );
+      publishLifecycleChanges(unpinned.succeededThreadIds);
+      return unpinned;
+    },
+    async bulkSnooze({ threadIds, snoozedUntil }) {
+      const now = Date.now();
+      writeMany(
+        threadIds.map((threadId) => ({
+          threadId,
+          settledAt: null,
+          settledOverride: null,
+          snoozedUntil,
+          snoozedAt: now,
+        })),
+      );
+      publishLifecycleChanges(threadIds);
+      return { succeededThreadIds: [...threadIds], failures: [] };
     },
     async unsnooze({ threadId }) {
       clear(threadId);

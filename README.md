@@ -15,6 +15,7 @@ jump away while you are about to click it.
 - Project filtering through the list's own scope picker
 - Pinned threads above the inbox, with persistent drag or keyboard reordering
 - Durable custom ordering for ordinary inbox threads
+- Modifier-click and Shift-click selection with bulk settle, snooze, read, and unread actions
 - Hover controls for unpinning a pinned thread without opening its menu
 - Snoozed and Settled shelves backed by the plugin's SQLite database
 - Optional settling after inactivity, PR merge, or PR close
@@ -49,6 +50,19 @@ positions. The plugin ignores another move while a save is running and restores
 the previous order if the save fails.
 
 Pinned cards also reveal an unpin button on hover or keyboard focus.
+
+## Selecting several threads
+
+Hold Command on macOS or Ctrl on Windows and Linux while clicking rows to add
+or remove them from the selection. Shift-click extends from the last selected
+row across the rows currently visible. The project picker becomes a compact
+bulk-action bar for settle, snooze, mark read, and mark unread. Successful rows
+leave the selection. Rows that fail stay selected so the action can be retried.
+
+Changing project scope, search results, shelf expansion, or lifecycle state
+removes rows that are no longer visible from the selection. Deletion remains a
+per-row action because BB's confirmation counts descendants for one thread at
+a time; the plugin does not bypass that warning.
 
 ## How parking works
 

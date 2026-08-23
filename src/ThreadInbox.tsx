@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import {
   experimental_useSidebarThreadActions as useSidebarThreadActions,
   experimental_useSidebarThreads as useSidebarThreads,
@@ -6,6 +12,7 @@ import {
   type PluginThreadListProps,
   useSettings,
 } from "@get-bb/plugin-sdk/app";
+import { toast } from "sonner";
 import { Icon } from "./components/Icon";
 import { cn } from "./lib/utils";
 import {
@@ -18,6 +25,8 @@ import {
 import { ThreadCard, type ThreadReorderControls } from "./ThreadCard";
 import { SlimRow } from "./SlimRow";
 import { SearchResults } from "./SearchResults";
+import { BulkSelectionBar } from "./BulkSelectionBar";
+import { runBulkAction, type BulkActionResult } from "./bulk-actions";
 import { useLifecycle } from "./useLifecycle";
 import { usePinnedReorder } from "./usePinnedReorder";
 import { useInboxReorder } from "./useInboxReorder";
@@ -43,6 +52,13 @@ import {
   parseConfiguredSnoozePresets,
   type ConfiguredSnoozePreset,
 } from "./lifecycle";
+import {
+  EMPTY_THREAD_SELECTION,
+  keepFailedSelection,
+  reconcileThreadSelection,
+  updateThreadSelection,
+  type ThreadSelectionState,
+} from "./selection";
 
 const ALL_PROJECTS = "__all__";
 const SHELF_EXPANSION_STORAGE_KEY = "t3chat-sidebar:shelf-expansion:v1";
@@ -71,6 +87,19 @@ function readShelfExpansion(): ShelfExpansionState {
   } catch {
     return COLLAPSED_SHELVES;
   }
+}
+
+function visibleParkedThreads(
+  threads: readonly PluginSidebarThread[],
+  expanded: boolean,
+  activeThreadId: string | null,
+  limit = threads.length,
+): PluginSidebarThread[] {
+  const activeThread = threads.find((thread) => thread.id === activeThreadId);
+  if (!expanded) return activeThread ? [activeThread] : [];
+  return threads.filter(
+    (thread, index) => index < limit || thread.id === activeThreadId,
+  );
 }
 
 /**
@@ -116,6 +145,10 @@ export function ThreadInbox({
   const [expandedShelves, setExpandedShelves] =
     useState<ShelfExpansionState>(readShelfExpansion);
   const [settledLimit, setSettledLimit] = useState(SETTLED_INITIAL_LIMIT);
+  const [selection, setSelection] = useState<ThreadSelectionState>(
+    EMPTY_THREAD_SELECTION,
+  );
+  const [bulkBusy, setBulkBusy] = useState(false);
   useEffect(() => {
     try {
       window.localStorage.setItem(
@@ -294,6 +327,56 @@ export function ThreadInbox({
       ),
     [inbox, pinned, searchQuery, settled, snoozed],
   );
+  const visibleSnoozed = useMemo(
+    () =>
+      visibleParkedThreads(
+        snoozed,
+        expandedShelves.snoozed,
+        activeThreadId,
+      ),
+    [activeThreadId, expandedShelves.snoozed, snoozed],
+  );
+  const visibleSettled = useMemo(
+    () =>
+      visibleParkedThreads(
+        settled,
+        expandedShelves.settled,
+        activeThreadId,
+        settledLimit,
+      ),
+    [activeThreadId, expandedShelves.settled, settled, settledLimit],
+  );
+  const selectableThreads = useMemo(
+    () =>
+      isSearching
+        ? searchResults
+        : [...pinned, ...inbox, ...visibleSnoozed, ...visibleSettled],
+    [
+      inbox,
+      isSearching,
+      pinned,
+      searchResults,
+      visibleSettled,
+      visibleSnoozed,
+    ],
+  );
+  const selectableThreadIds = useMemo(
+    () => selectableThreads.map((thread) => thread.id),
+    [selectableThreads],
+  );
+  const selectableThreadIdsKey = selectableThreadIds.join("\0");
+  useEffect(() => {
+    setSelection((current) =>
+      reconcileThreadSelection(current, selectableThreadIds),
+    );
+  }, [selectableThreadIds, selectableThreadIdsKey]);
+  const selectedThreads = useMemo(
+    () =>
+      selectableThreads.filter((thread) =>
+        selection.selectedIds.has(thread.id),
+      ),
+    [selectableThreads, selection.selectedIds],
+  );
   const wokeThreadIds = useMemo(
     () =>
       new Set(
@@ -308,6 +391,136 @@ export function ThreadInbox({
     scope === ALL_PROJECTS
       ? "All projects"
       : (projectNameById.get(scope) ?? "All projects");
+
+  const handleSelectionClick = (
+    threadId: string,
+    event: ReactMouseEvent<HTMLAnchorElement>,
+  ): boolean => {
+    const toggleKey = event.metaKey || event.ctrlKey;
+    if (!toggleKey && !event.shiftKey) {
+      if (selection.selectedIds.size > 0) {
+        setSelection(EMPTY_THREAD_SELECTION);
+      }
+      return false;
+    }
+    setSelection((current) =>
+      updateThreadSelection(current, selectableThreadIds, threadId, {
+        shiftKey: event.shiftKey,
+        toggleKey,
+      }),
+    );
+    return true;
+  };
+
+  const finishBulkAction = (
+    actionLabel: string,
+    successLabel: string,
+    total: number,
+    result: BulkActionResult,
+  ) => {
+    if (result.failures.length === 0) {
+      toast.success(
+        `${total} ${total === 1 ? "thread" : "threads"} ${successLabel}`,
+      );
+    } else {
+      toast.error(
+        `${result.failures.length} of ${total} ${actionLabel} actions failed`,
+        { description: result.failures[0]?.error },
+      );
+    }
+    setSelection(
+      keepFailedSelection(
+        result.failures.map((failure) => failure.threadId),
+        selectableThreadIds,
+      ),
+    );
+  };
+
+  const runSelectedAction = async (
+    actionLabel: string,
+    successLabel: string,
+    action: (
+      threads: readonly PluginSidebarThread[],
+    ) => Promise<BulkActionResult>,
+    parksThreads = false,
+  ) => {
+    if (bulkBusy || selectedThreads.length === 0) return;
+    const targets = [...selectedThreads];
+    setBulkBusy(true);
+    try {
+      const result = await action(targets);
+      finishBulkAction(actionLabel, successLabel, targets.length, result);
+      if (
+        parksThreads &&
+        activeThreadIdRef.current !== null &&
+        result.succeededThreadIds.includes(activeThreadIdRef.current)
+      ) {
+        const parkedIds = new Set(result.succeededThreadIds);
+        const activeRows = [...pinned, ...inbox];
+        const activeIndex = activeRows.findIndex(
+          (thread) => thread.id === activeThreadIdRef.current,
+        );
+        const nextThread =
+          activeRows
+            .slice(activeIndex + 1)
+            .find((thread) => !parkedIds.has(thread.id)) ??
+          activeRows
+            .slice(0, Math.max(0, activeIndex))
+            .reverse()
+            .find((thread) => !parkedIds.has(thread.id)) ??
+          null;
+        if (nextThread) actions.open(nextThread.id);
+        else {
+          actions.openNewThread({
+            projectId: targets[0]?.projectId,
+            focusPrompt: true,
+          });
+        }
+        onNavigate();
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      const failures = targets.map((thread) => ({
+        threadId: thread.id,
+        error: message,
+      }));
+      finishBulkAction(actionLabel, successLabel, targets.length, {
+        succeededThreadIds: [],
+        failures,
+      });
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const runBulkParkAction = (
+    actionLabel: "settle" | "snooze",
+    snoozedUntil?: number,
+  ) =>
+    runSelectedAction(
+      actionLabel,
+      actionLabel === "settle" ? "settled" : "snoozed",
+      async (targets) => {
+        const eligible = targets.filter(lifecycle.canPark);
+        const blocked = targets
+          .filter((thread) => !lifecycle.canPark(thread))
+          .map((thread) => ({
+            threadId: thread.id,
+            error: "Thread is working or needs input",
+          }));
+        const result =
+          eligible.length === 0
+            ? { succeededThreadIds: [], failures: [] }
+            : actionLabel === "settle"
+              ? await lifecycle.bulkSettle(eligible.map((thread) => thread.id))
+              : await lifecycle.bulkSnooze(
+                  eligible.map((thread) => thread.id),
+                  snoozedUntil!,
+                );
+        return { ...result, failures: [...result.failures, ...blocked] };
+      },
+      true,
+    );
 
   const parkActiveThread = async (
     thread: PluginSidebarThread,
@@ -336,30 +549,62 @@ export function ThreadInbox({
       {/* The one control the host has no equivalent for. Everything else in
           the chrome above — New thread, search — is bb's and stays bb's. */}
       <div className="flex shrink-0 items-center gap-1 px-2 pb-1">
-        <Select value={scope} onValueChange={setScope}>
-          {/* Ghost trigger: no border, no filled track — it reads as a label
-              until you hover it. */}
-          <SelectTrigger
-            className="h-7 min-w-0 flex-1 border-0 px-1.5 py-1 text-xs font-medium text-muted-foreground shadow-none hover:bg-sidebar-accent focus:ring-0"
-            aria-label={`Project scope: ${scopeLabel}`}
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL_PROJECTS} className="text-xs">
-              All projects
-            </SelectItem>
-            {projects.map((project) => (
-              <SelectItem
-                key={project.id}
-                value={project.id}
-                className="text-xs"
-              >
-                {project.name}
+        {selectedThreads.length > 0 ? (
+          <BulkSelectionBar
+            count={selectedThreads.length}
+            busy={bulkBusy}
+            snoozePresets={snoozePresets}
+            onSettle={() => void runBulkParkAction("settle")}
+            onSnooze={(snoozedUntil) =>
+              void runBulkParkAction("snooze", snoozedUntil)
+            }
+            onMarkRead={() =>
+              void runSelectedAction("mark read", "marked read", (targets) =>
+                runBulkAction(
+                  targets.map((thread) => thread.id),
+                  (threadId) => actions.setRead(threadId, true),
+                ),
+              )
+            }
+            onMarkUnread={() =>
+              void runSelectedAction(
+                "mark unread",
+                "marked unread",
+                (targets) =>
+                  runBulkAction(
+                    targets.map((thread) => thread.id),
+                    (threadId) => actions.setRead(threadId, false),
+                  ),
+              )
+            }
+            onClear={() => setSelection(EMPTY_THREAD_SELECTION)}
+          />
+        ) : (
+          <Select value={scope} onValueChange={setScope}>
+            {/* Ghost trigger: no border, no filled track — it reads as a label
+                until you hover it. */}
+            <SelectTrigger
+              className="h-7 min-w-0 flex-1 border-0 px-1.5 py-1 text-xs font-medium text-muted-foreground shadow-none hover:bg-sidebar-accent focus:ring-0"
+              aria-label={`Project scope: ${scopeLabel}`}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_PROJECTS} className="text-xs">
+                All projects
               </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+              {projects.map((project) => (
+                <SelectItem
+                  key={project.id}
+                  value={project.id}
+                  className="text-xs"
+                >
+                  {project.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-2">
@@ -390,6 +635,8 @@ export function ThreadInbox({
             onAcknowledgeWake={(threadId) =>
               void lifecycle.acknowledgeWake(threadId)
             }
+            selectedThreadIds={selection.selectedIds}
+            onSelectionClick={handleSelectionClick}
             onNavigate={onNavigate}
           />
         ) : (
@@ -402,6 +649,7 @@ export function ThreadInbox({
                     thread={thread}
                     projectName={projectNameById.get(thread.projectId) ?? null}
                     isActive={thread.id === activeThreadId}
+                    isSelected={selection.selectedIds.has(thread.id)}
                     isWoke={wokeThreadIds.has(thread.id)}
                     canPark={lifecycle.canPark(thread)}
                     snoozePresets={snoozePresets}
@@ -418,6 +666,9 @@ export function ThreadInbox({
                     }
                     onAcknowledgeWake={() =>
                       void lifecycle.acknowledgeWake(thread.id)
+                    }
+                    onSelectionClick={(event) =>
+                      handleSelectionClick(thread.id, event)
                     }
                     reorder={threadReorderControls(thread, "pinned")}
                     now={now}
@@ -433,6 +684,7 @@ export function ThreadInbox({
                     thread={thread}
                     projectName={projectNameById.get(thread.projectId) ?? null}
                     isActive={thread.id === activeThreadId}
+                    isSelected={selection.selectedIds.has(thread.id)}
                     isWoke={wokeThreadIds.has(thread.id)}
                     canPark={lifecycle.canPark(thread)}
                     snoozePresets={snoozePresets}
@@ -449,6 +701,9 @@ export function ThreadInbox({
                     }
                     onAcknowledgeWake={() =>
                       void lifecycle.acknowledgeWake(thread.id)
+                    }
+                    onSelectionClick={(event) =>
+                      handleSelectionClick(thread.id, event)
                     }
                     reorder={threadReorderControls(thread, "inbox")}
                     now={now}
@@ -467,10 +722,13 @@ export function ThreadInbox({
                 }))
               }
               shelf="snoozed"
+              visibleThreads={visibleSnoozed}
               activeThreadId={activeThreadId}
               lifecycle={lifecycle}
               snoozePresets={snoozePresets}
               onNavigate={onNavigate}
+              selectedThreadIds={selection.selectedIds}
+              onSelectionClick={handleSelectionClick}
             />
             <ParkedShelf
               label="Settled"
@@ -483,10 +741,13 @@ export function ThreadInbox({
                 }))
               }
               shelf="settled"
+              visibleThreads={visibleSettled}
               activeThreadId={activeThreadId}
               lifecycle={lifecycle}
               snoozePresets={snoozePresets}
               onNavigate={onNavigate}
+              selectedThreadIds={selection.selectedIds}
+              onSelectionClick={handleSelectionClick}
               settledLimit={settledLimit}
               onLoadMore={() =>
                 setSettledLimit((limit) => limit + SETTLED_PAGE_SIZE)
@@ -510,10 +771,13 @@ function ParkedShelf({
   expanded,
   onToggle,
   shelf,
+  visibleThreads,
   activeThreadId,
   lifecycle,
   snoozePresets,
   onNavigate,
+  selectedThreadIds,
+  onSelectionClick,
   settledLimit,
   onLoadMore,
 }: {
@@ -522,25 +786,23 @@ function ParkedShelf({
   expanded: boolean;
   onToggle: () => void;
   shelf: "snoozed" | "settled";
+  visibleThreads: readonly PluginSidebarThread[];
   activeThreadId: string | null;
   lifecycle: ReturnType<typeof useLifecycle>;
   snoozePresets: readonly ConfiguredSnoozePreset[];
   onNavigate: () => void;
+  selectedThreadIds: ReadonlySet<string>;
+  onSelectionClick: (
+    threadId: string,
+    event: ReactMouseEvent<HTMLAnchorElement>,
+  ) => boolean;
   settledLimit?: number;
   onLoadMore?: () => void;
 }) {
   if (threads.length === 0) return null;
   const now = Date.now();
-  const activeThread = threads.find((thread) => thread.id === activeThreadId);
   const limit =
     shelf === "settled" ? (settledLimit ?? threads.length) : threads.length;
-  const visibleThreads = expanded
-    ? threads.filter(
-        (thread, index) => index < limit || thread.id === activeThreadId,
-      )
-    : activeThread
-      ? [activeThread]
-      : [];
   const hasMore = shelf === "settled" && threads.length > limit;
   return (
     <section aria-label={label}>
@@ -573,12 +835,16 @@ function ParkedShelf({
               key={thread.id}
               thread={thread}
               isActive={thread.id === activeThreadId}
+              isSelected={selectedThreadIds.has(thread.id)}
               shelf={shelf}
               wakeAt={lifecycle.wakeAtFor(thread)}
               now={now}
               snoozePresets={snoozePresets}
               onSnooze={(until) => void lifecycle.snooze(thread.id, until)}
               onNavigate={onNavigate}
+              onSelectionClick={(event) =>
+                onSelectionClick(thread.id, event)
+              }
               onRestore={() =>
                 shelf === "snoozed"
                   ? void lifecycle.unsnooze(thread.id)
