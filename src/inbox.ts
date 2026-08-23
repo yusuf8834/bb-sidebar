@@ -17,6 +17,26 @@ export function sortByCreatedAtDescending<
   );
 }
 
+/** Newest parked work first, falling back to bb's last activity timestamp. */
+export function sortSettledThreads<
+  T extends {
+    readonly id: string;
+    readonly latestAttentionAt: number;
+    readonly updatedAt: number;
+  },
+>(
+  threads: readonly T[],
+  settledAtFor: (thread: T) => number | null,
+): T[] {
+  return [...threads].sort((left, right) => {
+    const leftAt =
+      settledAtFor(left) ?? Math.max(left.latestAttentionAt, left.updatedAt);
+    const rightAt =
+      settledAtFor(right) ?? Math.max(right.latestAttentionAt, right.updatedAt);
+    return rightAt - leftAt || left.id.localeCompare(right.id);
+  });
+}
+
 export function threadDisplayTitle(thread: PluginSidebarThread): string {
   const title = thread.title?.trim();
   if (title) return title;

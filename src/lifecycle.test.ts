@@ -6,6 +6,7 @@ import {
   nextWakeDelayMs,
   parseConfiguredSnoozePresets,
   resolveShelf,
+  resolveWakeReason,
   resolveSnoozePresets,
   snoozeWakeLabel,
   MAX_TIMEOUT_MS,
@@ -124,6 +125,32 @@ describe("resolveShelf", () => {
         1_000,
       ),
     ).toBe("snoozed");
+  });
+});
+
+describe("resolveWakeReason", () => {
+  it("marks a timer wake and leaves a future snooze unmarked", () => {
+    const snoozed = row({ snoozedUntil: 900, snoozedAt: 500 });
+    expect(resolveWakeReason(snoozed, quiet, 1_000)).toBe("timer");
+    expect(resolveWakeReason(snoozed, quiet, 800)).toBeNull();
+  });
+
+  it("marks new attention, including a pending interaction", () => {
+    const snoozed = row({ snoozedUntil: 5_000, snoozedAt: 500 });
+    expect(
+      resolveWakeReason(
+        snoozed,
+        { ...quiet, latestAttentionAt: 800 },
+        1_000,
+      ),
+    ).toBe("attention");
+    expect(
+      resolveWakeReason(
+        snoozed,
+        { ...quiet, hasPendingInteraction: true },
+        1_000,
+      ),
+    ).toBe("attention");
   });
 });
 

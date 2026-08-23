@@ -8,6 +8,7 @@ import {
   formatSnoozeWakeTime,
   nextWakeDelayMs,
   resolveShelf,
+  resolveWakeReason,
   type ThreadLifecycleRow,
   type ThreadShelf,
 } from "./lifecycle";
@@ -30,13 +31,21 @@ export interface LifecycleApi {
   shelfFor(thread: PluginSidebarThread): ThreadShelf;
   canPark(thread: PluginSidebarThread): boolean;
   wakeAtFor(thread: PluginSidebarThread): number | null;
+  settledAtFor(thread: PluginSidebarThread): number | null;
+  wokeFor(thread: PluginSidebarThread): boolean;
+  acknowledgeWake(threadId: string): Promise<boolean>;
   settle(threadId: string): Promise<boolean>;
   unsettle(threadId: string): Promise<boolean>;
   snooze(threadId: string, snoozedUntil: number): Promise<boolean>;
   unsnooze(threadId: string): Promise<boolean>;
 }
 
-type LifecycleMutation = "settle" | "unsettle" | "snooze" | "unsnooze";
+type LifecycleMutation =
+  | "settle"
+  | "unsettle"
+  | "snooze"
+  | "unsnooze"
+  | "acknowledgeWake";
 type LifecycleMutationRequest =
   | { method: "snooze"; threadId: string; snoozedUntil: number }
   | {
@@ -44,7 +53,10 @@ type LifecycleMutationRequest =
       threadId: string;
     };
 
-const SUCCESS_MESSAGE: Record<Exclude<LifecycleMutation, "snooze">, string> = {
+const SUCCESS_MESSAGE: Record<
+  Exclude<LifecycleMutation, "snooze" | "acknowledgeWake">,
+  string
+> = {
   settle: "Thread settled",
   unsettle: "Thread returned to the inbox",
   unsnooze: "Thread woke up",
@@ -55,6 +67,7 @@ const ERROR_MESSAGE: Record<LifecycleMutation, string> = {
   unsettle: "Could not un-settle thread",
   snooze: "Could not snooze thread",
   unsnooze: "Could not wake thread",
+  acknowledgeWake: "Could not dismiss Woke marker",
 };
 
 function errorDescription(error: unknown): string | undefined {
@@ -158,7 +171,7 @@ export function useLifecycle(
             onClick: () => void mutate({ method: "unsnooze", threadId }),
           },
         });
-      } else {
+      } else if (method !== "acknowledgeWake") {
         toast.success(SUCCESS_MESSAGE[method]);
       }
       return true;
@@ -168,6 +181,11 @@ export function useLifecycle(
         resolveShelf(rows.get(thread.id), signalsFor(thread), now),
       canPark: (thread) => canPark(signalsFor(thread)),
       wakeAtFor: (thread) => rows.get(thread.id)?.snoozedUntil ?? null,
+      settledAtFor: (thread) => rows.get(thread.id)?.settledAt ?? null,
+      wokeFor: (thread) =>
+        resolveWakeReason(rows.get(thread.id), signalsFor(thread), now) !== null,
+      acknowledgeWake: (threadId) =>
+        mutate({ method: "acknowledgeWake", threadId }),
       settle: (threadId) => mutate({ method: "settle", threadId }),
       unsettle: (threadId) => mutate({ method: "unsettle", threadId }),
       unsnooze: (threadId) => mutate({ method: "unsnooze", threadId }),

@@ -27,22 +27,27 @@ export function ThreadCard({
   thread,
   projectName,
   isActive,
+  isWoke,
   canPark,
   snoozePresets,
   onNavigate,
   onSettle,
   onSnooze,
+  onAcknowledgeWake,
   now,
 }: {
   thread: PluginSidebarThread;
   projectName: string | null;
   isActive: boolean;
+  /** A snooze ended and has not yet been acknowledged. */
+  isWoke: boolean;
   /** False while the thread is working or blocked on the user. */
   canPark: boolean;
   snoozePresets: readonly ConfiguredSnoozePreset[];
   onNavigate: () => void;
   onSettle: () => void;
   onSnooze: (snoozedUntil: number) => void;
+  onAcknowledgeWake: () => void;
   /** Quantized clock, so every card in one render agrees on "now". */
   now: number;
 }) {
@@ -85,6 +90,7 @@ export function ThreadCard({
             onClick={(event) => {
               event.preventDefault();
               if (isRenaming || event.detail > 1) return;
+              if (isWoke) onAcknowledgeWake();
               actions.open(thread.id, {
                 split: event.metaKey || event.ctrlKey,
               });
@@ -103,7 +109,7 @@ export function ThreadCard({
             </span>
             {/* Status at rest, park actions on hover. Only the status yields,
                 so the project name never shifts. */}
-            {canPark && quickSnooze ? (
+            {canPark && quickSnooze && !isWoke ? (
               <span className="pointer-events-auto hidden items-center gap-0.5 group-hover/card:flex">
                 <ParkButton
                   label={`Snooze for ${quickSnooze.label}`}
@@ -117,14 +123,32 @@ export function ThreadCard({
                 />
               </span>
             ) : null}
-            <span
-              className={cn(
-                STATUS_SLOT_CLASS,
-                canPark && "group-hover/card:hidden",
-              )}
-            >
-              <StatusOrTime thread={thread} now={now} />
-            </span>
+            {isWoke ? (
+              <button
+                type="button"
+                aria-label="Dismiss Woke marker"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onAcknowledgeWake();
+                }}
+                className={cn(
+                  STATUS_SLOT_CLASS,
+                  "pointer-events-auto justify-end text-2xs font-medium text-primary hover:underline",
+                )}
+              >
+                Woke
+              </button>
+            ) : (
+              <span
+                className={cn(
+                  STATUS_SLOT_CLASS,
+                  canPark && "group-hover/card:hidden",
+                )}
+              >
+                <StatusOrTime thread={thread} now={now} />
+              </span>
+            )}
           </div>
           <div
             className={cn(

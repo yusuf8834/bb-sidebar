@@ -21,12 +21,16 @@ export function SearchResults({
   projectNameById,
   activeThreadId,
   now,
+  wokeThreadIds,
+  onAcknowledgeWake,
   onNavigate,
 }: {
   threads: readonly PluginSidebarThread[];
   projectNameById: ReadonlyMap<string, string>;
   activeThreadId: string | null;
   now: number;
+  wokeThreadIds: ReadonlySet<string>;
+  onAcknowledgeWake: (threadId: string) => void;
   onNavigate: () => void;
 }) {
   const [highlightedIndex, setHighlightedIndex] = useState(0);
@@ -84,10 +88,12 @@ export function SearchResults({
           isActive={thread.id === activeThreadId}
           isHighlighted={highlightedIndex === index}
           now={now}
+          isWoke={wokeThreadIds.has(thread.id)}
           anchorRef={(node) => {
             resultRefs.current[index] = node;
           }}
           onHighlight={() => setHighlightedIndex(index)}
+          onAcknowledgeWake={() => onAcknowledgeWake(thread.id)}
           onNavigate={onNavigate}
         />
       ))}
@@ -101,8 +107,10 @@ function SearchResultRow({
   isActive,
   isHighlighted,
   now,
+  isWoke,
   anchorRef,
   onHighlight,
+  onAcknowledgeWake,
   onNavigate,
 }: {
   thread: PluginSidebarThread;
@@ -110,8 +118,10 @@ function SearchResultRow({
   isActive: boolean;
   isHighlighted: boolean;
   now: number;
+  isWoke: boolean;
   anchorRef: (node: HTMLAnchorElement | null) => void;
   onHighlight: () => void;
+  onAcknowledgeWake: () => void;
   onNavigate: () => void;
 }) {
   const actions = useSidebarThreadActions();
@@ -136,6 +146,7 @@ function SearchResultRow({
         onMouseMove={onHighlight}
         onClick={(event) => {
           event.preventDefault();
+          if (isWoke) onAcknowledgeWake();
           actions.open(thread.id, {
             split: event.metaKey || event.ctrlKey,
           });
@@ -155,8 +166,13 @@ function SearchResultRow({
             {projectName}
           </span>
         ) : null}
-        <span className={STATUS_SLOT_CLASS}>
-          <StatusOrTime thread={thread} now={now} />
+        <span
+          className={cn(
+            STATUS_SLOT_CLASS,
+            isWoke && "justify-end text-2xs font-medium text-primary",
+          )}
+        >
+          {isWoke ? "Woke" : <StatusOrTime thread={thread} now={now} />}
         </span>
       </a>
     </li>

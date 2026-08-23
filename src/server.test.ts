@@ -93,6 +93,22 @@ describe("lifecycle RPC", () => {
     ]);
   });
 
+  it("clears a woken snooze when the user acknowledges it", async () => {
+    const harness = await loadPlugin();
+    await harness.behavior.callRpc("snooze", {
+      threadId: "thr_woke",
+      snoozedUntil: Date.now() - 1,
+    });
+
+    await harness.behavior.callRpc("acknowledgeWake", {
+      threadId: "thr_woke",
+    });
+
+    await expect(
+      harness.behavior.callRpc("listLifecycle", {}),
+    ).resolves.toEqual({ rows: [] });
+  });
+
   it("removes lifecycle state when bb deletes the thread", async () => {
     const harness = await loadPlugin();
     await harness.behavior.callRpc("settle", { threadId: "thr_1" });

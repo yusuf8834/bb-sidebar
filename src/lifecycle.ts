@@ -27,6 +27,31 @@ export interface ThreadActivitySignals {
 }
 
 export type ThreadShelf = "active" | "snoozed" | "settled";
+export type WakeReason = "timer" | "attention";
+
+/**
+ * Why a snoozed thread is back in the active inbox, if it has woken at all.
+ *
+ * The lifecycle row deliberately remains until acknowledgement. That makes
+ * the Woke marker durable across reloads and gives every client the same
+ * answer. A pending interaction is attention even if bb has not advanced the
+ * rolled-up timestamp yet.
+ */
+export function resolveWakeReason(
+  row: ThreadLifecycleRow | undefined,
+  signals: ThreadActivitySignals,
+  now: number,
+): WakeReason | null {
+  if (row?.snoozedUntil === null || row?.snoozedUntil === undefined) {
+    return null;
+  }
+
+  const wokeOnAttention =
+    signals.hasPendingInteraction ||
+    (row.snoozedAt !== null && signals.latestAttentionAt > row.snoozedAt);
+  if (wokeOnAttention) return "attention";
+  return row.snoozedUntil <= now ? "timer" : null;
+}
 
 /**
  * Whether a thread may be parked at all.
@@ -56,12 +81,7 @@ export function resolveShelf(
   if (!canPark(signals)) return "active";
 
   if (row.snoozedUntil !== null) {
-    // A timer that has elapsed wakes the thread; so does anything that
-    // happened after the snooze was set.
-    const wokeOnTimer = row.snoozedUntil <= now;
-    const wokeOnActivity =
-      row.snoozedAt !== null && signals.latestAttentionAt > row.snoozedAt;
-    if (!wokeOnTimer && !wokeOnActivity) return "snoozed";
+    if (resolveWakeReason(row, signals, now) === null) return "snoozed";
     return "active";
   }
 

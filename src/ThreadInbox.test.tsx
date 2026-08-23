@@ -93,6 +93,7 @@ function deferred<T>() {
 
 afterEach(() => {
   cleanup();
+  window.localStorage.clear();
   toastMocks.success.mockReset();
   toastMocks.error.mockReset();
 });
@@ -499,6 +500,194 @@ describe("parking threads", () => {
     fireEvent.click(within(shelf).getByRole("button"));
     expect(within(shelf).getByText("2h")).toBeDefined();
     expect(within(shelf).getByLabelText("Wake thread now")).toBeDefined();
+  });
+
+  it("persists each shelf's expanded state across remounts", async () => {
+    const now = Date.now();
+    const rows = [
+      {
+        threadId: "thr_done",
+        settledAt: 200,
+        snoozedUntil: null,
+        snoozedAt: null,
+      },
+      {
+        threadId: "thr_later",
+        settledAt: null,
+        snoozedUntil: now + 60_000,
+        snoozedAt: now,
+      },
+    ];
+    const options = {
+      sidebarThreads: {
+        status: "ready" as const,
+        threads: [
+          thread({ id: "thr_done", title: "Finished work" }),
+          thread({ id: "thr_later", title: "Later work" }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: { listLifecycle: () => ({ rows }) },
+    };
+
+    renderSlot(inbox, listProps, options);
+    let settledShelf = await screen.findByRole("region", { name: "Settled" });
+    let snoozedShelf = await screen.findByRole("region", { name: "Snoozed" });
+    fireEvent.click(within(settledShelf).getByRole("button"));
+    fireEvent.click(within(snoozedShelf).getByRole("button"));
+    expect(within(settledShelf).getByText("Finished work")).toBeDefined();
+    expect(within(snoozedShelf).getByText("Later work")).toBeDefined();
+
+    cleanup();
+    renderSlot(inbox, listProps, options);
+    settledShelf = await screen.findByRole("region", { name: "Settled" });
+    snoozedShelf = await screen.findByRole("region", { name: "Snoozed" });
+    expect(
+      within(settledShelf).getByRole("button", { expanded: true }),
+    ).toBeDefined();
+    expect(
+      within(snoozedShelf).getByRole("button", { expanded: true }),
+    ).toBeDefined();
+    expect(within(settledShelf).getByText("Finished work")).toBeDefined();
+    expect(within(snoozedShelf).getByText("Later work")).toBeDefined();
+  });
+
+  it("keeps the currently open parked row visible while collapsed", async () => {
+    renderSlot(inbox, { ...listProps, activeThreadId: "thr_open" }, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ id: "thr_open", title: "Open but settled" })],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: {
+        listLifecycle: () => ({
+          rows: [
+            {
+              threadId: "thr_open",
+              settledAt: 200,
+              snoozedUntil: null,
+              snoozedAt: null,
+            },
+          ],
+        }),
+      },
+    });
+
+    const shelf = await screen.findByRole("region", { name: "Settled" });
+    expect(
+      within(shelf).getByRole("button", { expanded: false }),
+    ).toBeDefined();
+    expect(within(shelf).getByText("Open but settled")).toBeDefined();
+  });
+
+  it("sorts snoozed rows by soonest wake and settled rows by settle time", async () => {
+    const now = Date.now();
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "later", title: "Later wake", createdAt: 100 }),
+          thread({ id: "sooner", title: "Sooner wake", createdAt: 1 }),
+          thread({ id: "old-settle", title: "Older settle", createdAt: 999 }),
+          thread({ id: "new-settle", title: "Newer settle", createdAt: 1 }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: {
+        listLifecycle: () => ({
+          rows: [
+            { threadId: "later", settledAt: null, snoozedUntil: now + 5_000, snoozedAt: now },
+            { threadId: "sooner", settledAt: null, snoozedUntil: now + 1_000, snoozedAt: now },
+            { threadId: "old-settle", settledAt: 500, snoozedUntil: null, snoozedAt: null },
+            { threadId: "new-settle", settledAt: 900, snoozedUntil: null, snoozedAt: null },
+          ],
+        }),
+      },
+    });
+
+    const snoozedShelf = await screen.findByRole("region", { name: "Snoozed" });
+    const settledShelf = await screen.findByRole("region", { name: "Settled" });
+    fireEvent.click(within(snoozedShelf).getByRole("button"));
+    fireEvent.click(within(settledShelf).getByRole("button"));
+    expect(
+      within(snoozedShelf).getAllByRole("listitem").map((row) => row.textContent),
+    ).toEqual([expect.stringContaining("Sooner wake"), expect.stringContaining("Later wake")]);
+    expect(
+      within(settledShelf).getAllByRole("listitem").map((row) => row.textContent),
+    ).toEqual([expect.stringContaining("Newer settle"), expect.stringContaining("Older settle")]);
+  });
+
+  it("shows 10 settled rows initially and loads 25 more at a time", async () => {
+    const threads = Array.from({ length: 36 }, (_, index) =>
+      thread({ id: `settled-${index}`, title: `Settled ${index}` }),
+    );
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads,
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: {
+        listLifecycle: () => ({
+          rows: threads.map((candidate, index) => ({
+            threadId: candidate.id,
+            settledAt: 1_000 - index,
+            snoozedUntil: null,
+            snoozedAt: null,
+          })),
+        }),
+      },
+    });
+
+    const shelf = await screen.findByRole("region", { name: "Settled" });
+    fireEvent.click(within(shelf).getByRole("button"));
+    expect(within(shelf).getAllByRole("listitem")).toHaveLength(10);
+    fireEvent.click(within(shelf).getByRole("button", { name: "Load 25 more" }));
+    expect(within(shelf).getAllByRole("listitem")).toHaveLength(35);
+    fireEvent.click(within(shelf).getByRole("button", { name: "Load 1 more" }));
+    expect(within(shelf).getAllByRole("listitem")).toHaveLength(36);
+    expect(within(shelf).queryByText(/Load .* more/)).toBeNull();
+  });
+
+  it("marks timer and attention wakes until the user dismisses or opens them", async () => {
+    const acknowledged: string[] = [];
+    const now = Date.now();
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "timer", title: "Timer wake", latestAttentionAt: 10 }),
+          thread({ id: "attention", title: "Attention wake", latestAttentionAt: now }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: {
+        listLifecycle: () => ({
+          rows: [
+            { threadId: "timer", settledAt: null, snoozedUntil: now - 1, snoozedAt: 20 },
+            { threadId: "attention", settledAt: null, snoozedUntil: now + 60_000, snoozedAt: now - 1 },
+          ],
+        }),
+        acknowledgeWake: (input) => {
+          acknowledged.push((input as { threadId: string }).threadId);
+          return { ok: true };
+        },
+      },
+    });
+
+    const timerRow = (await screen.findByText("Timer wake")).closest("li")!;
+    const attentionRow = screen.getByText("Attention wake").closest("li")!;
+    expect(within(timerRow).getByText("Woke")).toBeDefined();
+    expect(within(attentionRow).getByText("Woke")).toBeDefined();
+
+    fireEvent.click(within(timerRow).getByRole("button", { name: "Dismiss Woke marker" }));
+    fireEvent.click(within(attentionRow).getByRole("link", { name: "Attention wake" }));
+    await waitFor(() => expect(acknowledged).toEqual(["timer", "attention"]));
+    expect(rendered.sidebarActionCalls).toContainEqual({
+      method: "open",
+      threadId: "attention",
+      options: { split: false },
+    });
   });
 });
 

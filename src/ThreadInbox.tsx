@@ -27,6 +27,7 @@ import {
   partitionPinned,
   searchThreadsByTitle,
   sortByCreatedAtDescending,
+  sortSettledThreads,
   visibleInboxThreads,
 } from "./inbox";
 import {
@@ -36,6 +37,33 @@ import {
 } from "./lifecycle";
 
 const ALL_PROJECTS = "__all__";
+const SHELF_EXPANSION_STORAGE_KEY = "t3chat-sidebar:shelf-expansion:v1";
+const SETTLED_INITIAL_LIMIT = 10;
+const SETTLED_PAGE_SIZE = 25;
+
+interface ShelfExpansionState {
+  snoozed: boolean;
+  settled: boolean;
+}
+
+const COLLAPSED_SHELVES: ShelfExpansionState = {
+  snoozed: false,
+  settled: false,
+};
+
+function readShelfExpansion(): ShelfExpansionState {
+  try {
+    const stored = window.localStorage.getItem(SHELF_EXPANSION_STORAGE_KEY);
+    if (!stored) return COLLAPSED_SHELVES;
+    const parsed = JSON.parse(stored) as Partial<ShelfExpansionState>;
+    return {
+      snoozed: parsed.snoozed === true,
+      settled: parsed.settled === true,
+    };
+  } catch {
+    return COLLAPSED_SHELVES;
+  }
+}
 
 /**
  * The sidebar's scrolling list: one flat, statically ordered stack of cards.
@@ -77,8 +105,20 @@ export function ThreadInbox({
     return () => clearInterval(timer);
   }, []);
   const now = nowMinute * 60_000;
-  const [showSnoozed, setShowSnoozed] = useState(false);
-  const [showSettled, setShowSettled] = useState(false);
+  const [expandedShelves, setExpandedShelves] =
+    useState<ShelfExpansionState>(readShelfExpansion);
+  const [settledLimit, setSettledLimit] = useState(SETTLED_INITIAL_LIMIT);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        SHELF_EXPANSION_STORAGE_KEY,
+        JSON.stringify(expandedShelves),
+      );
+    } catch {
+      // Storage may be unavailable in a hardened browser. The shelves still
+      // work for this mount; only the preference becomes non-durable.
+    }
+  }, [expandedShelves]);
 
   const projectNameById = useMemo(
     () => new Map(projects.map((project) => [project.id, project.name])),
@@ -111,7 +151,7 @@ export function ThreadInbox({
         (left, right) =>
           (lifecycle.wakeAtFor(left) ?? 0) - (lifecycle.wakeAtFor(right) ?? 0),
       ),
-      settled: sortByCreatedAtDescending(onSettledShelf),
+      settled: sortSettledThreads(onSettledShelf, lifecycle.settledAtFor),
     };
   }, [lifecycle, scope, threads]);
 
@@ -123,6 +163,15 @@ export function ThreadInbox({
         searchQuery,
       ),
     [inbox, pinned, searchQuery, settled, snoozed],
+  );
+  const wokeThreadIds = useMemo(
+    () =>
+      new Set(
+        [...pinned, ...inbox]
+          .filter((thread) => lifecycle.wokeFor(thread))
+          .map((thread) => thread.id),
+      ),
+    [inbox, lifecycle, pinned],
   );
 
   const scopeLabel =
@@ -207,6 +256,10 @@ export function ThreadInbox({
             projectNameById={projectNameById}
             activeThreadId={activeThreadId}
             now={now}
+            wokeThreadIds={wokeThreadIds}
+            onAcknowledgeWake={(threadId) =>
+              void lifecycle.acknowledgeWake(threadId)
+            }
             onNavigate={onNavigate}
           />
         ) : (
@@ -219,6 +272,7 @@ export function ThreadInbox({
                     thread={thread}
                     projectName={projectNameById.get(thread.projectId) ?? null}
                     isActive={thread.id === activeThreadId}
+                    isWoke={wokeThreadIds.has(thread.id)}
                     canPark={lifecycle.canPark(thread)}
                     snoozePresets={snoozePresets}
                     onNavigate={onNavigate}
@@ -231,6 +285,9 @@ export function ThreadInbox({
                       void parkActiveThread(thread, () =>
                         lifecycle.snooze(thread.id, until),
                       )
+                    }
+                    onAcknowledgeWake={() =>
+                      void lifecycle.acknowledgeWake(thread.id)
                     }
                     now={now}
                   />
@@ -245,6 +302,7 @@ export function ThreadInbox({
                     thread={thread}
                     projectName={projectNameById.get(thread.projectId) ?? null}
                     isActive={thread.id === activeThreadId}
+                    isWoke={wokeThreadIds.has(thread.id)}
                     canPark={lifecycle.canPark(thread)}
                     snoozePresets={snoozePresets}
                     onNavigate={onNavigate}
@@ -258,6 +316,9 @@ export function ThreadInbox({
                         lifecycle.snooze(thread.id, until),
                       )
                     }
+                    onAcknowledgeWake={() =>
+                      void lifecycle.acknowledgeWake(thread.id)
+                    }
                     now={now}
                   />
                 ))}
@@ -266,8 +327,13 @@ export function ThreadInbox({
             <ParkedShelf
               label="Snoozed"
               threads={snoozed}
-              expanded={showSnoozed}
-              onToggle={() => setShowSnoozed((open) => !open)}
+              expanded={expandedShelves.snoozed}
+              onToggle={() =>
+                setExpandedShelves((current) => ({
+                  ...current,
+                  snoozed: !current.snoozed,
+                }))
+              }
               shelf="snoozed"
               activeThreadId={activeThreadId}
               lifecycle={lifecycle}
@@ -277,13 +343,22 @@ export function ThreadInbox({
             <ParkedShelf
               label="Settled"
               threads={settled}
-              expanded={showSettled}
-              onToggle={() => setShowSettled((open) => !open)}
+              expanded={expandedShelves.settled}
+              onToggle={() =>
+                setExpandedShelves((current) => ({
+                  ...current,
+                  settled: !current.settled,
+                }))
+              }
               shelf="settled"
               activeThreadId={activeThreadId}
               lifecycle={lifecycle}
               snoozePresets={snoozePresets}
               onNavigate={onNavigate}
+              settledLimit={settledLimit}
+              onLoadMore={() =>
+                setSettledLimit((limit) => limit + SETTLED_PAGE_SIZE)
+              }
             />
           </>
         )}
@@ -307,6 +382,8 @@ function ParkedShelf({
   lifecycle,
   snoozePresets,
   onNavigate,
+  settledLimit,
+  onLoadMore,
 }: {
   label: string;
   threads: readonly PluginSidebarThread[];
@@ -317,9 +394,22 @@ function ParkedShelf({
   lifecycle: ReturnType<typeof useLifecycle>;
   snoozePresets: readonly ConfiguredSnoozePreset[];
   onNavigate: () => void;
+  settledLimit?: number;
+  onLoadMore?: () => void;
 }) {
   if (threads.length === 0) return null;
   const now = Date.now();
+  const activeThread = threads.find((thread) => thread.id === activeThreadId);
+  const limit =
+    shelf === "settled" ? (settledLimit ?? threads.length) : threads.length;
+  const visibleThreads = expanded
+    ? threads.filter(
+        (thread, index) => index < limit || thread.id === activeThreadId,
+      )
+    : activeThread
+      ? [activeThread]
+      : [];
+  const hasMore = shelf === "settled" && threads.length > limit;
   return (
     <section aria-label={label}>
       <button
@@ -344,9 +434,9 @@ function ParkedShelf({
           />
         </span>
       </button>
-      {expanded ? (
+      {visibleThreads.length > 0 ? (
         <ul className="flex flex-col gap-px">
-          {threads.map((thread) => (
+          {visibleThreads.map((thread) => (
             <SlimRow
               key={thread.id}
               thread={thread}
@@ -365,6 +455,15 @@ function ParkedShelf({
             />
           ))}
         </ul>
+      ) : null}
+      {expanded && hasMore && onLoadMore ? (
+        <button
+          type="button"
+          onClick={onLoadMore}
+          className="ml-2.5 mt-1 rounded px-1.5 py-1 text-2xs font-medium text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+        >
+          Load {Math.min(SETTLED_PAGE_SIZE, threads.length - limit)} more
+        </button>
       ) : null}
     </section>
   );

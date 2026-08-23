@@ -57,6 +57,10 @@ export const t3chatSidebarRpcContract = defineRpcContract({
     output: z.object({ ok: z.boolean() }),
   },
   unsnooze: { input: threadIdSchema, output: z.object({ ok: z.boolean() }) },
+  acknowledgeWake: {
+    input: threadIdSchema,
+    output: z.object({ ok: z.boolean() }),
+  },
 });
 
 /** Channel the frontend re-reads on. */
@@ -143,6 +147,12 @@ export default function plugin(bb: BbPluginApi) {
       return { ok: true };
     },
     async unsnooze({ threadId }) {
+      clear(threadId);
+      return { ok: true };
+    },
+    async acknowledgeWake({ threadId }) {
+      // A woken snooze row is retained only to make the marker durable. Once
+      // the user opens or dismisses it, the thread is ordinary active work.
       clear(threadId);
       return { ok: true };
     },

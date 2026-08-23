@@ -9,6 +9,7 @@ import {
   partitionPinned,
   searchThreadsByTitle,
   sortByCreatedAtDescending,
+  sortSettledThreads,
   threadDisplayTitle,
   visibleInboxThreads,
 } from "./inbox";
@@ -87,6 +88,40 @@ describe("sortByCreatedAtDescending", () => {
     ];
     sortByCreatedAtDescending(input);
     expect(input.map((t) => t.id)).toEqual(["a", "b"]);
+  });
+});
+
+describe("sortSettledThreads", () => {
+  it("orders by newest settled time instead of creation time", () => {
+    const settledAt = new Map([
+      ["old-thread", 500],
+      ["new-thread", 900],
+    ]);
+    const ordered = sortSettledThreads(
+      [
+        thread({ id: "old-thread", createdAt: 999 }),
+        thread({ id: "new-thread", createdAt: 1 }),
+      ],
+      (candidate) => settledAt.get(candidate.id) ?? null,
+    );
+    expect(ordered.map((candidate) => candidate.id)).toEqual([
+      "new-thread",
+      "old-thread",
+    ]);
+  });
+
+  it("falls back to the latest bb activity time", () => {
+    const ordered = sortSettledThreads(
+      [
+        thread({ id: "updated", updatedAt: 800, latestAttentionAt: 100 }),
+        thread({ id: "attention", updatedAt: 200, latestAttentionAt: 900 }),
+      ],
+      () => null,
+    );
+    expect(ordered.map((candidate) => candidate.id)).toEqual([
+      "attention",
+      "updated",
+    ]);
   });
 });
 
