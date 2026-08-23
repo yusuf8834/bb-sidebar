@@ -15,7 +15,7 @@ A stable thread list for [bb](https://github.com/get-bb/bb). Threads stay where 
 ## Install
 
 ```sh
-bb plugin install git:https://github.com/yusuf8834/bb-t3sidebar.git
+bb plugin install git:https://github.com/yusuf8834/bb-sidebar.git
 ```
 
 Then choose **BB Sidebar** under **Settings > Appearance > Sidebar**.

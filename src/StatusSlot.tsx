@@ -92,7 +92,7 @@ function shortStatus(indicator: PluginSidebarThreadIndicator): {
   }
 }
 
-/** T3 Code's sidebar status palette, shared by cards and child-thread chips. */
+/** Status palette shared by cards and child-thread chips. */
 export function statusToneClass(
   indicator: PluginSidebarThreadIndicator,
 ): string {
