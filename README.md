@@ -28,4 +28,4 @@ npm run build
 bb plugin install path:. --yes
 ```
 
-Based on the MIT-licensed [bb-plugin-t3sidebar](https://github.com/SawyerHood/bb-plugin-t3sidebar) and informed by [T3 Code](https://github.com/pingdotgg/t3code). See [LICENSE](LICENSE).
+Directly inspired by [T3 Code](https://github.com/pingdotgg/t3code). See [LICENSE](LICENSE).
