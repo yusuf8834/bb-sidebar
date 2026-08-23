@@ -1,6 +1,7 @@
 import type { PluginSidebarThreadIndicator } from "@get-bb/plugin-sdk";
 import { Icon } from "./components/Icon";
 import { cn } from "./lib/utils";
+import { statusToneClass } from "./StatusSlot";
 
 /**
  * This plugin's status glyphs, matching bb's own sidebar shape for shape: the
@@ -63,7 +64,7 @@ export function StatusGlyph({
         <Icon
           name="CircleX"
           aria-label={aria}
-          className={cn(shared, "text-destructive")}
+          className={cn(shared, statusToneClass(indicator))}
         />
       );
     case "waiting-for-input":
@@ -71,7 +72,7 @@ export function StatusGlyph({
         <Icon
           name="CircleQuestion"
           aria-label={aria}
-          className={cn(shared, "text-muted-foreground/75")}
+          className={cn(shared, statusToneClass(indicator))}
         />
       );
     case "runtime":
@@ -79,26 +80,60 @@ export function StatusGlyph({
         <Icon
           name="Loading"
           aria-label={aria}
-          className={cn(shared, "animate-spin text-muted-foreground/50")}
+          className={cn(
+            shared,
+            "animate-spin opacity-75",
+            statusToneClass(indicator),
+          )}
         />
       );
     case "workflow":
-      return <ShineIcon name="Workflow" label={aria} className={shared} />;
+      return (
+        <ShineIcon
+          name="Workflow"
+          label={aria}
+          className={cn(shared, statusToneClass(indicator))}
+        />
+      );
     case "background-agent":
-      return <ShineIcon name="UserRoundPlus" label={aria} className={shared} />;
+      return (
+        <ShineIcon
+          name="UserRoundPlus"
+          label={aria}
+          className={cn(shared, statusToneClass(indicator))}
+        />
+      );
     case "background-command":
-      return <ShineIcon name="Terminal" label={aria} className={shared} />;
+      return (
+        <ShineIcon
+          name="Terminal"
+          label={aria}
+          className={cn(shared, statusToneClass(indicator))}
+        />
+      );
     case "plan-mode":
-      return <ShineIcon name="ListTodo" label={aria} className={shared} />;
+      return (
+        <ShineIcon
+          name="ListTodo"
+          label={aria}
+          className={cn(shared, statusToneClass(indicator))}
+        />
+      );
     case "goal":
-      return <ShineIcon name="Target" label={aria} className={shared} />;
+      return (
+        <ShineIcon
+          name="Target"
+          label={aria}
+          className={cn(shared, statusToneClass(indicator))}
+        />
+      );
     case "draft":
     case "working-draft":
       return (
         <Icon
           name="Edit"
           aria-label={aria}
-          className={cn(shared, "text-muted-foreground")}
+          className={cn(shared, statusToneClass(indicator))}
         />
       );
     case "unread-success":
@@ -108,9 +143,13 @@ export function StatusGlyph({
       return (
         <span
           aria-label={aria}
-          className={cn("flex items-center justify-center", shared)}
+          className={cn(
+            "flex items-center justify-center",
+            shared,
+            statusToneClass(indicator),
+          )}
         >
-          <span className="size-[5px] rounded-full bg-timeline-accent" />
+          <span className="size-[5px] rounded-full bg-current" />
         </span>
       );
     case "none":
@@ -133,7 +172,7 @@ function ShineIcon({
     <Icon
       name={name}
       aria-label={label}
-      className={cn("animate-shine-icon text-muted-foreground/50", className)}
+      className={cn("animate-shine-icon opacity-75", className)}
     />
   );
 }

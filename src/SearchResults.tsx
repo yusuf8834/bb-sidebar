@@ -189,7 +189,8 @@ function SearchResultRow({
         <span
           className={cn(
             STATUS_SLOT_CLASS,
-            isWoke && "justify-end text-2xs font-medium text-primary",
+            isWoke &&
+              "justify-end text-2xs font-medium text-amber-700 dark:text-amber-300",
           )}
         >
           {isWoke ? "Woke" : <StatusOrTime thread={thread} now={now} />}

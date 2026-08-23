@@ -1698,6 +1698,84 @@ describe("card metadata", () => {
     ]);
     expect(await screen.findByText("bb/feature")).toBeDefined();
     expect(screen.queryByText("Sawyer's MacBook")).toBeNull();
+    expect(await screen.findByLabelText("Worktree branch")).toBeDefined();
+    expect(
+      screen.getByLabelText("Machine: Sawyer's MacBook"),
+    ).toBeDefined();
+  });
+
+  it("shows a plain branch cue for non-worktree checkouts", async () => {
+    render([
+      thread({
+        id: "thr_checkout",
+        environment: {
+          id: "env_1",
+          name: "Checkout",
+          branchName: "main",
+          workspaceDisplayKind: "other",
+        },
+      }),
+    ]);
+    expect(await screen.findByLabelText("Branch")).toBeDefined();
+    expect(screen.queryByLabelText("Worktree branch")).toBeNull();
+  });
+
+  it("reduces read idle emphasis without weakening unread rows", async () => {
+    render([
+      thread({ id: "read", title: "Read row", createdAt: 20 }),
+      thread({
+        id: "unread",
+        title: "Unread row",
+        isUnread: true,
+        createdAt: 10,
+      }),
+    ]);
+    const read = (await screen.findByText("Read row")).closest(
+      "[data-row-emphasis]",
+    );
+    const unread = screen
+      .getByText("Unread row")
+      .closest("[data-row-emphasis]");
+    expect(read?.getAttribute("data-row-emphasis")).toBe("read-idle");
+    expect(read?.className).toContain("text-muted-foreground");
+    expect(unread?.getAttribute("data-row-emphasis")).toBe("unread");
+    expect(unread?.className).toContain("font-medium");
+    expect(unread?.className).toContain("text-foreground");
+  });
+
+  it("lists available thread metadata from the SDK in one tooltip", async () => {
+    render([
+      thread({
+        id: "thr_details",
+        providerId: "claude-code",
+        host: { id: "host_1", name: "Build Mac" },
+        environment: {
+          id: "env_1",
+          name: "Feature worktree",
+          branchName: "bb/details",
+          workspaceDisplayKind: "unmanaged-worktree",
+        },
+        activity: {
+          workflows: 1,
+          backgroundAgents: 2,
+          backgroundCommands: 0,
+          planMode: 0,
+          goals: 1,
+        },
+      }),
+    ]);
+
+    fireEvent.focus(await screen.findByLabelText("Thread details"));
+    const details = await screen.findByRole("tooltip");
+    expect(details.textContent).toContain("Project: bb");
+    expect(details.textContent).toContain("Environment: Feature worktree");
+    expect(details.textContent).toContain("Workspace: Unmanaged worktree");
+    expect(details.textContent).toContain("Branch: bb/details");
+    expect(details.textContent).toContain("Machine: Build Mac");
+    expect(details.textContent).toContain("Provider: Claude Code");
+    expect(details.textContent).toContain(
+      "Activity: 1 workflow, 2 background agents, 1 goal",
+    );
   });
 
   // Not exactly 3h: the card's clock is quantized to the minute, so a
@@ -1709,9 +1787,9 @@ describe("card metadata", () => {
     expect(await screen.findByText("3h")).toBeDefined();
   });
 
-  // Status and age share one slot. A row that shows both puts a variable-width
-  // label in the column, and no two rows line up.
-  it("replaces the age label with the status glyph while work runs", async () => {
+  // Status and age share one slot. Live work uses a short readable label;
+  // idle rows use their age.
+  it("replaces the age label with a readable status while work runs", async () => {
     render([
       thread({
         id: "thr_run",
@@ -1721,6 +1799,7 @@ describe("card metadata", () => {
       }),
     ]);
     expect(await screen.findByLabelText("Agent is working")).toBeDefined();
+    expect(screen.getByText("Working").className).toContain("text-sky-600");
     expect(screen.queryByText("3h")).toBeNull();
   });
 
@@ -1738,18 +1817,26 @@ describe("card metadata", () => {
   });
 });
 
-// The three states that want the user take the slot from the age label, and
-// they use bb's own glyphs: the two lists sit in one window, and a user who
-// switches between them should not have to learn a second vocabulary.
+// The three states that need attention take the slot from the age label.
 describe("attention states", () => {
   const states = [
-    ["waiting-for-input", "Thread needs user input"],
-    ["unread-error", "Unread thread failed"],
-    ["unread-success", "Unread thread succeeded"],
+    [
+      "waiting-for-input",
+      "Thread needs user input",
+      "Needs you",
+      "text-indigo-600",
+    ],
+    ["unread-error", "Unread thread failed", "Failed", "text-red-700"],
+    [
+      "unread-success",
+      "Unread thread succeeded",
+      "Unread",
+      "text-emerald-700",
+    ],
   ] as const;
 
-  for (const [indicator, label] of states) {
-    it(`shows the ${indicator} glyph instead of the age`, async () => {
+  for (const [indicator, label, shortLabel, toneClass] of states) {
+    it(`shows the ${indicator} label instead of the age`, async () => {
       render([
         thread({
           id: `thr_${indicator}`,
@@ -1759,13 +1846,12 @@ describe("attention states", () => {
         }),
       ]);
       expect(await screen.findByLabelText(label)).toBeDefined();
+      expect(screen.getByText(shortLabel).className).toContain(toneClass);
       expect(screen.queryByText("3h")).toBeNull();
     });
   }
 
-  // Running work is the one state the user does NOT have to act on, so it gets
-  // the neutral spinner and no notification dot.
-  it("shows the spinner, not a dot, while work runs", async () => {
+  it("uses a working label instead of an unread success state", async () => {
     render([
       thread({
         id: "thr_busy",
@@ -1775,6 +1861,7 @@ describe("attention states", () => {
       }),
     ]);
     expect(await screen.findByLabelText("Thread working")).toBeDefined();
+    expect(screen.getByText("Working")).toBeDefined();
     expect(screen.queryByLabelText("Unread thread succeeded")).toBeNull();
   });
 });
@@ -1803,7 +1890,11 @@ describe("pull request badge", () => {
     withPr("none");
     const badge = await screen.findByRole("link", { name: "#412" });
     expect(badge.getAttribute("href")).toBe("https://github.com/o/r/pull/412");
-    expect(badge.getAttribute("title")).toBe("Fix the flake");
+    expect(badge.getAttribute("title")).toBeNull();
+    fireEvent.focus(badge);
+    expect((await screen.findByRole("tooltip")).textContent).toBe(
+      "Fix the flake\nOpen",
+    );
   });
 
   it("shows no badge when the branch has no PR", async () => {
@@ -1812,18 +1903,49 @@ describe("pull request badge", () => {
     expect(screen.queryByRole("link", { name: /^#/ })).toBeNull();
   });
 
-  // The attention state is bb's rolled-up "does this need you" signal, so the
-  // badge can colour itself without reading checks/review/mergeability.
+  // BB's richer attention state keeps failed open PRs red while the remaining
+  // open states use T3's emerald PR color.
   it("colors the badge from the attention state", async () => {
     const failing = withPr("checks_failed");
     expect(
       (await screen.findByRole("link", { name: "#412" })).className,
-    ).toContain("destructive");
+    ).toContain("text-red-600");
     failing.unmount();
 
     withPr("ready_to_merge");
     expect(
       (await screen.findByRole("link", { name: "#412" })).className,
-    ).toContain("success");
+    ).toContain("text-emerald-600");
+  });
+
+  it("covers pending, review, draft, closed, and merged states", async () => {
+    const pending = withPr("checks_pending");
+    expect(
+      (await screen.findByRole("link", { name: "#412" })).className,
+    ).toContain("text-emerald-600");
+    pending.unmount();
+
+    const review = withPr("review_requested");
+    expect(
+      (await screen.findByRole("link", { name: "#412" })).className,
+    ).toContain("text-emerald-600");
+    review.unmount();
+
+    const draft = withPr("draft", "draft");
+    expect(
+      (await screen.findByRole("link", { name: "#412" })).className,
+    ).toContain("text-muted-foreground/60");
+    draft.unmount();
+
+    const closed = withPr("closed", "closed");
+    expect(
+      (await screen.findByRole("link", { name: "#412" })).className,
+    ).toContain("text-red-600");
+    closed.unmount();
+
+    withPr("merged", "merged");
+    expect(
+      (await screen.findByRole("link", { name: "#412" })).className,
+    ).toContain("text-violet-600");
   });
 });

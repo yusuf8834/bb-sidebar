@@ -8,6 +8,7 @@ import {
   experimental_useSidebarThreadPullRequest as useSidebarThreadPullRequest,
   experimental_useSidebarThreadSplit as useSidebarThreadSplit,
   experimental_useSidebarThreadActions as useSidebarThreadActions,
+  type PluginSidebarPullRequest,
   type PluginSidebarThread,
 } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
@@ -81,6 +82,13 @@ export function ThreadCard({
   // worktree share one.
   const { pullRequest } = useSidebarThreadPullRequest(thread.id);
   const [isRenaming, setIsRenaming] = useState(false);
+  const emphasis = isWoke
+    ? "woke"
+    : thread.isUnread
+      ? "unread"
+      : thread.indicator === "none"
+        ? "read-idle"
+        : "active";
 
   return (
     <RowContextMenu
@@ -205,7 +213,7 @@ export function ThreadCard({
                   }}
                   className={cn(
                     STATUS_SLOT_CLASS,
-                    "pointer-events-auto justify-end text-2xs font-medium text-primary hover:underline",
+                    "pointer-events-auto justify-end text-2xs font-medium text-amber-700 hover:underline dark:text-amber-300",
                   )}
                 >
                   Woke
@@ -223,13 +231,14 @@ export function ThreadCard({
             )}
           </div>
           <div
+            data-row-emphasis={emphasis}
             className={cn(
-              // Weight alone carries unread. Fading the title — or the whole
-              // card — makes a thread at rest read as disabled, and at rest is
-              // what most of the list is most of the time.
-              "pointer-events-none relative mt-0.5 truncate text-sm text-foreground",
+              "pointer-events-none relative mt-0.5 truncate text-sm",
               isRenaming && "pointer-events-auto",
-              thread.isUnread && "font-medium",
+              emphasis === "read-idle"
+                ? "text-muted-foreground"
+                : "text-foreground",
+              (emphasis === "unread" || emphasis === "woke") && "font-medium",
             )}
           >
             <InlineThreadTitle
@@ -242,17 +251,14 @@ export function ThreadCard({
             {/* A thread without a worktree still runs somewhere, so the
                 machine takes the branch's place rather than leaving the line
                 blank. */}
-            {thread.environment?.branchName ? (
-              <span className="min-w-0 flex-1 truncate font-mono">
-                {thread.environment.branchName}
-              </span>
-            ) : thread.host ? (
-              <span className="min-w-0 flex-1 truncate">
-                {thread.host.name}
-              </span>
-            ) : (
-              <span className="flex-1" />
-            )}
+            <ThreadLocation thread={thread} />
+            {thread.environment?.branchName && thread.host ? (
+              <Icon
+                name="Computer"
+                aria-label={`Machine: ${thread.host.name}`}
+                className="size-3 shrink-0 text-muted-foreground/60"
+              />
+            ) : null}
             {thread.activity.workflows > 0 ? (
               <ActivityCount
                 label="workflows"
@@ -266,34 +272,186 @@ export function ThreadCard({
               />
             ) : null}
             {pullRequest ? (
-              <a
-                href={pullRequest.url}
-                target="_blank"
-                rel="noreferrer"
-                onClick={(event) => event.stopPropagation()}
-                title={pullRequest.title}
-                className={cn(
-                  "relative shrink-0 font-mono hover:underline",
-                  pullRequest.state === "merged"
-                    ? "text-[color:var(--pr-merged)]"
-                    : pullRequest.attention === "checks_failed" ||
-                        pullRequest.attention === "conflicts"
-                      ? "text-destructive-text"
-                      : pullRequest.attention === "ready_to_merge"
-                        ? "text-success-foreground"
-                        : "text-muted-foreground",
-                )}
+              <Tooltip
+                label={`${pullRequest.title}\n${pullRequestStatusLabel(pullRequest)}`}
+                className="whitespace-pre-line"
               >
-                #{pullRequest.number}
-              </a>
+                <a
+                  href={pullRequest.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(event) => event.stopPropagation()}
+                  className={cn(
+                    "pointer-events-auto relative shrink-0 font-mono hover:underline",
+                    pullRequestToneClass(pullRequest),
+                  )}
+                >
+                  #{pullRequest.number}
+                </a>
+              </Tooltip>
             ) : null}
-            {/* Always drawn, so the line has a fixed right edge. */}
-            <ProviderGlyph providerId={thread.providerId} />
+            <Tooltip
+              label={threadMetadataLabel(thread, projectName)}
+              side="left"
+              className="whitespace-pre-line"
+            >
+              <span
+                tabIndex={0}
+                aria-label="Thread details"
+                className="pointer-events-auto rounded-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <ProviderGlyph providerId={thread.providerId} />
+              </span>
+            </Tooltip>
           </div>
         </div>
       </li>
     </RowContextMenu>
   );
+}
+
+function ThreadLocation({ thread }: { thread: PluginSidebarThread }) {
+  const branchName = thread.environment?.branchName;
+  if (branchName) {
+    const isWorktree =
+      thread.environment?.workspaceDisplayKind === "managed-worktree" ||
+      thread.environment?.workspaceDisplayKind === "unmanaged-worktree";
+    return (
+      <span className="flex min-w-0 flex-1 items-center gap-1 truncate">
+        <Icon
+          name={isWorktree ? "FolderGit" : "GitBranch"}
+          aria-label={isWorktree ? "Worktree branch" : "Branch"}
+          className="size-3 shrink-0 text-muted-foreground/60"
+        />
+        <span className="truncate font-mono">{branchName}</span>
+      </span>
+    );
+  }
+  if (thread.host) {
+    return (
+      <span className="flex min-w-0 flex-1 items-center gap-1 truncate">
+        <Icon
+          name="Computer"
+          aria-hidden
+          className="size-3 shrink-0 text-muted-foreground/60"
+        />
+        <span className="truncate">{thread.host.name}</span>
+      </span>
+    );
+  }
+  return <span className="flex-1" />;
+}
+
+function providerLabel(providerId: string): string {
+  if (providerId === "codex") return "Codex";
+  if (providerId === "claude-code") return "Claude Code";
+  return providerId;
+}
+
+function workspaceLabel(thread: PluginSidebarThread): string | null {
+  switch (thread.environment?.workspaceDisplayKind) {
+    case "managed-worktree":
+      return "Managed worktree";
+    case "unmanaged-worktree":
+      return "Unmanaged worktree";
+    case "other":
+      return "Checkout";
+    default:
+      return null;
+  }
+}
+
+function activityLabel(thread: PluginSidebarThread): string {
+  const parts: string[] = [];
+  if (thread.hasPendingInteraction) parts.push("needs user input");
+  const counts = [
+    [thread.activity.workflows, "workflow"],
+    [thread.activity.backgroundAgents, "background agent"],
+    [thread.activity.backgroundCommands, "background command"],
+    [thread.activity.planMode, "plan"],
+    [thread.activity.goals, "goal"],
+  ] as const;
+  for (const [count, label] of counts) {
+    if (count > 0) parts.push(`${count} ${label}${count === 1 ? "" : "s"}`);
+  }
+  return parts.length > 0 ? parts.join(", ") : "Idle";
+}
+
+function threadMetadataLabel(
+  thread: PluginSidebarThread,
+  projectName: string | null,
+): string {
+  const workspace = workspaceLabel(thread);
+  const lines = [
+    projectName ? `Project: ${projectName}` : null,
+    thread.environment?.name
+      ? `Environment: ${thread.environment.name}`
+      : null,
+    workspace ? `Workspace: ${workspace}` : null,
+    thread.environment?.branchName
+      ? `Branch: ${thread.environment.branchName}`
+      : null,
+    thread.host ? `Machine: ${thread.host.name}` : null,
+    `Provider: ${providerLabel(thread.providerId)}`,
+    `Activity: ${activityLabel(thread)}`,
+  ];
+  return lines.filter((line): line is string => line !== null).join("\n");
+}
+
+function pullRequestStatusLabel(pullRequest: PluginSidebarPullRequest): string {
+  switch (pullRequest.attention) {
+    case "blocked":
+      return "Blocked";
+    case "changes_requested":
+      return "Changes requested";
+    case "checks_failed":
+      return "Checks failed";
+    case "checks_pending":
+      return "Checks pending";
+    case "conflicts":
+      return "Conflicts";
+    case "ready_to_merge":
+      return "Ready to merge";
+    case "review_requested":
+      return "Review requested";
+    case "draft":
+      return "Draft";
+    case "merged":
+      return "Merged";
+    case "closed":
+      return "Closed";
+    case "none":
+      return pullRequest.state === "open"
+        ? "Open"
+        : pullRequest.state[0]!.toUpperCase() + pullRequest.state.slice(1);
+  }
+}
+
+function pullRequestToneClass(pullRequest: PluginSidebarPullRequest): string {
+  if (pullRequest.state === "merged" || pullRequest.attention === "merged") {
+    return "text-violet-600 dark:text-violet-300/90";
+  }
+  if (
+    pullRequest.attention === "blocked" ||
+    pullRequest.attention === "changes_requested" ||
+    pullRequest.attention === "checks_failed" ||
+    pullRequest.attention === "conflicts"
+  ) {
+    return "text-red-600 dark:text-red-300/90";
+  }
+  if (
+    pullRequest.state === "draft" ||
+    pullRequest.attention === "draft"
+  ) {
+    return "text-muted-foreground/60";
+  }
+  if (pullRequest.state === "closed" || pullRequest.attention === "closed") {
+    return "text-red-600 dark:text-red-300/90";
+  }
+  if (pullRequest.state === "open") {
+    return "text-emerald-600 dark:text-emerald-300/90";
+  }
+  return "text-muted-foreground";
 }
 
 function ParkButton({
