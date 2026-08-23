@@ -1039,6 +1039,23 @@ describe("parking threads", () => {
     expect(screen.getByRole("option", { name: "1 week" })).toBeDefined();
   });
 
+  it("keeps hover-only snooze controls visible while the menu is open", async () => {
+    render([thread({ id: "thr_snooze_anchor", title: "Quiet" })]);
+
+    const snooze = await screen.findByRole("combobox", {
+      name: "Snooze thread",
+    });
+    const controls = snooze.parentElement;
+    expect(controls).not.toBeNull();
+    expect(controls!.classList.contains("hidden")).toBe(true);
+
+    fireEvent.keyDown(snooze, { key: "Enter" });
+    await screen.findByRole("option", { name: "30 minutes" });
+
+    expect(controls!.classList.contains("hidden")).toBe(false);
+    expect(controls!.classList.contains("flex")).toBe(true);
+  });
+
   it("settles a thread when the user clicks Settle", async () => {
     let settled: string | null = null;
     renderSlot(inbox, listProps, {

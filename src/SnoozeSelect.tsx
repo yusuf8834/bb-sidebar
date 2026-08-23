@@ -13,17 +13,20 @@ export function SnoozeSelect({
   snoozePresets,
   disabled = false,
   triggerClassName,
+  onOpenChange,
   onSnooze,
 }: {
   label: string;
   snoozePresets: readonly ConfiguredSnoozePreset[];
   disabled?: boolean;
   triggerClassName: string;
+  onOpenChange?: (open: boolean) => void;
   onSnooze: (snoozedUntil: number) => void;
 }) {
   return (
     <Select
       disabled={disabled || snoozePresets.length === 0}
+      onOpenChange={onOpenChange}
       onValueChange={(presetId) => {
         const preset = snoozePresets.find((item) => item.id === presetId);
         if (preset) onSnooze(Date.now() + preset.durationMs);

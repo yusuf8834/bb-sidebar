@@ -79,6 +79,7 @@ export function ThreadCard({
   // worktree share one.
   const { pullRequest } = useSidebarThreadPullRequest(thread.id);
   const [isRenaming, setIsRenaming] = useState(false);
+  const [isSnoozeOpen, setIsSnoozeOpen] = useState(false);
   const emphasis = isWoke
     ? "woke"
     : thread.isUnread
@@ -176,11 +177,17 @@ export function ThreadCard({
             {/* Status at rest, park actions on hover. Only the status yields,
                 so the project name never shifts. */}
             {canPark && snoozePresets.length > 0 && !isWoke ? (
-              <span className="pointer-events-auto hidden items-center gap-0.5 group-hover/card:flex">
+              <span
+                className={cn(
+                  "pointer-events-auto items-center gap-0.5",
+                  isSnoozeOpen ? "flex" : "hidden group-hover/card:flex",
+                )}
+              >
                 <SnoozeSelect
                   label="Snooze thread"
                   snoozePresets={snoozePresets}
                   triggerClassName="h-5 w-8 border-0 px-0.5 py-0 shadow-none hover:bg-transparent focus:ring-0 [&>svg:last-child]:size-3"
+                  onOpenChange={setIsSnoozeOpen}
                   onSnooze={onSnooze}
                 />
                 <ParkButton
@@ -211,7 +218,8 @@ export function ThreadCard({
               <span
                 className={cn(
                   STATUS_SLOT_CLASS,
-                  canPark && "group-hover/card:hidden",
+                  canPark &&
+                    (isSnoozeOpen ? "hidden" : "group-hover/card:hidden"),
                 )}
               >
                 <StatusOrTime thread={thread} now={now} />
