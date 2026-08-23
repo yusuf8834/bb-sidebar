@@ -1047,13 +1047,14 @@ describe("parking threads", () => {
     });
     const controls = snooze.parentElement;
     expect(controls).not.toBeNull();
-    expect(controls!.classList.contains("hidden")).toBe(true);
+    expect(controls!.classList.contains("opacity-0")).toBe(true);
+    expect(controls!.classList.contains("pointer-events-none")).toBe(true);
 
     fireEvent.keyDown(snooze, { key: "Enter" });
     await screen.findByRole("option", { name: "30 minutes" });
 
-    expect(controls!.classList.contains("hidden")).toBe(false);
-    expect(controls!.classList.contains("flex")).toBe(true);
+    expect(controls!.classList.contains("opacity-100")).toBe(true);
+    expect(controls!.classList.contains("pointer-events-auto")).toBe(true);
   });
 
   it("settles a thread when the user clicks Settle", async () => {

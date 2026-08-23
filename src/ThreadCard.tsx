@@ -99,11 +99,14 @@ export function ThreadCard({
       onRename={() => setIsRenaming(true)}
     >
       <li
-        className={cn("list-none", reorder?.isDragging && "opacity-50")}
+        className={cn(
+          "list-none transition-opacity duration-150 ease-out motion-reduce:transition-none",
+          reorder?.isDragging && "opacity-50",
+        )}
       >
         <div
           className={cn(
-            "group/card relative rounded-md px-2.5 py-2 transition-colors",
+            "group/card relative rounded-md px-2.5 py-2 transition-colors duration-150 ease-out motion-reduce:transition-none",
             isActive ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60",
             isSelected &&
               "bg-sidebar-accent ring-1 ring-inset ring-primary/60",
@@ -168,33 +171,11 @@ export function ThreadCard({
                       });
                     });
                   }}
-                  className="pointer-events-auto rounded p-0.5 text-muted-foreground opacity-0 hover:text-foreground focus-visible:opacity-100 group-hover/card:opacity-100"
+                  className="pointer-events-auto rounded p-0.5 text-muted-foreground opacity-0 transition-opacity duration-150 ease-out hover:text-foreground focus-visible:opacity-100 group-hover/card:opacity-100 motion-reduce:transition-none"
                 >
                   <Icon name="PinOff" className="size-3.5" />
                 </button>
               </Tooltip>
-            ) : null}
-            {/* Status at rest, park actions on hover. Only the status yields,
-                so the project name never shifts. */}
-            {canPark && snoozePresets.length > 0 && !isWoke ? (
-              <span
-                className={cn(
-                  "pointer-events-auto items-center gap-0.5",
-                  isSnoozeOpen ? "flex" : "hidden group-hover/card:flex",
-                )}
-              >
-                <SnoozeSelect
-                  label="Snooze thread"
-                  snoozePresets={snoozePresets}
-                  triggerClassName="h-5 w-8 border-0 px-0.5 py-0 shadow-none hover:bg-transparent focus:ring-0 [&>svg:last-child]:size-3"
-                  onOpenChange={setIsSnoozeOpen}
-                  onSnooze={onSnooze}
-                />
-                <ParkButton
-                  label="Settle thread"
-                  onActivate={onSettle}
-                />
-              </span>
             ) : null}
             {isWoke ? (
               <Tooltip label="Dismiss Woke marker">
@@ -218,11 +199,40 @@ export function ThreadCard({
               <span
                 className={cn(
                   STATUS_SLOT_CLASS,
-                  canPark &&
-                    (isSnoozeOpen ? "hidden" : "group-hover/card:hidden"),
+                  "group/status-slot pointer-events-auto relative h-5",
                 )}
               >
-                <StatusOrTime thread={thread} now={now} />
+                <span
+                  className={cn(
+                    "absolute inset-y-0 right-0 flex items-center justify-end transition-opacity duration-150 ease-out group-has-[:focus-visible]/status-slot:opacity-0 motion-reduce:transition-none",
+                    canPark &&
+                      snoozePresets.length > 0 &&
+                      "group-hover/card:opacity-0",
+                    isSnoozeOpen && "opacity-0",
+                  )}
+                >
+                  <StatusOrTime thread={thread} now={now} />
+                </span>
+                {canPark && snoozePresets.length > 0 ? (
+                  <span
+                    className={cn(
+                      "pointer-events-none absolute inset-y-0 right-0 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 ease-out has-[:focus-visible]:pointer-events-auto has-[:focus-visible]:opacity-100 group-hover/card:pointer-events-auto group-hover/card:opacity-100 motion-reduce:transition-none",
+                      isSnoozeOpen && "pointer-events-auto opacity-100",
+                    )}
+                  >
+                    <SnoozeSelect
+                      label="Snooze thread"
+                      snoozePresets={snoozePresets}
+                      triggerClassName="h-5 w-8 border-0 px-0.5 py-0 shadow-none hover:bg-transparent focus:ring-0 [&>svg:last-child]:size-3"
+                      onOpenChange={setIsSnoozeOpen}
+                      onSnooze={onSnooze}
+                    />
+                    <ParkButton
+                      label="Settle thread"
+                      onActivate={onSettle}
+                    />
+                  </span>
+                ) : null}
               </span>
             )}
           </div>

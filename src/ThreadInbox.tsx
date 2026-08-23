@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -12,6 +13,7 @@ import {
   type PluginThreadListProps,
   useSettings,
 } from "@get-bb/plugin-sdk/app";
+import { autoAnimate } from "@formkit/auto-animate";
 import { toast } from "sonner";
 import { Icon } from "./components/Icon";
 import { cn } from "./lib/utils";
@@ -64,6 +66,13 @@ const ALL_PROJECTS = "__all__";
 const SHELF_EXPANSION_STORAGE_KEY = "t3chat-sidebar:shelf-expansion:v1";
 const SETTLED_INITIAL_LIMIT = 10;
 const SETTLED_PAGE_SIZE = 25;
+
+function useListAutoAnimate<T extends HTMLElement>() {
+  return useCallback((node: T | null) => {
+    if (!node || typeof window.matchMedia !== "function") return;
+    autoAnimate(node, { duration: 150, easing: "ease-out" });
+  }, []);
+}
 
 function suppressNextClick(threadId: string): void {
   let timeout = 0;
@@ -140,6 +149,7 @@ export function ThreadInbox({
   const actions = useSidebarThreadActions();
   const { values: settings } = useSettings();
   const lifecycle = useLifecycle(threads);
+  const attachShelvesAutoAnimateRef = useListAutoAnimate<HTMLDivElement>();
   const activeThreadIdRef = useRef(activeThreadId);
   activeThreadIdRef.current = activeThreadId;
   const configuredSnoozePresets =
@@ -750,7 +760,7 @@ export function ThreadInbox({
             onNavigate={onNavigate}
           />
         ) : (
-          <>
+          <div ref={attachShelvesAutoAnimateRef} className="flex flex-col">
             {pinned.length > 0 ? (
               <Shelf label="Pinned">
                 {pinned.map((thread) => (
@@ -863,7 +873,7 @@ export function ThreadInbox({
                 setSettledLimit((limit) => limit + SETTLED_PAGE_SIZE)
               }
             />
-          </>
+          </div>
         )}
       </div>
     </div>
@@ -909,6 +919,7 @@ function ParkedShelf({
   settledLimit?: number;
   onLoadMore?: () => void;
 }) {
+  const attachListAutoAnimateRef = useListAutoAnimate<HTMLUListElement>();
   if (threads.length === 0) return null;
   const now = Date.now();
   const limit =
@@ -932,38 +943,34 @@ function ParkedShelf({
           <Icon
             name="ChevronDown"
             className={cn(
-              "size-3 text-muted-foreground/70 transition-transform",
+              "size-3 text-muted-foreground/70 transition-transform duration-150 ease-out motion-reduce:transition-none",
               expanded && "rotate-180",
             )}
           />
         </span>
       </button>
-      {visibleThreads.length > 0 ? (
-        <ul className="flex flex-col gap-px">
-          {visibleThreads.map((thread) => (
-            <SlimRow
-              key={thread.id}
-              thread={thread}
-              isActive={thread.id === activeThreadId}
-              isSelected={selectedThreadIds.has(thread.id)}
-              shelf={shelf}
-              wakeAt={lifecycle.wakeAtFor(thread)}
-              now={now}
-              snoozePresets={snoozePresets}
-              onSnooze={(until) => void lifecycle.snooze(thread.id, until)}
-              onNavigate={onNavigate}
-              onSelectionClick={(event) =>
-                onSelectionClick(thread.id, event)
-              }
-              onRestore={() =>
-                shelf === "snoozed"
-                  ? void lifecycle.unsnooze(thread.id)
-                  : void lifecycle.unsettle(thread.id)
-              }
-            />
-          ))}
-        </ul>
-      ) : null}
+      <ul ref={attachListAutoAnimateRef} className="flex flex-col gap-px">
+        {visibleThreads.map((thread) => (
+          <SlimRow
+            key={thread.id}
+            thread={thread}
+            isActive={thread.id === activeThreadId}
+            isSelected={selectedThreadIds.has(thread.id)}
+            shelf={shelf}
+            wakeAt={lifecycle.wakeAtFor(thread)}
+            now={now}
+            snoozePresets={snoozePresets}
+            onSnooze={(until) => void lifecycle.snooze(thread.id, until)}
+            onNavigate={onNavigate}
+            onSelectionClick={(event) => onSelectionClick(thread.id, event)}
+            onRestore={() =>
+              shelf === "snoozed"
+                ? void lifecycle.unsnooze(thread.id)
+                : void lifecycle.unsettle(thread.id)
+            }
+          />
+        ))}
+      </ul>
       {expanded && hasMore && onLoadMore ? (
         <button
           type="button"
@@ -984,6 +991,7 @@ function Shelf({
   label: string | null;
   children: React.ReactNode;
 }) {
+  const attachListAutoAnimateRef = useListAutoAnimate<HTMLUListElement>();
   return (
     // A named section is exposed as a landmark region; an unnamed one is not,
     // which is exactly right for the single unlabelled inbox list.
@@ -996,7 +1004,9 @@ function Shelf({
           <span className="h-px flex-1 bg-sidebar-border" />
         </h2>
       ) : null}
-      <ul className="flex flex-col gap-px">{children}</ul>
+      <ul ref={attachListAutoAnimateRef} className="flex flex-col gap-px">
+        {children}
+      </ul>
     </section>
   );
 }
