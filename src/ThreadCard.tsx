@@ -1,10 +1,15 @@
-import { useState } from "react";
+import {
+  useState,
+  type DragEventHandler,
+  type KeyboardEventHandler,
+} from "react";
 import {
   experimental_useSidebarThreadPullRequest as useSidebarThreadPullRequest,
   experimental_useSidebarThreadSplit as useSidebarThreadSplit,
   experimental_useSidebarThreadActions as useSidebarThreadActions,
   type PluginSidebarThread,
 } from "@get-bb/plugin-sdk/app";
+import { toast } from "sonner";
 import { Icon, type IconName } from "./components/Icon";
 import { cn } from "./lib/utils";
 import { RowContextMenu } from "./RowContextMenu";
@@ -13,6 +18,16 @@ import { STATUS_SLOT_CLASS, StatusOrTime } from "./StatusSlot";
 import { threadDisplayTitle } from "./inbox";
 import { InlineThreadTitle } from "./InlineThreadTitle";
 import type { ConfiguredSnoozePreset } from "./lifecycle";
+
+export interface ThreadReorderControls {
+  disabled: boolean;
+  isDragging: boolean;
+  onDragStart: DragEventHandler<HTMLButtonElement>;
+  onDragEnd: DragEventHandler<HTMLButtonElement>;
+  onDragOver: DragEventHandler<HTMLLIElement>;
+  onDrop: DragEventHandler<HTMLLIElement>;
+  onKeyDown: KeyboardEventHandler<HTMLButtonElement>;
+}
 
 /**
  * One thread as a three-line card: project and status, title, then branch and
@@ -34,6 +49,7 @@ export function ThreadCard({
   onSettle,
   onSnooze,
   onAcknowledgeWake,
+  reorder,
   now,
 }: {
   thread: PluginSidebarThread;
@@ -48,6 +64,7 @@ export function ThreadCard({
   onSettle: () => void;
   onSnooze: (snoozedUntil: number) => void;
   onAcknowledgeWake: () => void;
+  reorder?: ThreadReorderControls;
   /** Quantized clock, so every card in one render agrees on "now". */
   now: number;
 }) {
@@ -70,7 +87,11 @@ export function ThreadCard({
       onSettle={canPark ? onSettle : undefined}
       onRename={() => setIsRenaming(true)}
     >
-      <li className="list-none">
+      <li
+        className={cn("list-none", reorder?.isDragging && "opacity-50")}
+        onDragOver={reorder?.onDragOver}
+        onDrop={reorder?.onDrop}
+      >
         <div
           className={cn(
             "group/card relative rounded-md px-2.5 py-2 transition-colors",
@@ -107,6 +128,45 @@ export function ThreadCard({
             <span className="min-w-0 flex-1 truncate text-2xs font-medium text-muted-foreground">
               {projectName ?? " "}
             </span>
+            {reorder ? (
+              <button
+                type="button"
+                draggable={!reorder.disabled}
+                disabled={reorder.disabled}
+                aria-label={`Reorder ${threadDisplayTitle(thread)}. Use Arrow Up or Arrow Down.`}
+                title="Drag to reorder. Arrow Up or Arrow Down also works."
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onDragStart={reorder.onDragStart}
+                onDragEnd={reorder.onDragEnd}
+                onKeyDown={reorder.onKeyDown}
+                className="pointer-events-auto rounded p-0.5 text-muted-foreground opacity-0 hover:text-foreground focus-visible:opacity-100 disabled:cursor-not-allowed group-hover/card:opacity-100"
+              >
+                <Icon name="GripVertical" className="size-3.5" />
+              </button>
+            ) : null}
+            {thread.isPinned ? (
+              <button
+                type="button"
+                aria-label={`Unpin ${threadDisplayTitle(thread)}`}
+                title="Unpin thread"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  void actions.setPinned(thread.id, false).catch((error) => {
+                    toast.error("Could not unpin thread", {
+                      description:
+                        error instanceof Error ? error.message : undefined,
+                    });
+                  });
+                }}
+                className="pointer-events-auto rounded p-0.5 text-muted-foreground opacity-0 hover:text-foreground focus-visible:opacity-100 group-hover/card:opacity-100"
+              >
+                <Icon name="PinOff" className="size-3.5" />
+              </button>
+            ) : null}
             {/* Status at rest, park actions on hover. Only the status yields,
                 so the project name never shifts. */}
             {canPark && quickSnooze && !isWoke ? (

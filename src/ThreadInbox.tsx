@@ -15,10 +15,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./components/Select";
-import { ThreadCard } from "./ThreadCard";
+import { ThreadCard, type ThreadReorderControls } from "./ThreadCard";
 import { SlimRow } from "./SlimRow";
 import { SearchResults } from "./SearchResults";
 import { useLifecycle } from "./useLifecycle";
+import { usePinnedReorder } from "./usePinnedReorder";
+import { useInboxReorder } from "./useInboxReorder";
 import { TRAILING_GLYPH_BOX_CLASS } from "./StatusSlot";
 import {
   filterByProject,
@@ -30,6 +32,12 @@ import {
   sortSettledThreads,
   visibleInboxThreads,
 } from "./inbox";
+import {
+  movePinnedId,
+  movePinnedIdByOffset,
+  mergeVisibleOrder,
+  orderPinnedThreads,
+} from "./pinned-order";
 import {
   DEFAULT_SNOOZE_PRESET_CONFIG,
   parseConfiguredSnoozePresets,
@@ -125,9 +133,17 @@ export function ThreadInbox({
     [projects],
   );
 
-  const { pinned, inbox, snoozed, settled } = useMemo(() => {
+  const {
+    pinnedBase,
+    inboxBase,
+    allPinnedBase,
+    allInboxBase,
+    snoozed,
+    settled,
+  } = useMemo(() => {
+    const allVisible = visibleInboxThreads(threads);
     const scoped = filterByProject(
-      visibleInboxThreads(threads),
+      allVisible,
       scope === ALL_PROJECTS ? null : scope,
     );
     // Children live in their parent's header chip instead of the flat list;
@@ -143,9 +159,16 @@ export function ThreadInbox({
       else active.push(thread);
     }
     const split = partitionPinned(active);
+    const allSplit = partitionPinned(allVisible);
     return {
-      pinned: sortByCreatedAtDescending(split.pinned),
-      inbox: sortByCreatedAtDescending(split.inbox),
+      // BB supplies pinned rows in the user's persisted pin order.
+      pinnedBase: split.pinned,
+      inboxBase: sortByCreatedAtDescending(split.inbox),
+      // Keep a global order behind project-scoped and parked views. Child and
+      // parked rows are included because they can become visible later; a
+      // reorder elsewhere must not silently discard their old slot.
+      allPinnedBase: allSplit.pinned,
+      allInboxBase: sortByCreatedAtDescending(allSplit.inbox),
       // Soonest wake first: "what comes back next" is the shelf's question.
       snoozed: [...onSnoozeShelf].sort(
         (left, right) =>
@@ -154,6 +177,113 @@ export function ThreadInbox({
       settled: sortSettledThreads(onSettledShelf, lifecycle.settledAtFor),
     };
   }, [lifecycle, scope, threads]);
+
+  const pinnedReorder = usePinnedReorder(allPinnedBase);
+  const inboxReorder = useInboxReorder(allInboxBase);
+  const [dragOrder, setDragOrder] = useState<{
+    shelf: "pinned" | "inbox";
+    movingId: string;
+    ids: string[];
+  } | null>(null);
+  const dragOrderRef = useRef(dragOrder);
+  dragOrderRef.current = dragOrder;
+  const pinned = useMemo(() => {
+    const ordered = orderPinnedThreads(pinnedBase, pinnedReorder.ids);
+    return orderPinnedThreads(
+      ordered,
+      dragOrder?.shelf === "pinned" ? dragOrder.ids : null,
+    );
+  }, [dragOrder, pinnedBase, pinnedReorder.ids]);
+  const inbox = useMemo(() => {
+    const ordered = orderPinnedThreads(inboxBase, inboxReorder.ids);
+    return orderPinnedThreads(
+      ordered,
+      dragOrder?.shelf === "inbox" ? dragOrder.ids : null,
+    );
+  }, [dragOrder, inboxBase, inboxReorder.ids]);
+
+  const threadReorderControls = (
+    thread: PluginSidebarThread,
+    shelf: "pinned" | "inbox",
+  ): ThreadReorderControls => {
+    const target = shelf === "pinned" ? pinnedReorder : inboxReorder;
+    const visibleIds = (shelf === "pinned" ? pinned : inbox).map(
+      (candidate) => candidate.id,
+    );
+    return {
+      disabled: target.isReordering,
+      isDragging:
+        dragOrder?.shelf === shelf && dragOrder.movingId === thread.id,
+      onDragStart: (event) => {
+        if (target.isReordering) {
+          event.preventDefault();
+          return;
+        }
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", thread.id);
+        const next = { shelf, movingId: thread.id, ids: visibleIds };
+        dragOrderRef.current = next;
+        setDragOrder(next);
+      },
+      onDragEnd: () => {
+        dragOrderRef.current = null;
+        setDragOrder(null);
+      },
+      onDragOver: (event) => {
+        const current = dragOrderRef.current;
+        if (
+          !current ||
+          current.shelf !== shelf ||
+          current.movingId === thread.id
+        ) {
+          return;
+        }
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        const rect = event.currentTarget.getBoundingClientRect();
+        const placement =
+          event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+        const ids = movePinnedId(
+          current.ids,
+          current.movingId,
+          thread.id,
+          placement,
+        );
+        const next = { ...current, ids };
+        dragOrderRef.current = next;
+        setDragOrder(next);
+      },
+      onDrop: (event) => {
+        const current = dragOrderRef.current;
+        if (!current || current.shelf !== shelf) return;
+        event.preventDefault();
+        dragOrderRef.current = null;
+        setDragOrder(null);
+        const globalIds = mergeVisibleOrder(target.ids, current.ids);
+        if (shelf === "pinned") {
+          void pinnedReorder.reorder(globalIds, current.movingId);
+        } else {
+          void inboxReorder.reorder(globalIds);
+        }
+      },
+      onKeyDown: (event) => {
+        if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+        event.preventDefault();
+        event.stopPropagation();
+        const ids = movePinnedIdByOffset(
+          visibleIds,
+          thread.id,
+          event.key === "ArrowUp" ? -1 : 1,
+        );
+        const globalIds = mergeVisibleOrder(target.ids, ids);
+        if (shelf === "pinned") {
+          void pinnedReorder.reorder(globalIds, thread.id);
+        } else {
+          void inboxReorder.reorder(globalIds);
+        }
+      },
+    };
+  };
 
   const isSearching = searchQuery.trim().length > 0;
   const searchResults = useMemo(
@@ -289,6 +419,7 @@ export function ThreadInbox({
                     onAcknowledgeWake={() =>
                       void lifecycle.acknowledgeWake(thread.id)
                     }
+                    reorder={threadReorderControls(thread, "pinned")}
                     now={now}
                   />
                 ))}
@@ -319,6 +450,7 @@ export function ThreadInbox({
                     onAcknowledgeWake={() =>
                       void lifecycle.acknowledgeWake(thread.id)
                     }
+                    reorder={threadReorderControls(thread, "inbox")}
                     now={now}
                   />
                 ))}

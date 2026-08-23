@@ -22,6 +22,12 @@ async function loadPlugin() {
       threads: {
         unpin: async ({ threadId }) =>
           makeThreadResponse({ id: threadId }),
+        reorderPinned: async ({ threadId }) => [
+          makeThreadResponse({
+            id: threadId,
+            pinnedAt: 1,
+          }),
+        ],
       },
     },
   });
@@ -109,6 +115,66 @@ describe("lifecycle RPC", () => {
     ).resolves.toEqual({ rows: [] });
   });
 
+  it("persists pinned placement through the bb SDK", async () => {
+    const harness = await loadPlugin();
+
+    await expect(
+      harness.behavior.callRpc("reorderPinned", {
+        threadId: "thr_2",
+        previousThreadId: "thr_1",
+        nextThreadId: "thr_3",
+      }),
+    ).resolves.toEqual({ pinnedThreadIds: ["thr_2"] });
+    expect(harness.inspection.sdk.callsTo("threads.reorderPinned")).toEqual([
+      [
+        {
+          threadId: "thr_2",
+          previousThreadId: "thr_1",
+          nextThreadId: "thr_3",
+        },
+      ],
+    ]);
+  });
+
+  it("persists inbox order in the plugin database and publishes it", async () => {
+    const harness = await loadPlugin();
+
+    await expect(
+      harness.behavior.callRpc("reorderInbox", {
+        inboxThreadIds: ["thr_2", "thr_1"],
+      }),
+    ).resolves.toEqual({ inboxThreadIds: ["thr_2", "thr_1"] });
+    await expect(
+      harness.behavior.callRpc("listInboxOrder", {}),
+    ).resolves.toEqual({ inboxThreadIds: ["thr_2", "thr_1"] });
+    expect(harness.inspection.realtimeSignals).toContainEqual({
+      channel: "inbox-order",
+      payload: {},
+    });
+
+    const reloaded = await harness.lifecycle.reload(plugin);
+    disposers.push(() => reloaded.harness.lifecycle.dispose());
+    await expect(
+      reloaded.harness.behavior.callRpc("listInboxOrder", {}),
+    ).resolves.toEqual({ inboxThreadIds: ["thr_2", "thr_1"] });
+  });
+
+  it("rejects duplicate inbox ids without replacing the saved order", async () => {
+    const harness = await loadPlugin();
+    await harness.behavior.callRpc("reorderInbox", {
+      inboxThreadIds: ["thr_1", "thr_2"],
+    });
+
+    await expect(
+      harness.behavior.callRpc("reorderInbox", {
+        inboxThreadIds: ["thr_1", "thr_1"],
+      }),
+    ).rejects.toThrow();
+    await expect(
+      harness.behavior.callRpc("listInboxOrder", {}),
+    ).resolves.toEqual({ inboxThreadIds: ["thr_1", "thr_2"] });
+  });
+
   it("removes lifecycle state when bb deletes the thread", async () => {
     const harness = await loadPlugin();
     await harness.behavior.callRpc("settle", { threadId: "thr_1" });
@@ -120,6 +186,21 @@ describe("lifecycle RPC", () => {
     await expect(
       harness.behavior.callRpc("listLifecycle", {}),
     ).resolves.toEqual({ rows: [] });
+  });
+
+  it("removes a deleted thread from the saved inbox order", async () => {
+    const harness = await loadPlugin();
+    await harness.behavior.callRpc("reorderInbox", {
+      inboxThreadIds: ["thr_1", "thr_2"],
+    });
+
+    await harness.behavior.emitThreadEvent("thread.deleted", {
+      thread: makeThreadResponse({ id: "thr_1" }),
+    });
+
+    await expect(
+      harness.behavior.callRpc("listInboxOrder", {}),
+    ).resolves.toEqual({ inboxThreadIds: ["thr_2"] });
   });
 
   it("does not settle when native unpinning fails", async () => {

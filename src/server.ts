@@ -14,6 +14,10 @@ const migrations = [
      snoozed_until  INTEGER,
      snoozed_at     INTEGER
    )`,
+  `CREATE TABLE IF NOT EXISTS inbox_order (
+     thread_id   TEXT PRIMARY KEY,
+     sort_index  INTEGER NOT NULL
+   )`,
 ];
 
 export interface StoredLifecycleRow {
@@ -31,6 +35,17 @@ interface LifecycleDbRow {
 }
 
 const threadIdSchema = z.object({ threadId: z.string().trim().min(1) });
+const orderedThreadIdsSchema = z
+  .array(z.string().trim().min(1))
+  .max(10_000)
+  .superRefine((threadIds, context) => {
+    if (new Set(threadIds).size !== threadIds.length) {
+      context.addIssue({
+        code: "custom",
+        message: "Thread ids must be unique",
+      });
+    }
+  });
 
 export const t3chatSidebarRpcContract = defineRpcContract({
   listLifecycle: {
@@ -61,10 +76,29 @@ export const t3chatSidebarRpcContract = defineRpcContract({
     input: threadIdSchema,
     output: z.object({ ok: z.boolean() }),
   },
+  reorderPinned: {
+    input: z
+      .object({
+        threadId: z.string().trim().min(1),
+        previousThreadId: z.string().trim().min(1).nullable(),
+        nextThreadId: z.string().trim().min(1).nullable(),
+      })
+      .strict(),
+    output: z.object({ pinnedThreadIds: z.array(z.string()) }).strict(),
+  },
+  listInboxOrder: {
+    input: z.object({}).strict(),
+    output: z.object({ inboxThreadIds: z.array(z.string()) }).strict(),
+  },
+  reorderInbox: {
+    input: z.object({ inboxThreadIds: orderedThreadIdsSchema }).strict(),
+    output: z.object({ inboxThreadIds: z.array(z.string()) }).strict(),
+  },
 });
 
 /** Channel the frontend re-reads on. */
 export const LIFECYCLE_CHANNEL = "lifecycle";
+export const INBOX_ORDER_CHANNEL = "inbox-order";
 
 export default function plugin(bb: BbPluginApi) {
   bb.settings.define({
@@ -113,6 +147,25 @@ export default function plugin(bb: BbPluginApi) {
     bb.realtime.publish(LIFECYCLE_CHANNEL, { threadId });
   };
 
+  const readInboxOrder = (): string[] =>
+    (
+      db
+        .prepare(
+          `SELECT thread_id
+             FROM inbox_order
+            ORDER BY sort_index ASC, thread_id ASC`,
+        )
+        .all() as Array<{ thread_id: string }>
+    ).map((row) => row.thread_id);
+
+  const replaceInboxOrder = db.transaction((inboxThreadIds: string[]) => {
+    db.prepare(`DELETE FROM inbox_order`).run();
+    const insert = db.prepare(
+      `INSERT INTO inbox_order (thread_id, sort_index) VALUES (?, ?)`,
+    );
+    inboxThreadIds.forEach((threadId, index) => insert.run(threadId, index));
+  });
+
   bb.rpc.register(t3chatSidebarRpcContract, {
     async listLifecycle() {
       return { rows: readAll() };
@@ -156,11 +209,37 @@ export default function plugin(bb: BbPluginApi) {
       clear(threadId);
       return { ok: true };
     },
+    async reorderPinned({ threadId, previousThreadId, nextThreadId }) {
+      const reordered = await bb.sdk.threads.reorderPinned({
+        threadId,
+        previousThreadId,
+        nextThreadId,
+      });
+      return {
+        pinnedThreadIds: reordered
+          .filter((thread) => thread.pinnedAt !== null)
+          .map((thread) => thread.id),
+      };
+    },
+    async listInboxOrder() {
+      return { inboxThreadIds: readInboxOrder() };
+    },
+    async reorderInbox({ inboxThreadIds }) {
+      replaceInboxOrder(inboxThreadIds);
+      bb.realtime.publish(INBOX_ORDER_CHANNEL, {});
+      return { inboxThreadIds: readInboxOrder() };
+    },
   });
 
   // A deleted thread must not leave a row behind that would park a future
   // thread reusing the id, and stale rows accumulate otherwise.
   bb.events.on("thread.deleted", ({ thread }) => {
     clear(thread.id);
+    const removed = db
+      .prepare(`DELETE FROM inbox_order WHERE thread_id = ?`)
+      .run(thread.id);
+    if (removed.changes > 0) {
+      bb.realtime.publish(INBOX_ORDER_CHANNEL, {});
+    }
   });
 }

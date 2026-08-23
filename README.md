@@ -13,7 +13,9 @@ jump away while you are about to click it.
 - Three-line cards with project, status or age, title, branch or machine,
   activity counts, pull request, and provider glyph
 - Project filtering through the list's own scope picker
-- Pinned threads above the inbox
+- Pinned threads above the inbox, with persistent drag or keyboard reordering
+- Durable custom ordering for ordinary inbox threads
+- Hover controls for unpinning a pinned thread without opening its menu
 - Snoozed and Settled shelves backed by the plugin's SQLite database
 - Right-click Snooze presets that can be changed in the plugin settings
 - Automatic wake-up when parked work becomes active or needs input
@@ -34,6 +36,18 @@ bb's sidebar returns immediately if you select it again or disable this plugin.
 
 For development, use `bb plugin dev` after the path install. It rebuilds and
 reloads the plugin when a source file changes.
+
+## Reordering threads
+
+Hover a pinned or inbox card and drag its grip handle to move it within that
+shelf. Dragging anywhere else on the card keeps BB's normal drag-to-split
+behavior. Keyboard users can focus the same handle and press Arrow Up or Arrow
+Down. Pinned moves use BB's pinned-thread API; inbox moves are saved in the
+plugin's SQLite database. A project-scoped move preserves the hidden projects'
+positions. The plugin ignores another move while a save is running and restores
+the previous order if the save fails.
+
+Pinned cards also reveal an unpin button on hover or keyboard focus.
 
 ## How parking works
 

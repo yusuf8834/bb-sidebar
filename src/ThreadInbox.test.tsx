@@ -170,6 +170,269 @@ describe("ThreadInbox", () => {
     expect(within(pinned).getByText("Stuck")).toBeDefined();
   });
 
+  it("keeps pinned threads in the host's persisted order", () => {
+    render([
+      thread({ id: "first", title: "First pin", isPinned: true, createdAt: 1 }),
+      thread({ id: "second", title: "Second pin", isPinned: true, createdAt: 999 }),
+    ]);
+    const pinned = screen.getByRole("region", { name: "Pinned" });
+    expect(
+      within(pinned).getAllByRole("listitem").map((row) => row.textContent),
+    ).toEqual([
+      expect.stringContaining("First pin"),
+      expect.stringContaining("Second pin"),
+    ]);
+  });
+
+  it("reorders pinned threads with the keyboard and persists the neighbors", async () => {
+    let reorderInput: unknown = null;
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "a", title: "Pin A", isPinned: true }),
+          thread({ id: "b", title: "Pin B", isPinned: true }),
+          thread({ id: "c", title: "Pin C", isPinned: true }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: [] }),
+        reorderPinned: (input) => {
+          reorderInput = input;
+          return { pinnedThreadIds: ["b", "a", "c"] };
+        },
+      },
+    });
+
+    fireEvent.keyDown(
+      await screen.findByRole("button", { name: /Reorder Pin B/ }),
+      { key: "ArrowUp" },
+    );
+    await waitFor(() =>
+      expect(reorderInput).toEqual({
+        threadId: "b",
+        previousThreadId: null,
+        nextThreadId: "a",
+      }),
+    );
+    const pinned = screen.getByRole("region", { name: "Pinned" });
+    expect(
+      within(pinned).getAllByRole("listitem").map((row) => row.textContent),
+    ).toEqual([
+      expect.stringContaining("Pin B"),
+      expect.stringContaining("Pin A"),
+      expect.stringContaining("Pin C"),
+    ]);
+  });
+
+  it("reorders from the grip without taking over the card's split-drag target", async () => {
+    let reorderInput: unknown = null;
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "a", title: "Pin A", isPinned: true }),
+          thread({ id: "b", title: "Pin B", isPinned: true }),
+          thread({ id: "c", title: "Pin C", isPinned: true }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: [] }),
+        reorderPinned: (input) => {
+          reorderInput = input;
+          return { pinnedThreadIds: ["b", "a", "c"] };
+        },
+      },
+    });
+
+    const handle = await screen.findByRole("button", { name: /Reorder Pin A/ });
+    const target = screen.getByText("Pin B").closest("li")!;
+    const dataTransfer = {
+      dropEffect: "none",
+      effectAllowed: "none",
+      setData: vi.fn(),
+    };
+    vi.spyOn(target, "getBoundingClientRect").mockReturnValue({
+      top: 0,
+      bottom: 40,
+      left: 0,
+      right: 200,
+      width: 200,
+      height: 40,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+
+    expect(handle.closest("a")).toBeNull();
+    expect(handle.closest("li")!.querySelector("a[data-sidebar-thread-id='a']")).not.toBeNull();
+    fireEvent.dragStart(handle, { dataTransfer });
+    fireEvent.dragOver(target, { dataTransfer, clientY: 30 });
+    fireEvent.drop(target, { dataTransfer, clientY: 30 });
+    await waitFor(() =>
+      expect(reorderInput).toEqual({
+        threadId: "a",
+        previousThreadId: "b",
+        nextThreadId: "c",
+      }),
+    );
+  });
+
+  it("rolls back a failed reorder and ignores another move while saving", async () => {
+    const pending = deferred<{ pinnedThreadIds: string[] }>();
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "a", title: "Pin A", isPinned: true }),
+          thread({ id: "b", title: "Pin B", isPinned: true }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: [] }),
+        reorderPinned: () => pending.promise,
+      },
+    });
+
+    const handleA = await screen.findByRole("button", { name: /Reorder Pin A/ });
+    fireEvent.keyDown(handleA, { key: "ArrowDown" });
+    await waitFor(() =>
+      expect(rendered.rpcCalls.filter((call) => call.method === "reorderPinned"))
+        .toHaveLength(1),
+    );
+    const pinned = screen.getByRole("region", { name: "Pinned" });
+    expect(within(pinned).getAllByRole("listitem")[0]!.textContent).toContain("Pin B");
+
+    fireEvent.keyDown(handleA, { key: "ArrowDown" });
+    expect(rendered.rpcCalls.filter((call) => call.method === "reorderPinned"))
+      .toHaveLength(1);
+
+    pending.reject(new Error("order conflict"));
+    await waitFor(() =>
+      expect(toastMocks.error).toHaveBeenCalledWith(
+        "Could not reorder pinned thread",
+        { description: "order conflict" },
+      ),
+    );
+    expect(within(pinned).getAllByRole("listitem")[0]!.textContent).toContain("Pin A");
+  });
+
+  it("applies the plugin's durable order to inbox threads", async () => {
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "a", title: "Inbox A", createdAt: 2 }),
+          thread({ id: "b", title: "Inbox B", createdAt: 1 }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: [] }),
+        listInboxOrder: () => ({ inboxThreadIds: ["b", "a"] }),
+      },
+    });
+
+    await waitFor(() =>
+      expect(screen.getAllByRole("listitem")[0]!.textContent).toContain(
+        "Inbox B",
+      ),
+    );
+  });
+
+  it("reorders inbox threads with the keyboard and persists the full order", async () => {
+    let reorderInput: unknown = null;
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "a", title: "Inbox A", createdAt: 2 }),
+          thread({ id: "b", title: "Inbox B", createdAt: 1 }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: [] }),
+        listInboxOrder: () => ({ inboxThreadIds: ["a", "b"] }),
+        reorderInbox: (input) => {
+          reorderInput = input;
+          return { inboxThreadIds: ["b", "a"] };
+        },
+      },
+    });
+
+    fireEvent.keyDown(
+      await screen.findByRole("button", { name: /Reorder Inbox B/ }),
+      { key: "ArrowUp" },
+    );
+    await waitFor(() =>
+      expect(reorderInput).toEqual({ inboxThreadIds: ["b", "a"] }),
+    );
+    expect(screen.getAllByRole("listitem")[0]!.textContent).toContain(
+      "Inbox B",
+    );
+  });
+
+  it("rolls inbox order back when persistence fails", async () => {
+    const pending = deferred<{ inboxThreadIds: string[] }>();
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "a", title: "Inbox A", createdAt: 2 }),
+          thread({ id: "b", title: "Inbox B", createdAt: 1 }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: [] }),
+        listInboxOrder: () => ({ inboxThreadIds: ["a", "b"] }),
+        reorderInbox: () => pending.promise,
+      },
+    });
+
+    fireEvent.keyDown(
+      await screen.findByRole("button", { name: /Reorder Inbox A/ }),
+      { key: "ArrowDown" },
+    );
+    await waitFor(() =>
+      expect(screen.getAllByRole("listitem")[0]!.textContent).toContain(
+        "Inbox B",
+      ),
+    );
+
+    pending.reject(new Error("database busy"));
+    await waitFor(() =>
+      expect(toastMocks.error).toHaveBeenCalledWith(
+        "Could not reorder inbox thread",
+        { description: "database busy" },
+      ),
+    );
+    expect(screen.getAllByRole("listitem")[0]!.textContent).toContain(
+      "Inbox A",
+    );
+  });
+
+  it("unpins a pinned row from its hover action", async () => {
+    const rendered = render([
+      thread({ id: "pin", title: "Pinned work", isPinned: true }),
+    ]);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Unpin Pinned work" }),
+    );
+    await waitFor(() =>
+      expect(rendered.sidebarActionCalls).toContainEqual({
+        method: "setPinned",
+        threadId: "pin",
+        pinned: false,
+      }),
+    );
+  });
+
   // The host owns the search field; the plugin only filters by what it is
   // handed, so there is deliberately no second search box to type into.
   it("filters by the host's search query", () => {
