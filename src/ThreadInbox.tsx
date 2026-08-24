@@ -385,36 +385,18 @@ export function ThreadInbox({
     () =>
       visibleShelfThreads(
         pinned,
-        expandedShelves.active && expandedShelves.pinned,
+        expandedShelves.pinned,
         activeThreadId,
       ),
-    [
-      activeThreadId,
-      expandedShelves.active,
-      expandedShelves.pinned,
-      pinned,
-    ],
+    [activeThreadId, expandedShelves.pinned, pinned],
   );
   const visibleInbox = useMemo(
     () => visibleShelfThreads(inbox, expandedShelves.active, activeThreadId),
     [activeThreadId, expandedShelves.active, inbox],
   );
-  const sortedVisiblePinned = useMemo(
-    () => sortActiveThreads(visiblePinned, activeSortMode),
-    [activeSortMode, visiblePinned],
-  );
   const sortedVisibleInbox = useMemo(
     () => sortActiveThreads(visibleInbox, activeSortMode),
     [activeSortMode, visibleInbox],
-  );
-  const pinnedProjectGroups = useMemo(
-    () =>
-      groupActiveThreadsByProject(
-        visiblePinned,
-        [],
-        projectNameById,
-      ),
-    [projectNameById, visiblePinned],
   );
   const inboxProjectGroups = useMemo(
     () =>
@@ -849,7 +831,8 @@ export function ThreadInbox({
       onAcknowledgeWake={() => void lifecycle.acknowledgeWake(thread.id)}
       onSelectionClick={(event) => handleSelectionClick(thread.id, event)}
       reorder={
-        activeSortMode === "activity" || activeSortMode === "created"
+        shelf === "inbox" &&
+        (activeSortMode === "activity" || activeSortMode === "created")
           ? undefined
           : threadReorderControls(thread, shelf)
       }
@@ -974,10 +957,29 @@ export function ThreadInbox({
           />
         ) : (
           <div ref={attachShelvesAutoAnimateRef} className="flex flex-col">
-            {pinned.length + inbox.length > 0 ? (
+            {pinned.length > 0 ? (
+              <CollapsibleShelf
+                label="Pinned"
+                count={pinned.length}
+                expanded={expandedShelves.pinned}
+                onToggle={() =>
+                  setExpandedShelves((current) => ({
+                    ...current,
+                    pinned: !current.pinned,
+                  }))
+                }
+              >
+                <Shelf label={null}>
+                  {visiblePinned.map((thread) =>
+                    renderActiveThread(thread, "pinned"),
+                  )}
+                </Shelf>
+              </CollapsibleShelf>
+            ) : null}
+            {inbox.length > 0 ? (
               <CollapsibleShelf
                 label="Active"
-                count={pinned.length + inbox.length}
+                count={inbox.length}
                 expanded={expandedShelves.active}
                 onToggle={() =>
                   setExpandedShelves((current) => ({
@@ -1013,34 +1015,6 @@ export function ThreadInbox({
                   </Select>
                 }
               >
-                {(expandedShelves.active && pinned.length > 0) ||
-                visiblePinned.length > 0 ? (
-                  <CollapsibleShelf
-                    label="Pinned"
-                    count={pinned.length}
-                    expanded={expandedShelves.pinned}
-                    onToggle={() =>
-                      setExpandedShelves((current) => ({
-                        ...current,
-                        pinned: !current.pinned,
-                      }))
-                    }
-                  >
-                    {activeSortMode === "project" ? (
-                      <ProjectGroups
-                        groups={pinnedProjectGroups}
-                        projectNameById={projectNameById}
-                        renderThread={renderActiveThread}
-                      />
-                    ) : (
-                      <Shelf label={null}>
-                        {sortedVisiblePinned.map((thread) =>
-                          renderActiveThread(thread, "pinned"),
-                        )}
-                      </Shelf>
-                    )}
-                  </CollapsibleShelf>
-                ) : null}
                 {activeSortMode === "project" ? (
                   <ProjectGroups
                     groups={inboxProjectGroups}
@@ -1055,9 +1029,9 @@ export function ThreadInbox({
                   </Shelf>
                 ) : null}
               </CollapsibleShelf>
-            ) : (
+            ) : pinned.length === 0 ? (
               <ActiveEmptyState />
-            )}
+            ) : null}
             <ParkedShelf
               label="Snoozed"
               threads={snoozed}
@@ -1365,8 +1339,8 @@ function Shelf({
 }) {
   const attachListAutoAnimateRef = useListAutoAnimate<HTMLUListElement>();
   return (
-    // A named section is exposed as a landmark region; the ordinary active
-    // rows stay in an unnamed list beneath Pinned.
+    // A named section is exposed as a landmark region; shelf rows stay in an
+    // unnamed list beneath their collapsible heading.
     <section {...(label ? { "aria-label": label } : {})}>
       {label ? (
         <h2 className={cn("flex items-center gap-2 px-2.5 pb-1 pt-3")}>

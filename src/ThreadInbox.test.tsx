@@ -637,23 +637,20 @@ describe("ThreadInbox", () => {
     expect(bulkInput!.snoozedUntil).toBeGreaterThan(Date.now());
   });
 
-  it("keeps a collapsible pinned block above unpinned active rows", () => {
+  it("keeps a separate collapsible Pinned shelf above Active", () => {
     render([
       thread({ id: "a", title: "Plain" }),
       thread({ id: "b", title: "Stuck", isPinned: true }),
     ]);
 
     const active = screen.getByRole("region", { name: "Active" });
-    const pinned = within(active).getByRole("region", { name: "Pinned" });
+    const pinned = screen.getByRole("region", { name: "Pinned" });
     expect(
-      within(active)
-        .getAllByRole("listitem")
-        .map((row) => row.textContent),
-    ).toEqual([
-      expect.stringContaining("Stuck"),
-      expect.stringContaining("Plain"),
-    ]);
+      pinned.compareDocumentPosition(active) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(within(active).queryByText("Inbox")).toBeNull();
+    expect(within(active).getByText("Plain")).toBeDefined();
+    expect(within(active).queryByText("Stuck")).toBeNull();
     expect(within(pinned).getByText("Stuck")).toBeDefined();
     fireEvent.click(within(pinned).getByRole("button", { expanded: true }));
     expect(within(pinned).getByText("Pinned (1)")).toBeDefined();
