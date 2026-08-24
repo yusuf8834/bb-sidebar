@@ -156,6 +156,95 @@ describe("ThreadInbox", () => {
     expect(within(activeShelf).queryByText("Other active")).toBeNull();
   });
 
+  it("groups active threads by project from the subtle header toggle", async () => {
+    render(
+      [
+        thread({
+          id: "alpha-new",
+          projectId: "proj_alpha",
+          title: "Alpha new",
+          createdAt: 4,
+        }),
+        thread({
+          id: "beta-new",
+          projectId: "proj_beta",
+          title: "Beta new",
+          createdAt: 3,
+        }),
+        thread({
+          id: "alpha-old",
+          projectId: "proj_alpha",
+          title: "Alpha old",
+          createdAt: 2,
+        }),
+        thread({
+          id: "beta-old",
+          projectId: "proj_beta",
+          title: "Beta old",
+          createdAt: 1,
+        }),
+      ],
+      [
+        { id: "proj_alpha", name: "Alpha", isPersonal: false },
+        { id: "proj_beta", name: "Beta", isPersonal: false },
+      ],
+    );
+
+    const activeShelf = screen.getByRole("region", { name: "Active" });
+    const groupToggle = within(activeShelf).getByRole("button", {
+      name: "Group active threads by project",
+    });
+    expect(groupToggle.getAttribute("aria-pressed")).toBe("false");
+    expect(
+      within(activeShelf)
+        .getAllByRole("listitem")
+        .map((row) => row.textContent),
+    ).toEqual([
+      expect.stringContaining("Alpha new"),
+      expect.stringContaining("Beta new"),
+      expect.stringContaining("Alpha old"),
+      expect.stringContaining("Beta old"),
+    ]);
+
+    fireEvent.click(groupToggle);
+
+    expect(groupToggle.getAttribute("aria-pressed")).toBe("true");
+    expect(
+      within(activeShelf)
+        .getAllByRole("listitem")
+        .map((row) => row.textContent),
+    ).toEqual([
+      expect.stringContaining("Alpha new"),
+      expect.stringContaining("Alpha old"),
+      expect.stringContaining("Beta new"),
+      expect.stringContaining("Beta old"),
+    ]);
+    expect(
+      within(activeShelf).getByRole("list", {
+        name: "Alpha active threads",
+      }),
+    ).toBeDefined();
+    await waitFor(() =>
+      expect(
+        window.localStorage.getItem("bb-sidebar:active-grouping:v1"),
+      ).toBe("true"),
+    );
+  });
+
+  it("restores the active project grouping preference", () => {
+    window.localStorage.setItem("bb-sidebar:active-grouping:v1", "true");
+    render([thread({ id: "saved", title: "Saved grouping" })]);
+
+    expect(
+      screen
+        .getByRole("button", { name: "Group active threads by project" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      screen.getByRole("list", { name: "bb active threads" }),
+    ).toBeDefined();
+  });
+
   it("lists threads newest first", () => {
     render([
       thread({ id: "a", title: "Older", createdAt: 1 }),

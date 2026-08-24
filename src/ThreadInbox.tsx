@@ -63,6 +63,7 @@ import {
 } from "./selection";
 
 const ALL_PROJECTS = "__all__";
+const ACTIVE_GROUPING_STORAGE_KEY = "bb-sidebar:active-grouping:v1";
 const SHELF_EXPANSION_STORAGE_KEY = "bb-sidebar:shelf-expansion:v1";
 const SETTLED_INITIAL_LIMIT = 10;
 const SETTLED_PAGE_SIZE = 25;
@@ -124,6 +125,45 @@ function readShelfExpansion(): ShelfExpansionState {
   }
 }
 
+function readActiveGrouping(): boolean {
+  try {
+    return window.localStorage.getItem(ACTIVE_GROUPING_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+type ActiveShelfKind = "pinned" | "inbox";
+
+interface ActiveThreadGroup {
+  projectId: string;
+  entries: Array<{
+    thread: PluginSidebarThread;
+    shelf: ActiveShelfKind;
+  }>;
+}
+
+function groupActiveThreadsByProject(
+  pinned: readonly PluginSidebarThread[],
+  inbox: readonly PluginSidebarThread[],
+): ActiveThreadGroup[] {
+  const groups = new Map<string, ActiveThreadGroup>();
+  for (const [threads, shelf] of [
+    [pinned, "pinned"],
+    [inbox, "inbox"],
+  ] as const) {
+    for (const thread of threads) {
+      let group = groups.get(thread.projectId);
+      if (!group) {
+        group = { projectId: thread.projectId, entries: [] };
+        groups.set(thread.projectId, group);
+      }
+      group.entries.push({ thread, shelf });
+    }
+  }
+  return [...groups.values()];
+}
+
 function visibleShelfThreads(
   threads: readonly PluginSidebarThread[],
   expanded: boolean,
@@ -180,6 +220,8 @@ export function ThreadInbox({
   const now = nowMinute * 60_000;
   const [expandedShelves, setExpandedShelves] =
     useState<ShelfExpansionState>(readShelfExpansion);
+  const [groupActiveByProject, setGroupActiveByProject] =
+    useState(readActiveGrouping);
   const [settledLimit, setSettledLimit] = useState(SETTLED_INITIAL_LIMIT);
   const [selection, setSelection] = useState<ThreadSelectionState>(
     EMPTY_THREAD_SELECTION,
@@ -196,6 +238,16 @@ export function ThreadInbox({
       // work for this mount; only the preference becomes non-durable.
     }
   }, [expandedShelves]);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        ACTIVE_GROUPING_STORAGE_KEY,
+        String(groupActiveByProject),
+      );
+    } catch {
+      // Keep the view usable when browser storage is unavailable.
+    }
+  }, [groupActiveByProject]);
 
   const projectNameById = useMemo(
     () => new Map(projects.map((project) => [project.id, project.name])),
@@ -286,15 +338,22 @@ export function ThreadInbox({
     () => visibleShelfThreads(inbox, expandedShelves.active, activeThreadId),
     [activeThreadId, expandedShelves.active, inbox],
   );
+  const activeThreadGroups = useMemo(
+    () => groupActiveThreadsByProject(visiblePinned, visibleInbox),
+    [visibleInbox, visiblePinned],
+  );
 
   const threadReorderControls = (
     thread: PluginSidebarThread,
     shelf: "pinned" | "inbox",
   ): ThreadReorderControls => {
     const target = shelf === "pinned" ? pinnedReorder : inboxReorder;
-    const visibleIds = (shelf === "pinned" ? visiblePinned : visibleInbox).map(
-      (candidate) => candidate.id,
-    );
+    const visibleIds = (shelf === "pinned" ? visiblePinned : visibleInbox)
+      .filter(
+        (candidate) =>
+          !groupActiveByProject || candidate.projectId === thread.projectId,
+      )
+      .map((candidate) => candidate.id);
     return {
       disabled: target.isReordering,
       isDragging:
@@ -682,6 +741,33 @@ export function ThreadInbox({
     onNavigate();
   };
 
+  const renderActiveThread = (
+    thread: PluginSidebarThread,
+    shelf: ActiveShelfKind,
+  ) => (
+    <ThreadCard
+      key={thread.id}
+      thread={thread}
+      projectName={projectNameById.get(thread.projectId) ?? null}
+      isActive={thread.id === activeThreadId}
+      isSelected={selection.selectedIds.has(thread.id)}
+      isWoke={wokeThreadIds.has(thread.id)}
+      canPark={lifecycle.canPark(thread)}
+      snoozePresets={snoozePresets}
+      onNavigate={onNavigate}
+      onSettle={() =>
+        void parkActiveThread(thread, () => lifecycle.settle(thread.id))
+      }
+      onSnooze={(until) =>
+        void parkActiveThread(thread, () => lifecycle.snooze(thread.id, until))
+      }
+      onAcknowledgeWake={() => void lifecycle.acknowledgeWake(thread.id)}
+      onSelectionClick={(event) => handleSelectionClick(thread.id, event)}
+      reorder={threadReorderControls(thread, shelf)}
+      now={now}
+    />
+  );
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* The one control the host has no equivalent for. Everything else in
@@ -790,81 +876,61 @@ export function ThreadInbox({
                     active: !current.active,
                   }))
                 }
+                action={
+                  <button
+                    type="button"
+                    aria-label="Group active threads by project"
+                    aria-pressed={groupActiveByProject}
+                    title="Group active threads by project"
+                    onClick={() =>
+                      setGroupActiveByProject((grouped) => !grouped)
+                    }
+                    className={cn(
+                      "absolute bottom-1 right-[1.875rem] z-10 flex size-4 items-center justify-center rounded text-muted-foreground/35 transition-colors duration-150 hover:bg-sidebar-accent hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring motion-reduce:transition-none",
+                      groupActiveByProject &&
+                        "bg-sidebar-accent/70 text-muted-foreground/80",
+                    )}
+                  >
+                    <Icon name="GroupItems" className="size-3" />
+                  </button>
+                }
               >
-                {visiblePinned.length > 0 ? (
-                  <Shelf label="Pinned">
-                    {visiblePinned.map((thread) => (
-                      <ThreadCard
-                        key={thread.id}
-                        thread={thread}
+                {groupActiveByProject ? (
+                  <div
+                    aria-label="Active threads grouped by project"
+                    className="flex flex-col gap-1.5"
+                  >
+                    {activeThreadGroups.map((group) => (
+                      <ActiveProjectGroup
+                        key={group.projectId}
                         projectName={
-                          projectNameById.get(thread.projectId) ?? null
+                          projectNameById.get(group.projectId) ?? "Project"
                         }
-                        isActive={thread.id === activeThreadId}
-                        isSelected={selection.selectedIds.has(thread.id)}
-                        isWoke={wokeThreadIds.has(thread.id)}
-                        canPark={lifecycle.canPark(thread)}
-                        snoozePresets={snoozePresets}
-                        onNavigate={onNavigate}
-                        onSettle={() =>
-                          void parkActiveThread(thread, () =>
-                            lifecycle.settle(thread.id),
-                          )
-                        }
-                        onSnooze={(until) =>
-                          void parkActiveThread(thread, () =>
-                            lifecycle.snooze(thread.id, until),
-                          )
-                        }
-                        onAcknowledgeWake={() =>
-                          void lifecycle.acknowledgeWake(thread.id)
-                        }
-                        onSelectionClick={(event) =>
-                          handleSelectionClick(thread.id, event)
-                        }
-                        reorder={threadReorderControls(thread, "pinned")}
-                        now={now}
-                      />
+                      >
+                        {group.entries.map(({ thread, shelf }) =>
+                          renderActiveThread(thread, shelf),
+                        )}
+                      </ActiveProjectGroup>
                     ))}
-                  </Shelf>
-                ) : null}
-                {visibleInbox.length > 0 ? (
-                  <Shelf label={pinned.length > 0 ? "Inbox" : null}>
-                    {visibleInbox.map((thread) => (
-                      <ThreadCard
-                        key={thread.id}
-                        thread={thread}
-                        projectName={
-                          projectNameById.get(thread.projectId) ?? null
-                        }
-                        isActive={thread.id === activeThreadId}
-                        isSelected={selection.selectedIds.has(thread.id)}
-                        isWoke={wokeThreadIds.has(thread.id)}
-                        canPark={lifecycle.canPark(thread)}
-                        snoozePresets={snoozePresets}
-                        onNavigate={onNavigate}
-                        onSettle={() =>
-                          void parkActiveThread(thread, () =>
-                            lifecycle.settle(thread.id),
-                          )
-                        }
-                        onSnooze={(until) =>
-                          void parkActiveThread(thread, () =>
-                            lifecycle.snooze(thread.id, until),
-                          )
-                        }
-                        onAcknowledgeWake={() =>
-                          void lifecycle.acknowledgeWake(thread.id)
-                        }
-                        onSelectionClick={(event) =>
-                          handleSelectionClick(thread.id, event)
-                        }
-                        reorder={threadReorderControls(thread, "inbox")}
-                        now={now}
-                      />
-                    ))}
-                  </Shelf>
-                ) : null}
+                  </div>
+                ) : (
+                  <>
+                    {visiblePinned.length > 0 ? (
+                      <Shelf label="Pinned">
+                        {visiblePinned.map((thread) =>
+                          renderActiveThread(thread, "pinned"),
+                        )}
+                      </Shelf>
+                    ) : null}
+                    {visibleInbox.length > 0 ? (
+                      <Shelf label={pinned.length > 0 ? "Inbox" : null}>
+                        {visibleInbox.map((thread) =>
+                          renderActiveThread(thread, "inbox"),
+                        )}
+                      </Shelf>
+                    ) : null}
+                  </>
+                )}
               </CollapsibleShelf>
             ) : null}
             <ParkedShelf
@@ -1013,40 +1079,67 @@ function CollapsibleShelf({
   count,
   expanded,
   onToggle,
+  action,
   children,
 }: {
   label: string;
   count: number;
   expanded: boolean;
   onToggle: () => void;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <section aria-label={label}>
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={expanded}
-        // Padded like a card, so the chevron ends on the same right edge as
-        // every row's status and provider glyph.
-        className="mt-3 flex w-full items-center gap-2 px-2.5 pb-1 text-left"
-      >
-        <span className="text-2xs font-medium text-muted-foreground/70">
-          {expanded ? label : `${label} (${count})`}
-        </span>
-        <span className="h-px flex-1 bg-sidebar-border" />
-        <span className={TRAILING_GLYPH_BOX_CLASS}>
-          <Icon
-            name="ChevronDown"
-            className={cn(
-              "size-3 text-muted-foreground/70 transition-transform duration-150 ease-out motion-reduce:transition-none",
-              expanded && "rotate-180",
-            )}
-          />
-        </span>
-      </button>
+      <div className="relative">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          // Padded like a card, so the chevron ends on the same right edge as
+          // every row's status and provider glyph.
+          className="mt-3 flex w-full items-center gap-2 px-2.5 pb-1 text-left"
+        >
+          <span className="text-2xs font-medium text-muted-foreground/70">
+            {expanded ? label : `${label} (${count})`}
+          </span>
+          <span className="h-px flex-1 bg-sidebar-border" />
+          {action ? (
+            <span aria-hidden="true" className="size-4 shrink-0" />
+          ) : null}
+          <span className={TRAILING_GLYPH_BOX_CLASS}>
+            <Icon
+              name="ChevronDown"
+              className={cn(
+                "size-3 text-muted-foreground/70 transition-transform duration-150 ease-out motion-reduce:transition-none",
+                expanded && "rotate-180",
+              )}
+            />
+          </span>
+        </button>
+        {action}
+      </div>
       {children}
     </section>
+  );
+}
+
+function ActiveProjectGroup({
+  projectName,
+  children,
+}: {
+  projectName: string;
+  children: React.ReactNode;
+}) {
+  const attachListAutoAnimateRef = useListAutoAnimate<HTMLUListElement>();
+  return (
+    <ul
+      ref={attachListAutoAnimateRef}
+      aria-label={`${projectName} active threads`}
+      className="flex flex-col gap-px"
+    >
+      {children}
+    </ul>
   );
 }
 
