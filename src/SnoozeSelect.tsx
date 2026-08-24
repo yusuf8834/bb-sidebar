@@ -33,7 +33,10 @@ export function SnoozeSelect({
       }}
     >
       <Tooltip label={label}>
-        <SelectTrigger aria-label={label} className={triggerClassName}>
+        <SelectTrigger
+          aria-label={label}
+          className={`${triggerClassName} [&>svg:last-child]:hidden`}
+        >
           <Icon name="Clock" className="size-3.5" />
         </SelectTrigger>
       </Tooltip>

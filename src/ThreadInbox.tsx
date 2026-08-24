@@ -97,11 +97,13 @@ function suppressNextClick(threadId: string): void {
 }
 
 interface ShelfExpansionState {
+  active: boolean;
   snoozed: boolean;
   settled: boolean;
 }
 
-const COLLAPSED_SHELVES: ShelfExpansionState = {
+const DEFAULT_SHELF_EXPANSION: ShelfExpansionState = {
+  active: true,
   snoozed: false,
   settled: false,
 };
@@ -109,18 +111,20 @@ const COLLAPSED_SHELVES: ShelfExpansionState = {
 function readShelfExpansion(): ShelfExpansionState {
   try {
     const stored = window.localStorage.getItem(SHELF_EXPANSION_STORAGE_KEY);
-    if (!stored) return COLLAPSED_SHELVES;
+    if (!stored) return DEFAULT_SHELF_EXPANSION;
     const parsed = JSON.parse(stored) as Partial<ShelfExpansionState>;
     return {
+      // Keep Active expanded for people with the older stored shape.
+      active: parsed.active !== false,
       snoozed: parsed.snoozed === true,
       settled: parsed.settled === true,
     };
   } catch {
-    return COLLAPSED_SHELVES;
+    return DEFAULT_SHELF_EXPANSION;
   }
 }
 
-function visibleParkedThreads(
+function visibleShelfThreads(
   threads: readonly PluginSidebarThread[],
   expanded: boolean,
   activeThreadId: string | null,
@@ -273,13 +277,22 @@ export function ThreadInbox({
       dragOrder?.shelf === "inbox" ? dragOrder.ids : null,
     );
   }, [dragOrder, inboxBase, inboxReorder.ids]);
+  const visiblePinned = useMemo(
+    () =>
+      visibleShelfThreads(pinned, expandedShelves.active, activeThreadId),
+    [activeThreadId, expandedShelves.active, pinned],
+  );
+  const visibleInbox = useMemo(
+    () => visibleShelfThreads(inbox, expandedShelves.active, activeThreadId),
+    [activeThreadId, expandedShelves.active, inbox],
+  );
 
   const threadReorderControls = (
     thread: PluginSidebarThread,
     shelf: "pinned" | "inbox",
   ): ThreadReorderControls => {
     const target = shelf === "pinned" ? pinnedReorder : inboxReorder;
-    const visibleIds = (shelf === "pinned" ? pinned : inbox).map(
+    const visibleIds = (shelf === "pinned" ? visiblePinned : visibleInbox).map(
       (candidate) => candidate.id,
     );
     return {
@@ -449,7 +462,7 @@ export function ThreadInbox({
   );
   const visibleSnoozed = useMemo(
     () =>
-      visibleParkedThreads(
+      visibleShelfThreads(
         snoozed,
         expandedShelves.snoozed,
         activeThreadId,
@@ -458,7 +471,7 @@ export function ThreadInbox({
   );
   const visibleSettled = useMemo(
     () =>
-      visibleParkedThreads(
+      visibleShelfThreads(
         settled,
         expandedShelves.settled,
         activeThreadId,
@@ -470,12 +483,17 @@ export function ThreadInbox({
     () =>
       isSearching
         ? searchResults
-        : [...pinned, ...inbox, ...visibleSnoozed, ...visibleSettled],
+        : [
+            ...visiblePinned,
+            ...visibleInbox,
+            ...visibleSnoozed,
+            ...visibleSettled,
+          ],
     [
-      inbox,
       isSearching,
-      pinned,
       searchResults,
+      visibleInbox,
+      visiblePinned,
       visibleSettled,
       visibleSnoozed,
     ],
@@ -761,79 +779,98 @@ export function ThreadInbox({
           />
         ) : (
           <div ref={attachShelvesAutoAnimateRef} className="flex flex-col">
-            {pinned.length > 0 ? (
-              <Shelf label="Pinned">
-                {pinned.map((thread) => (
-                  <ThreadCard
-                    key={thread.id}
-                    thread={thread}
-                    projectName={projectNameById.get(thread.projectId) ?? null}
-                    isActive={thread.id === activeThreadId}
-                    isSelected={selection.selectedIds.has(thread.id)}
-                    isWoke={wokeThreadIds.has(thread.id)}
-                    canPark={lifecycle.canPark(thread)}
-                    snoozePresets={snoozePresets}
-                    onNavigate={onNavigate}
-                    onSettle={() =>
-                      void parkActiveThread(thread, () =>
-                        lifecycle.settle(thread.id),
-                      )
-                    }
-                    onSnooze={(until) =>
-                      void parkActiveThread(thread, () =>
-                        lifecycle.snooze(thread.id, until),
-                      )
-                    }
-                    onAcknowledgeWake={() =>
-                      void lifecycle.acknowledgeWake(thread.id)
-                    }
-                    onSelectionClick={(event) =>
-                      handleSelectionClick(thread.id, event)
-                    }
-                    reorder={threadReorderControls(thread, "pinned")}
-                    now={now}
-                  />
-                ))}
-              </Shelf>
-            ) : null}
-            {inbox.length > 0 ? (
-              <Shelf label={pinned.length > 0 ? "Inbox" : null}>
-                {inbox.map((thread) => (
-                  <ThreadCard
-                    key={thread.id}
-                    thread={thread}
-                    projectName={projectNameById.get(thread.projectId) ?? null}
-                    isActive={thread.id === activeThreadId}
-                    isSelected={selection.selectedIds.has(thread.id)}
-                    isWoke={wokeThreadIds.has(thread.id)}
-                    canPark={lifecycle.canPark(thread)}
-                    snoozePresets={snoozePresets}
-                    onNavigate={onNavigate}
-                    onSettle={() =>
-                      void parkActiveThread(thread, () =>
-                        lifecycle.settle(thread.id),
-                      )
-                    }
-                    onSnooze={(until) =>
-                      void parkActiveThread(thread, () =>
-                        lifecycle.snooze(thread.id, until),
-                      )
-                    }
-                    onAcknowledgeWake={() =>
-                      void lifecycle.acknowledgeWake(thread.id)
-                    }
-                    onSelectionClick={(event) =>
-                      handleSelectionClick(thread.id, event)
-                    }
-                    reorder={threadReorderControls(thread, "inbox")}
-                    now={now}
-                  />
-                ))}
-              </Shelf>
+            {pinned.length + inbox.length > 0 ? (
+              <CollapsibleShelf
+                label="Active"
+                count={pinned.length + inbox.length}
+                expanded={expandedShelves.active}
+                onToggle={() =>
+                  setExpandedShelves((current) => ({
+                    ...current,
+                    active: !current.active,
+                  }))
+                }
+              >
+                {visiblePinned.length > 0 ? (
+                  <Shelf label="Pinned">
+                    {visiblePinned.map((thread) => (
+                      <ThreadCard
+                        key={thread.id}
+                        thread={thread}
+                        projectName={
+                          projectNameById.get(thread.projectId) ?? null
+                        }
+                        isActive={thread.id === activeThreadId}
+                        isSelected={selection.selectedIds.has(thread.id)}
+                        isWoke={wokeThreadIds.has(thread.id)}
+                        canPark={lifecycle.canPark(thread)}
+                        snoozePresets={snoozePresets}
+                        onNavigate={onNavigate}
+                        onSettle={() =>
+                          void parkActiveThread(thread, () =>
+                            lifecycle.settle(thread.id),
+                          )
+                        }
+                        onSnooze={(until) =>
+                          void parkActiveThread(thread, () =>
+                            lifecycle.snooze(thread.id, until),
+                          )
+                        }
+                        onAcknowledgeWake={() =>
+                          void lifecycle.acknowledgeWake(thread.id)
+                        }
+                        onSelectionClick={(event) =>
+                          handleSelectionClick(thread.id, event)
+                        }
+                        reorder={threadReorderControls(thread, "pinned")}
+                        now={now}
+                      />
+                    ))}
+                  </Shelf>
+                ) : null}
+                {visibleInbox.length > 0 ? (
+                  <Shelf label={pinned.length > 0 ? "Inbox" : null}>
+                    {visibleInbox.map((thread) => (
+                      <ThreadCard
+                        key={thread.id}
+                        thread={thread}
+                        projectName={
+                          projectNameById.get(thread.projectId) ?? null
+                        }
+                        isActive={thread.id === activeThreadId}
+                        isSelected={selection.selectedIds.has(thread.id)}
+                        isWoke={wokeThreadIds.has(thread.id)}
+                        canPark={lifecycle.canPark(thread)}
+                        snoozePresets={snoozePresets}
+                        onNavigate={onNavigate}
+                        onSettle={() =>
+                          void parkActiveThread(thread, () =>
+                            lifecycle.settle(thread.id),
+                          )
+                        }
+                        onSnooze={(until) =>
+                          void parkActiveThread(thread, () =>
+                            lifecycle.snooze(thread.id, until),
+                          )
+                        }
+                        onAcknowledgeWake={() =>
+                          void lifecycle.acknowledgeWake(thread.id)
+                        }
+                        onSelectionClick={(event) =>
+                          handleSelectionClick(thread.id, event)
+                        }
+                        reorder={threadReorderControls(thread, "inbox")}
+                        now={now}
+                      />
+                    ))}
+                  </Shelf>
+                ) : null}
+              </CollapsibleShelf>
             ) : null}
             <ParkedShelf
               label="Snoozed"
               threads={snoozed}
+              projectNameById={projectNameById}
               expanded={expandedShelves.snoozed}
               onToggle={() =>
                 setExpandedShelves((current) => ({
@@ -929,29 +966,12 @@ function ParkedShelf({
     shelf === "settled" ? (settledLimit ?? threads.length) : threads.length;
   const hasMore = shelf === "settled" && threads.length > limit;
   return (
-    <section aria-label={label}>
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={expanded}
-        // Padded like a card, so the chevron ends on the same right edge as
-        // every row's status and provider glyph.
-        className="mt-3 flex w-full items-center gap-2 px-2.5 pb-1 text-left"
-      >
-        <span className="text-2xs font-medium text-muted-foreground/70">
-          {expanded ? label : `${label} (${threads.length})`}
-        </span>
-        <span className="h-px flex-1 bg-sidebar-border" />
-        <span className={TRAILING_GLYPH_BOX_CLASS}>
-          <Icon
-            name="ChevronDown"
-            className={cn(
-              "size-3 text-muted-foreground/70 transition-transform duration-150 ease-out motion-reduce:transition-none",
-              expanded && "rotate-180",
-            )}
-          />
-        </span>
-      </button>
+    <CollapsibleShelf
+      label={label}
+      count={threads.length}
+      expanded={expanded}
+      onToggle={onToggle}
+    >
       <ul ref={attachListAutoAnimateRef} className="flex flex-col gap-px">
         {visibleThreads.map((thread) => (
           <SlimRow
@@ -984,6 +1004,48 @@ function ParkedShelf({
           Load {Math.min(SETTLED_PAGE_SIZE, threads.length - limit)} more
         </button>
       ) : null}
+    </CollapsibleShelf>
+  );
+}
+
+function CollapsibleShelf({
+  label,
+  count,
+  expanded,
+  onToggle,
+  children,
+}: {
+  label: string;
+  count: number;
+  expanded: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <section aria-label={label}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        // Padded like a card, so the chevron ends on the same right edge as
+        // every row's status and provider glyph.
+        className="mt-3 flex w-full items-center gap-2 px-2.5 pb-1 text-left"
+      >
+        <span className="text-2xs font-medium text-muted-foreground/70">
+          {expanded ? label : `${label} (${count})`}
+        </span>
+        <span className="h-px flex-1 bg-sidebar-border" />
+        <span className={TRAILING_GLYPH_BOX_CLASS}>
+          <Icon
+            name="ChevronDown"
+            className={cn(
+              "size-3 text-muted-foreground/70 transition-transform duration-150 ease-out motion-reduce:transition-none",
+              expanded && "rotate-180",
+            )}
+          />
+        </span>
+      </button>
+      {children}
     </section>
   );
 }

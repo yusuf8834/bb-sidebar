@@ -117,6 +117,45 @@ describe("BB Sidebar registration", () => {
 });
 
 describe("ThreadInbox", () => {
+  it("shows active threads in a collapsible Active shelf", () => {
+    render([
+      thread({ id: "a", title: "First active" }),
+      thread({ id: "b", title: "Second active" }),
+    ]);
+
+    const activeShelf = screen.getByRole("region", { name: "Active" });
+    expect(
+      within(activeShelf).getByRole("button", { expanded: true }),
+    ).toBeDefined();
+    fireEvent.click(
+      within(activeShelf).getByRole("button", { expanded: true }),
+    );
+    expect(within(activeShelf).getByText("Active (2)")).toBeDefined();
+    expect(within(activeShelf).queryByText("First active")).toBeNull();
+    expect(within(activeShelf).queryByText("Second active")).toBeNull();
+  });
+
+  it("keeps the currently open active row visible while collapsed", () => {
+    renderSlot(inbox, { ...listProps, activeThreadId: "open" }, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "open", title: "Open active" }),
+          thread({ id: "other", title: "Other active" }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: { listLifecycle: () => ({ rows: [] }) },
+    });
+
+    const activeShelf = screen.getByRole("region", { name: "Active" });
+    fireEvent.click(
+      within(activeShelf).getByRole("button", { expanded: true }),
+    );
+    expect(within(activeShelf).getByText("Open active")).toBeDefined();
+    expect(within(activeShelf).queryByText("Other active")).toBeNull();
+  });
+
   it("lists threads newest first", () => {
     render([
       thread({ id: "a", title: "Older", createdAt: 1 }),
@@ -1036,6 +1075,12 @@ describe("parking threads", () => {
     // never mount leaves the whole feature unreachable.
     expect(await screen.findByLabelText("Settle thread")).toBeDefined();
     const snooze = screen.getByRole("combobox", { name: "Snooze thread" });
+    expect(
+      snooze.querySelector('[data-icon="Clock"]'),
+    ).not.toBeNull();
+    expect(snooze.querySelector('[data-icon="ChevronDown"]')).not.toBeNull();
+    expect(snooze.classList.contains("[&>svg:last-child]:hidden")).toBe(true);
+    expect(snooze.classList.contains("w-5")).toBe(true);
     fireEvent.keyDown(snooze, { key: "Enter" });
     expect(
       await screen.findByRole("option", { name: "30 minutes" }),
@@ -1107,6 +1152,14 @@ describe("parking threads", () => {
     const shelf = await screen.findByRole("region", { name: "Snoozed" });
     fireEvent.click(within(shelf).getByRole("button"));
     expect(within(shelf).getByText("2h")).toBeDefined();
+    expect(within(shelf).getByLabelText("bb · Later")).toBeDefined();
+    expect(within(shelf).getByText("bb").className).toContain(
+      "text-muted-foreground/50",
+    );
+    expect(within(shelf).getByText("·").className).toContain("text-sm");
+    expect(within(shelf).getByText("Later").className).toContain(
+      "text-foreground/80",
+    );
     expect(within(shelf).getByLabelText("Wake thread now")).toBeDefined();
   });
 
@@ -1130,6 +1183,7 @@ describe("parking threads", () => {
       sidebarThreads: {
         status: "ready" as const,
         threads: [
+          thread({ id: "thr_active", title: "Active work" }),
           thread({ id: "thr_done", title: "Finished work" }),
           thread({ id: "thr_later", title: "Later work" }),
         ],
@@ -1139,23 +1193,33 @@ describe("parking threads", () => {
     };
 
     renderSlot(inbox, listProps, options);
+    let activeShelf = screen.getByRole("region", { name: "Active" });
     let settledShelf = await screen.findByRole("region", { name: "Settled" });
     let snoozedShelf = await screen.findByRole("region", { name: "Snoozed" });
+    fireEvent.click(
+      within(activeShelf).getByRole("button", { expanded: true }),
+    );
     fireEvent.click(within(settledShelf).getByRole("button"));
     fireEvent.click(within(snoozedShelf).getByRole("button"));
+    expect(within(activeShelf).queryByText("Active work")).toBeNull();
     expect(within(settledShelf).getByText("Finished work")).toBeDefined();
     expect(within(snoozedShelf).getByText("Later work")).toBeDefined();
 
     cleanup();
     renderSlot(inbox, listProps, options);
+    activeShelf = screen.getByRole("region", { name: "Active" });
     settledShelf = await screen.findByRole("region", { name: "Settled" });
     snoozedShelf = await screen.findByRole("region", { name: "Snoozed" });
+    expect(
+      within(activeShelf).getByRole("button", { expanded: false }),
+    ).toBeDefined();
     expect(
       within(settledShelf).getByRole("button", { expanded: true }),
     ).toBeDefined();
     expect(
       within(snoozedShelf).getByRole("button", { expanded: true }),
     ).toBeDefined();
+    expect(within(activeShelf).queryByText("Active work")).toBeNull();
     expect(within(settledShelf).getByText("Finished work")).toBeDefined();
     expect(within(snoozedShelf).getByText("Later work")).toBeDefined();
   });

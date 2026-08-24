@@ -102,12 +102,24 @@ export function SlimRow({
           >
             {projectName && !isRenaming ? (
               <>
-                <span className="max-w-[40%] shrink truncate text-muted-foreground/60">
+                <span
+                  className={cn(
+                    "max-w-[40%] shrink truncate",
+                    isActive
+                      ? "text-muted-foreground/70"
+                      : "text-muted-foreground/50 group-hover/slim:text-muted-foreground/70",
+                  )}
+                >
                   {projectName}
                 </span>
                 <span
                   aria-hidden="true"
-                  className="shrink-0 text-muted-foreground/40"
+                  className={cn(
+                    "shrink-0 text-sm leading-none",
+                    isActive
+                      ? "text-muted-foreground/60"
+                      : "text-muted-foreground/45 group-hover/slim:text-muted-foreground/60",
+                  )}
                 >
                   ·
                 </span>
@@ -117,7 +129,12 @@ export function SlimRow({
               thread={thread}
               editing={isRenaming}
               onEditingChange={setIsRenaming}
-              className="min-w-0 flex-1 truncate"
+              className={cn(
+                "min-w-0 flex-1 truncate",
+                isActive
+                  ? "text-foreground"
+                  : "text-foreground/80 group-hover/slim:text-foreground",
+              )}
             />
           </span>
           {/* The same slot as a card, so a shelf keeps the card's column. A

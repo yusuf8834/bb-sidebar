@@ -1,5 +1,5 @@
 {
-  "name": "bb-plugin-bb-sidebar",
+  "name": "bb-plugin-t3chat-sidebar",
   "version": "0.1.0",
   "type": "module",
   "description": "A stable bb thread sidebar with manual ordering, snooze, settle, and bulk actions.",

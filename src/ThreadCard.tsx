@@ -223,7 +223,7 @@ export function ThreadCard({
                     <SnoozeSelect
                       label="Snooze thread"
                       snoozePresets={snoozePresets}
-                      triggerClassName="h-5 w-8 border-0 px-0.5 py-0 shadow-none hover:bg-transparent focus:ring-0 [&>svg:last-child]:size-3"
+                      triggerClassName="h-5 w-5 border-0 px-0.5 py-0 shadow-none hover:bg-transparent focus:ring-0 [&>svg:last-child]:size-3"
                       onOpenChange={setIsSnoozeOpen}
                       onSnooze={onSnooze}
                     />
