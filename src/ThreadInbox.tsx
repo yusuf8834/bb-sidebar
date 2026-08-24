@@ -64,6 +64,7 @@ import {
 
 const ALL_PROJECTS = "__all__";
 const ACTIVE_GROUPING_STORAGE_KEY = "bb-sidebar:active-grouping:v1";
+const ACTIVE_SORT_STORAGE_KEY = "bb-sidebar:active-sort:v1";
 const SHELF_EXPANSION_STORAGE_KEY = "bb-sidebar:shelf-expansion:v1";
 const SETTLED_INITIAL_LIMIT = 10;
 const SETTLED_PAGE_SIZE = 25;
@@ -125,11 +126,29 @@ function readShelfExpansion(): ShelfExpansionState {
   }
 }
 
-function readActiveGrouping(): boolean {
+const ACTIVE_SORT_MODES = ["manual", "activity", "created", "project"] as const;
+type ActiveSortMode = (typeof ACTIVE_SORT_MODES)[number];
+
+const ACTIVE_SORT_LABELS: Record<ActiveSortMode, string> = {
+  manual: "Manual order",
+  activity: "Recent activity",
+  created: "Date created",
+  project: "Project",
+};
+
+function isActiveSortMode(value: string): value is ActiveSortMode {
+  return ACTIVE_SORT_MODES.some((mode) => mode === value);
+}
+
+function readActiveSort(): ActiveSortMode {
   try {
-    return window.localStorage.getItem(ACTIVE_GROUPING_STORAGE_KEY) === "true";
+    const stored = window.localStorage.getItem(ACTIVE_SORT_STORAGE_KEY);
+    if (stored && isActiveSortMode(stored)) return stored;
+    return window.localStorage.getItem(ACTIVE_GROUPING_STORAGE_KEY) === "true"
+      ? "project"
+      : "manual";
   } catch {
-    return false;
+    return "manual";
   }
 }
 
@@ -146,6 +165,7 @@ interface ActiveThreadGroup {
 function groupActiveThreadsByProject(
   pinned: readonly PluginSidebarThread[],
   inbox: readonly PluginSidebarThread[],
+  projectNameById: ReadonlyMap<string, string>,
 ): ActiveThreadGroup[] {
   const groups = new Map<string, ActiveThreadGroup>();
   for (const [threads, shelf] of [
@@ -161,7 +181,25 @@ function groupActiveThreadsByProject(
       group.entries.push({ thread, shelf });
     }
   }
-  return [...groups.values()];
+  return [...groups.values()].sort((left, right) =>
+    (projectNameById.get(left.projectId) ?? left.projectId).localeCompare(
+      projectNameById.get(right.projectId) ?? right.projectId,
+    ),
+  );
+}
+
+function sortActiveThreads(
+  threads: readonly PluginSidebarThread[],
+  mode: ActiveSortMode,
+): PluginSidebarThread[] {
+  if (mode !== "activity" && mode !== "created") return [...threads];
+  const primaryKey = mode === "activity" ? "updatedAt" : "createdAt";
+  return [...threads].sort(
+    (left, right) =>
+      right[primaryKey] - left[primaryKey] ||
+      right.updatedAt - left.updatedAt ||
+      right.createdAt - left.createdAt,
+  );
 }
 
 function visibleShelfThreads(
@@ -220,8 +258,8 @@ export function ThreadInbox({
   const now = nowMinute * 60_000;
   const [expandedShelves, setExpandedShelves] =
     useState<ShelfExpansionState>(readShelfExpansion);
-  const [groupActiveByProject, setGroupActiveByProject] =
-    useState(readActiveGrouping);
+  const [activeSortMode, setActiveSortMode] =
+    useState<ActiveSortMode>(readActiveSort);
   const [settledLimit, setSettledLimit] = useState(SETTLED_INITIAL_LIMIT);
   const [selection, setSelection] = useState<ThreadSelectionState>(
     EMPTY_THREAD_SELECTION,
@@ -241,13 +279,13 @@ export function ThreadInbox({
   useEffect(() => {
     try {
       window.localStorage.setItem(
-        ACTIVE_GROUPING_STORAGE_KEY,
-        String(groupActiveByProject),
+        ACTIVE_SORT_STORAGE_KEY,
+        activeSortMode,
       );
     } catch {
       // Keep the view usable when browser storage is unavailable.
     }
-  }, [groupActiveByProject]);
+  }, [activeSortMode]);
 
   const projectNameById = useMemo(
     () => new Map(projects.map((project) => [project.id, project.name])),
@@ -338,9 +376,22 @@ export function ThreadInbox({
     () => visibleShelfThreads(inbox, expandedShelves.active, activeThreadId),
     [activeThreadId, expandedShelves.active, inbox],
   );
+  const sortedVisiblePinned = useMemo(
+    () => sortActiveThreads(visiblePinned, activeSortMode),
+    [activeSortMode, visiblePinned],
+  );
+  const sortedVisibleInbox = useMemo(
+    () => sortActiveThreads(visibleInbox, activeSortMode),
+    [activeSortMode, visibleInbox],
+  );
   const activeThreadGroups = useMemo(
-    () => groupActiveThreadsByProject(visiblePinned, visibleInbox),
-    [visibleInbox, visiblePinned],
+    () =>
+      groupActiveThreadsByProject(
+        visiblePinned,
+        visibleInbox,
+        projectNameById,
+      ),
+    [projectNameById, visibleInbox, visiblePinned],
   );
 
   const threadReorderControls = (
@@ -351,7 +402,8 @@ export function ThreadInbox({
     const visibleIds = (shelf === "pinned" ? visiblePinned : visibleInbox)
       .filter(
         (candidate) =>
-          !groupActiveByProject || candidate.projectId === thread.projectId,
+          activeSortMode !== "project" ||
+          candidate.projectId === thread.projectId,
       )
       .map((candidate) => candidate.id);
     return {
@@ -763,7 +815,11 @@ export function ThreadInbox({
       }
       onAcknowledgeWake={() => void lifecycle.acknowledgeWake(thread.id)}
       onSelectionClick={(event) => handleSelectionClick(thread.id, event)}
-      reorder={threadReorderControls(thread, shelf)}
+      reorder={
+        activeSortMode === "activity" || activeSortMode === "created"
+          ? undefined
+          : threadReorderControls(thread, shelf)
+      }
       now={now}
     />
   );
@@ -877,25 +933,34 @@ export function ThreadInbox({
                   }))
                 }
                 action={
-                  <button
-                    type="button"
-                    aria-label="Group active threads by project"
-                    aria-pressed={groupActiveByProject}
-                    title="Group active threads by project"
-                    onClick={() =>
-                      setGroupActiveByProject((grouped) => !grouped)
-                    }
-                    className={cn(
-                      "absolute bottom-1 right-[1.875rem] z-10 flex size-4 items-center justify-center rounded text-muted-foreground/35 transition-colors duration-150 hover:bg-sidebar-accent hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring motion-reduce:transition-none",
-                      groupActiveByProject &&
-                        "bg-sidebar-accent/70 text-muted-foreground/80",
-                    )}
+                  <Select
+                    value={activeSortMode}
+                    onValueChange={(value) => {
+                      if (isActiveSortMode(value)) setActiveSortMode(value);
+                    }}
                   >
-                    <Icon name="GroupItems" className="size-3" />
-                  </button>
+                    <SelectTrigger
+                      aria-label={`Sort active threads: ${ACTIVE_SORT_LABELS[activeSortMode]}`}
+                      title={`Sort active threads: ${ACTIVE_SORT_LABELS[activeSortMode]}`}
+                      className={cn(
+                        "absolute bottom-1 right-[1.875rem] z-10 size-4 h-4 w-4 border-0 p-0 text-muted-foreground/40 shadow-none hover:bg-sidebar-accent hover:text-muted-foreground focus:ring-1 [&>svg:last-child]:hidden",
+                        activeSortMode !== "manual" &&
+                          "bg-sidebar-accent/60 text-muted-foreground/80",
+                      )}
+                    >
+                      <Icon name="ArrowUpDown" className="size-3" />
+                    </SelectTrigger>
+                    <SelectContent align="end" className="min-w-40">
+                      {ACTIVE_SORT_MODES.map((mode) => (
+                        <SelectItem key={mode} value={mode} className="text-xs">
+                          {ACTIVE_SORT_LABELS[mode]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 }
               >
-                {groupActiveByProject ? (
+                {activeSortMode === "project" ? (
                   <div
                     aria-label="Active threads grouped by project"
                     className="flex flex-col gap-1.5"
@@ -917,14 +982,14 @@ export function ThreadInbox({
                   <>
                     {visiblePinned.length > 0 ? (
                       <Shelf label="Pinned">
-                        {visiblePinned.map((thread) =>
+                        {sortedVisiblePinned.map((thread) =>
                           renderActiveThread(thread, "pinned"),
                         )}
                       </Shelf>
                     ) : null}
                     {visibleInbox.length > 0 ? (
                       <Shelf label={pinned.length > 0 ? "Inbox" : null}>
-                        {visibleInbox.map((thread) =>
+                        {sortedVisibleInbox.map((thread) =>
                           renderActiveThread(thread, "inbox"),
                         )}
                       </Shelf>
@@ -1136,7 +1201,7 @@ function ActiveProjectGroup({
     <ul
       ref={attachListAutoAnimateRef}
       aria-label={`${projectName} active threads`}
-      className="flex flex-col gap-px"
+      className="flex flex-col gap-px rounded-lg border border-sidebar-border/40 p-px"
     >
       {children}
     </ul>

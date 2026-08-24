@@ -5,6 +5,7 @@ import {
   ArrowRight01Icon,
   ArrowTurnBackwardIcon,
   ArrowUp01Icon,
+  ArrowUpDownIcon,
   CancelCircleIcon,
   CheckListIcon,
   Clock01Icon,
@@ -15,7 +16,6 @@ import {
   Edit02Icon,
   FolderGitIcon,
   GitBranchIcon,
-  GroupItemsIcon,
   HelpCircleIcon,
   Loading03Icon,
   PinOffIcon,
@@ -28,6 +28,7 @@ import { cn } from "../lib/utils";
 
 const ICON_MAP = {
   ArrowTurnBackward: ArrowTurnBackwardIcon,
+  ArrowUpDown: ArrowUpDownIcon,
   Check: Tick02Icon,
   ChevronDown: ArrowDown01Icon,
   ChevronLeft: ArrowLeft01Icon,
@@ -40,7 +41,6 @@ const ICON_MAP = {
   Edit: Edit02Icon,
   FolderGit: FolderGitIcon,
   GitBranch: GitBranchIcon,
-  GroupItems: GroupItemsIcon,
   ListTodo: CheckListIcon,
   Loading: Loading03Icon,
   Mail: Mail01Icon,

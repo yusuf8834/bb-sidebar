@@ -156,32 +156,36 @@ describe("ThreadInbox", () => {
     expect(within(activeShelf).queryByText("Other active")).toBeNull();
   });
 
-  it("groups active threads by project from the subtle header toggle", async () => {
+  it("sorts active threads from the subtle header menu", async () => {
     render(
       [
         thread({
           id: "alpha-new",
           projectId: "proj_alpha",
           title: "Alpha new",
-          createdAt: 4,
+          createdAt: 3,
+          updatedAt: 10,
         }),
         thread({
           id: "beta-new",
           projectId: "proj_beta",
           title: "Beta new",
-          createdAt: 3,
+          createdAt: 4,
+          updatedAt: 30,
         }),
         thread({
           id: "alpha-old",
           projectId: "proj_alpha",
           title: "Alpha old",
-          createdAt: 2,
+          createdAt: 1,
+          updatedAt: 40,
         }),
         thread({
           id: "beta-old",
           projectId: "proj_beta",
           title: "Beta old",
-          createdAt: 1,
+          createdAt: 2,
+          updatedAt: 20,
         }),
       ],
       [
@@ -191,24 +195,71 @@ describe("ThreadInbox", () => {
     );
 
     const activeShelf = screen.getByRole("region", { name: "Active" });
-    const groupToggle = within(activeShelf).getByRole("button", {
-      name: "Group active threads by project",
+    const sortMenu = within(activeShelf).getByRole("combobox", {
+      name: "Sort active threads: Manual order",
     });
-    expect(groupToggle.getAttribute("aria-pressed")).toBe("false");
+    expect(sortMenu.querySelector('[data-icon="ArrowUpDown"]')).not.toBeNull();
     expect(
       within(activeShelf)
         .getAllByRole("listitem")
         .map((row) => row.textContent),
     ).toEqual([
-      expect.stringContaining("Alpha new"),
       expect.stringContaining("Beta new"),
-      expect.stringContaining("Alpha old"),
+      expect.stringContaining("Alpha new"),
       expect.stringContaining("Beta old"),
+      expect.stringContaining("Alpha old"),
     ]);
 
-    fireEvent.click(groupToggle);
+    fireEvent.keyDown(sortMenu, { key: "Enter" });
+    expect(screen.getByRole("option", { name: "Manual order" })).toBeDefined();
+    expect(
+      screen.getByRole("option", { name: "Recent activity" }),
+    ).toBeDefined();
+    expect(screen.getByRole("option", { name: "Date created" })).toBeDefined();
+    expect(screen.getByRole("option", { name: "Project" })).toBeDefined();
+    fireEvent.click(screen.getByRole("option", { name: "Recent activity" }));
 
-    expect(groupToggle.getAttribute("aria-pressed")).toBe("true");
+    expect(
+      within(activeShelf)
+        .getAllByRole("listitem")
+        .map((row) => row.textContent),
+    ).toEqual([
+      expect.stringContaining("Alpha old"),
+      expect.stringContaining("Beta new"),
+      expect.stringContaining("Beta old"),
+      expect.stringContaining("Alpha new"),
+    ]);
+    expect(
+      within(activeShelf)
+        .getAllByRole("link")
+        .every((link) => link.getAttribute("aria-keyshortcuts") === null),
+    ).toBe(true);
+
+    fireEvent.keyDown(
+      within(activeShelf).getByRole("combobox", {
+        name: "Sort active threads: Recent activity",
+      }),
+      { key: "Enter" },
+    );
+    fireEvent.click(screen.getByRole("option", { name: "Date created" }));
+    expect(
+      within(activeShelf)
+        .getAllByRole("listitem")
+        .map((row) => row.textContent),
+    ).toEqual([
+      expect.stringContaining("Beta new"),
+      expect.stringContaining("Alpha new"),
+      expect.stringContaining("Beta old"),
+      expect.stringContaining("Alpha old"),
+    ]);
+
+    fireEvent.keyDown(
+      within(activeShelf).getByRole("combobox", {
+        name: "Sort active threads: Date created",
+      }),
+      { key: "Enter" },
+    );
+    fireEvent.click(screen.getByRole("option", { name: "Project" }));
     expect(
       within(activeShelf)
         .getAllByRole("listitem")
@@ -224,25 +275,44 @@ describe("ThreadInbox", () => {
         name: "Alpha active threads",
       }),
     ).toBeDefined();
+    expect(
+      within(activeShelf)
+        .getByRole("list", { name: "Alpha active threads" })
+        .classList.contains("border"),
+    ).toBe(true);
+    expect(
+      within(activeShelf)
+        .getAllByRole("link")
+        .every(
+          (link) =>
+            link.getAttribute("aria-keyshortcuts") ===
+            "Alt+ArrowUp Alt+ArrowDown",
+        ),
+    ).toBe(true);
     await waitFor(() =>
       expect(
-        window.localStorage.getItem("bb-sidebar:active-grouping:v1"),
-      ).toBe("true"),
+        window.localStorage.getItem("bb-sidebar:active-sort:v1"),
+      ).toBe("project"),
     );
   });
 
-  it("restores the active project grouping preference", () => {
+  it("migrates the previous project grouping preference", async () => {
     window.localStorage.setItem("bb-sidebar:active-grouping:v1", "true");
     render([thread({ id: "saved", title: "Saved grouping" })]);
 
     expect(
-      screen
-        .getByRole("button", { name: "Group active threads by project" })
-        .getAttribute("aria-pressed"),
-    ).toBe("true");
+      screen.getByRole("combobox", {
+        name: "Sort active threads: Project",
+      }),
+    ).toBeDefined();
     expect(
       screen.getByRole("list", { name: "bb active threads" }),
     ).toBeDefined();
+    await waitFor(() =>
+      expect(window.localStorage.getItem("bb-sidebar:active-sort:v1")).toBe(
+        "project",
+      ),
+    );
   });
 
   it("lists threads newest first", () => {
