@@ -2074,8 +2074,8 @@ describe("pull request badge", () => {
     expect(screen.queryByRole("link", { name: /^#/ })).toBeNull();
   });
 
-  // BB's richer attention state keeps failed open PRs red while the remaining
-  // open states use T3's emerald PR color.
+  // BB's richer attention state keeps failed open PRs red while other open
+  // states use the emerald pull request color.
   it("colors the badge from the attention state", async () => {
     const failing = withPr("checks_failed");
     expect(
