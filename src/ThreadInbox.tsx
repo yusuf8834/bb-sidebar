@@ -12,6 +12,7 @@ import {
   type PluginSidebarThread,
   type PluginThreadListProps,
   useRealtime,
+  useRpc,
   useSettings,
 } from "@get-bb/plugin-sdk/app";
 import { autoAnimate } from "@formkit/auto-animate";
@@ -56,6 +57,11 @@ import {
   type ConfiguredSnoozePreset,
 } from "./lifecycle";
 import {
+  DEFAULT_INACTIVE_AFTER_HOURS,
+  isInactiveThread,
+  parseInactiveAfterHours,
+} from "./inactive";
+import {
   EMPTY_THREAD_SELECTION,
   keepFailedSelection,
   reconcileThreadSelection,
@@ -67,6 +73,11 @@ import {
   projectIconUrl,
 } from "./project-icons";
 import { ProjectFavicon } from "./ProjectFavicon";
+import type { bbSidebarRpcContract } from "./server";
+import {
+  SIDEBAR_SETTINGS_CHANNEL,
+  type SidebarSettingsValues,
+} from "./sidebar-settings";
 
 const ALL_PROJECTS = "__all__";
 const ACTIVE_GROUPING_STORAGE_KEY = "bb-sidebar:active-grouping:v1";
@@ -107,6 +118,7 @@ function suppressNextClick(threadId: string): void {
 interface ShelfExpansionState {
   active: boolean;
   pinned: boolean;
+  inactive: boolean;
   snoozed: boolean;
   settled: boolean;
 }
@@ -114,6 +126,7 @@ interface ShelfExpansionState {
 const DEFAULT_SHELF_EXPANSION: ShelfExpansionState = {
   active: true,
   pinned: true,
+  inactive: false,
   snoozed: false,
   settled: false,
 };
@@ -128,6 +141,7 @@ function readShelfExpansion(): ShelfExpansionState {
       active: parsed.active !== false,
       // Pinned became independently collapsible after the first stored shape.
       pinned: parsed.pinned !== false,
+      inactive: parsed.inactive === true,
       snoozed: parsed.snoozed === true,
       settled: parsed.settled === true,
     };
@@ -239,7 +253,23 @@ export function ThreadInbox({
 }: PluginThreadListProps) {
   const { status, threads, projects } = useSidebarThreads();
   const actions = useSidebarThreadActions();
-  const { values: settings } = useSettings();
+  const rpc = useRpc<typeof bbSidebarRpcContract>();
+  const { values: legacySettings } = useSettings();
+  const [sidebarSettings, setSidebarSettings] =
+    useState<SidebarSettingsValues | null>(null);
+  const loadSidebarSettings = useCallback(async () => {
+    try {
+      setSidebarSettings(await rpc.call("getSidebarSettings", {}));
+    } catch {
+      // Older test harnesses and a backend still reloading have no method yet.
+    }
+  }, [rpc]);
+  useEffect(() => {
+    void loadSidebarSettings();
+  }, [loadSidebarSettings]);
+  useRealtime(SIDEBAR_SETTINGS_CHANNEL, () => {
+    void loadSidebarSettings();
+  });
   const lifecycle = useLifecycle(threads);
   const [projectIconRevision, setProjectIconRevision] = useState(0);
   useRealtime(PROJECT_ICONS_CHANNEL, () => {
@@ -249,12 +279,22 @@ export function ThreadInbox({
   const activeThreadIdRef = useRef(activeThreadId);
   activeThreadIdRef.current = activeThreadId;
   const configuredSnoozePresets =
-    typeof settings?.snoozePresets === "string"
-      ? settings.snoozePresets
-      : DEFAULT_SNOOZE_PRESET_CONFIG;
+    sidebarSettings?.snoozePresets ??
+    (typeof legacySettings?.snoozePresets === "string"
+      ? legacySettings.snoozePresets
+      : DEFAULT_SNOOZE_PRESET_CONFIG);
   const snoozePresets = useMemo(
     () => parseConfiguredSnoozePresets(configuredSnoozePresets),
     [configuredSnoozePresets],
+  );
+  const inactiveAfterHours = parseInactiveAfterHours(
+    sidebarSettings?.inactiveThreadsEnabled === true ||
+      legacySettings?.inactiveThreadsEnabled === true,
+    sidebarSettings
+      ? String(sidebarSettings.inactiveAfterHours)
+      : typeof legacySettings?.inactiveAfterHours === "string"
+        ? legacySettings.inactiveAfterHours
+        : String(DEFAULT_INACTIVE_AFTER_HOURS),
   );
   const [scope, setScope] = useState<string>(ALL_PROJECTS);
   // One clock for every card in a render, quantized to the minute so the
@@ -309,6 +349,7 @@ export function ThreadInbox({
   const {
     pinnedBase,
     inboxBase,
+    inactiveBase,
     allPinnedBase,
     allInboxBase,
     snoozed,
@@ -332,11 +373,21 @@ export function ThreadInbox({
       else active.push(thread);
     }
     const split = partitionPinned(active);
+    const activeUnpinned: typeof split.inbox = [];
+    const inactive: typeof split.inbox = [];
+    for (const thread of split.inbox) {
+      if (isInactiveThread(thread, now, inactiveAfterHours)) {
+        inactive.push(thread);
+      } else {
+        activeUnpinned.push(thread);
+      }
+    }
     const allSplit = partitionPinned(allVisible);
     return {
       // BB supplies pinned rows in the user's persisted pin order.
       pinnedBase: split.pinned,
-      inboxBase: sortByCreatedAtDescending(split.inbox),
+      inboxBase: sortByCreatedAtDescending(activeUnpinned),
+      inactiveBase: sortByCreatedAtDescending(inactive),
       // Keep a global order behind project-scoped and parked views. Child and
       // parked rows are included because they can become visible later; a
       // reorder elsewhere must not silently discard their old slot.
@@ -349,7 +400,7 @@ export function ThreadInbox({
       ),
       settled: sortSettledThreads(onSettledShelf, lifecycle.settledAtFor),
     };
-  }, [lifecycle, scope, threads]);
+  }, [inactiveAfterHours, lifecycle, now, scope, threads]);
 
   const pinnedReorder = usePinnedReorder(allPinnedBase);
   const inboxReorder = useInboxReorder(allInboxBase);
@@ -381,6 +432,10 @@ export function ThreadInbox({
       dragOrder?.shelf === "inbox" ? dragOrder.ids : null,
     );
   }, [dragOrder, inboxBase, inboxReorder.ids]);
+  const inactive = useMemo(
+    () => orderPinnedThreads(inactiveBase, inboxReorder.ids),
+    [inactiveBase, inboxReorder.ids],
+  );
   const visiblePinned = useMemo(
     () =>
       visibleShelfThreads(
@@ -393,6 +448,15 @@ export function ThreadInbox({
   const visibleInbox = useMemo(
     () => visibleShelfThreads(inbox, expandedShelves.active, activeThreadId),
     [activeThreadId, expandedShelves.active, inbox],
+  );
+  const visibleInactive = useMemo(
+    () =>
+      visibleShelfThreads(
+        inactive,
+        expandedShelves.inactive,
+        activeThreadId,
+      ),
+    [activeThreadId, expandedShelves.inactive, inactive],
   );
   const sortedVisibleInbox = useMemo(
     () => sortActiveThreads(visibleInbox, activeSortMode),
@@ -580,10 +644,10 @@ export function ThreadInbox({
   const searchResults = useMemo(
     () =>
       searchThreadsByTitle(
-        [...pinned, ...inbox, ...snoozed, ...settled],
+        [...pinned, ...inbox, ...inactive, ...snoozed, ...settled],
         searchQuery,
       ),
-    [inbox, pinned, searchQuery, settled, snoozed],
+    [inactive, inbox, pinned, searchQuery, settled, snoozed],
   );
   const visibleSnoozed = useMemo(
     () =>
@@ -611,6 +675,7 @@ export function ThreadInbox({
         : [
             ...visiblePinned,
             ...visibleInbox,
+            ...visibleInactive,
             ...visibleSnoozed,
             ...visibleSettled,
           ],
@@ -618,6 +683,7 @@ export function ThreadInbox({
       isSearching,
       searchResults,
       visibleInbox,
+      visibleInactive,
       visiblePinned,
       visibleSettled,
       visibleSnoozed,
@@ -643,11 +709,11 @@ export function ThreadInbox({
   const wokeThreadIds = useMemo(
     () =>
       new Set(
-        [...pinned, ...inbox]
+        [...pinned, ...inbox, ...inactive]
           .filter((thread) => lifecycle.wokeFor(thread))
           .map((thread) => thread.id),
       ),
-    [inbox, lifecycle, pinned],
+    [inactive, inbox, lifecycle, pinned],
   );
 
   const scopeLabel =
@@ -719,7 +785,7 @@ export function ThreadInbox({
         result.succeededThreadIds.includes(activeThreadIdRef.current)
       ) {
         const parkedIds = new Set(result.succeededThreadIds);
-        const activeRows = [...pinned, ...inbox];
+        const activeRows = [...pinned, ...inbox, ...inactive];
         const activeIndex = activeRows.findIndex(
           (thread) => thread.id === activeThreadIdRef.current,
         );
@@ -793,7 +859,7 @@ export function ThreadInbox({
     if (!parked || activeThreadIdRef.current !== thread.id) return;
 
     const nextThread = nextThreadAfterParking(
-      [...pinned, ...inbox],
+      [...pinned, ...inbox, ...inactive],
       thread.id,
     );
     if (nextThread) {
@@ -810,6 +876,7 @@ export function ThreadInbox({
   const renderActiveThread = (
     thread: PluginSidebarThread,
     shelf: ActiveShelfKind,
+    reorderable = true,
   ) => (
     <ThreadCard
       key={thread.id}
@@ -831,8 +898,9 @@ export function ThreadInbox({
       onAcknowledgeWake={() => void lifecycle.acknowledgeWake(thread.id)}
       onSelectionClick={(event) => handleSelectionClick(thread.id, event)}
       reorder={
-        shelf === "inbox" &&
-        (activeSortMode === "activity" || activeSortMode === "created")
+        !reorderable ||
+        (shelf === "inbox" &&
+          (activeSortMode === "activity" || activeSortMode === "created"))
           ? undefined
           : threadReorderControls(thread, shelf)
       }
@@ -1029,7 +1097,29 @@ export function ThreadInbox({
                   </Shelf>
                 ) : null}
               </CollapsibleShelf>
-            ) : pinned.length === 0 ? (
+            ) : null}
+            {inactive.length > 0 ? (
+              <CollapsibleShelf
+                label="Inactive"
+                count={inactive.length}
+                expanded={expandedShelves.inactive}
+                onToggle={() =>
+                  setExpandedShelves((current) => ({
+                    ...current,
+                    inactive: !current.inactive,
+                  }))
+                }
+              >
+                <Shelf label={null}>
+                  {visibleInactive.map((thread) =>
+                    renderActiveThread(thread, "inbox", false),
+                  )}
+                </Shelf>
+              </CollapsibleShelf>
+            ) : null}
+            {pinned.length === 0 &&
+            inbox.length === 0 &&
+            inactive.length === 0 ? (
               <ActiveEmptyState />
             ) : null}
             <ParkedShelf

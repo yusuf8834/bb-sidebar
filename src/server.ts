@@ -20,6 +20,11 @@ import {
   iconPathsForHref,
   normalizeProjectIconPath,
 } from "./project-icons";
+import {
+  DEFAULT_SIDEBAR_SETTINGS,
+  SIDEBAR_SETTINGS_CHANNEL,
+  type SidebarSettingsValues,
+} from "./sidebar-settings";
 
 const migrations = [
   `CREATE TABLE IF NOT EXISTS thread_lifecycle (
@@ -43,6 +48,23 @@ const migrations = [
      path        TEXT NOT NULL,
      updated_at  INTEGER NOT NULL
    )`,
+  `CREATE TABLE IF NOT EXISTS sidebar_settings (
+     id                         INTEGER PRIMARY KEY CHECK (id = 1),
+     snooze_presets             TEXT NOT NULL,
+     inactive_threads_enabled   INTEGER NOT NULL,
+     inactive_after_hours       INTEGER NOT NULL,
+     auto_settle_inactive       INTEGER NOT NULL,
+     auto_settle_after_days     INTEGER NOT NULL,
+     auto_settle_on_merge       INTEGER NOT NULL
+   )`,
+  `CREATE TABLE IF NOT EXISTS project_icon_uploads (
+     project_id       TEXT PRIMARY KEY,
+     filename         TEXT NOT NULL,
+     mime_type        TEXT NOT NULL,
+     content_base64   TEXT NOT NULL,
+     size_bytes       INTEGER NOT NULL,
+     updated_at       INTEGER NOT NULL
+   )`,
 ];
 
 export interface StoredLifecycleRow {
@@ -59,6 +81,15 @@ interface LifecycleDbRow {
   settled_override: SettledOverride | null;
   snoozed_until: number | null;
   snoozed_at: number | null;
+}
+
+interface SidebarSettingsDbRow {
+  snooze_presets: string;
+  inactive_threads_enabled: number;
+  inactive_after_hours: number;
+  auto_settle_inactive: number;
+  auto_settle_after_days: number;
+  auto_settle_on_merge: number;
 }
 
 const threadIdSchema = z.object({ threadId: z.string().trim().min(1) });
@@ -83,6 +114,33 @@ const projectIconPathSchema = z
   .refine((path) => normalizeProjectIconPath(path) !== null, {
     message: "Choose a relative SVG, PNG, ICO, JPEG, GIF, AVIF, or WebP path",
   });
+const sidebarSettingsSchema = z
+  .object({
+    snoozePresets: z.string().trim().min(1).max(500),
+    inactiveThreadsEnabled: z.boolean(),
+    inactiveAfterHours: z.number().int().min(1).max(720),
+    autoSettleInactive: z.boolean(),
+    autoSettleAfterDays: z.number().int().min(1).max(90),
+    autoSettleOnMerge: z.boolean(),
+  })
+  .strict();
+const uploadFilenameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(255)
+  .refine(
+    (filename) =>
+      !filename.includes("/") &&
+      !filename.includes("\\") &&
+      normalizeProjectIconPath(filename) !== null,
+    { message: "Choose a supported image file" },
+  );
+const iconBase64Schema = z
+  .string()
+  .min(1)
+  .max(1_400_000)
+  .regex(/^[A-Za-z0-9+/]*={0,2}$/, "Invalid image data");
 const bulkMutationOutputSchema = z
   .object({
     succeededThreadIds: z.array(z.string()),
@@ -95,6 +153,14 @@ const bulkMutationOutputSchema = z
   .strict();
 
 export const bbSidebarRpcContract = defineRpcContract({
+  getSidebarSettings: {
+    input: z.object({}).strict(),
+    output: sidebarSettingsSchema,
+  },
+  updateSidebarSettings: {
+    input: sidebarSettingsSchema,
+    output: sidebarSettingsSchema,
+  },
   listLifecycle: {
     input: z.object({}),
     output: z.object({
@@ -169,6 +235,7 @@ export const bbSidebarRpcContract = defineRpcContract({
               id: z.string(),
               name: z.string(),
               customPath: z.string().nullable(),
+              customUploadName: z.string().nullable(),
             })
             .strict(),
         ),
@@ -191,7 +258,28 @@ export const bbSidebarRpcContract = defineRpcContract({
         path: projectIconPathSchema.nullable(),
       })
       .strict(),
-    output: z.object({ customPath: z.string().nullable() }).strict(),
+    output: z
+      .object({
+        customPath: z.string().nullable(),
+        customUploadName: z.string().nullable(),
+      })
+      .strict(),
+  },
+  uploadProjectIcon: {
+    input: z
+      .object({
+        projectId: projectIdSchema,
+        filename: uploadFilenameSchema,
+        mimeType: z.string().max(100),
+        contentBase64: iconBase64Schema,
+      })
+      .strict(),
+    output: z
+      .object({
+        customPath: z.string().nullable(),
+        customUploadName: z.string().nullable(),
+      })
+      .strict(),
   },
 });
 
@@ -201,6 +289,15 @@ export const INBOX_ORDER_CHANNEL = "inbox-order";
 interface StoredProjectIconRow {
   project_id: string;
   path: string;
+  updated_at: number;
+}
+
+interface StoredProjectIconUploadRow {
+  project_id: string;
+  filename: string;
+  mime_type: string;
+  content_base64: string;
+  size_bytes: number;
   updated_at: number;
 }
 
@@ -237,32 +334,105 @@ function iconMimeType(path: string, reported: string): string {
   return reported;
 }
 
-export default function plugin(bb: BbPluginApi) {
-  const settings = bb.settings.define({
-    snoozePresets: {
-      type: "string",
-      label: "Snooze presets (examples: 15m, 2h, Lunch=3h, 1d)",
-      default: "30m, 2h, 1d, 1w",
-    },
-    autoSettleInactive: {
-      type: "boolean",
-      label: "Auto-settle inactive threads",
-      default: true,
-    },
-    autoSettleAfterDays: {
-      type: "string",
-      label: "Days of inactivity before auto-settle (1-90)",
-      default: "3",
-    },
-    autoSettleOnMerge: {
-      type: "boolean",
-      label: "Auto-settle when a pull request merges",
-      default: true,
-    },
-  });
-
+export default async function plugin(bb: BbPluginApi) {
   const db = bb.storage.database();
   bb.storage.migrate(db, migrations);
+
+  const readSidebarSettings = (): SidebarSettingsValues => {
+    const row = db
+      .prepare(
+        `SELECT snooze_presets, inactive_threads_enabled,
+                inactive_after_hours, auto_settle_inactive,
+                auto_settle_after_days, auto_settle_on_merge
+           FROM sidebar_settings
+          WHERE id = 1`,
+      )
+      .get() as SidebarSettingsDbRow | undefined;
+    return row
+      ? {
+          snoozePresets: row.snooze_presets,
+          inactiveThreadsEnabled: row.inactive_threads_enabled === 1,
+          inactiveAfterHours: row.inactive_after_hours,
+          autoSettleInactive: row.auto_settle_inactive === 1,
+          autoSettleAfterDays: row.auto_settle_after_days,
+          autoSettleOnMerge: row.auto_settle_on_merge === 1,
+        }
+      : { ...DEFAULT_SIDEBAR_SETTINGS };
+  };
+  const writeSidebarSettings = (values: SidebarSettingsValues): void => {
+    db.prepare(
+      `INSERT INTO sidebar_settings (
+         id, snooze_presets, inactive_threads_enabled,
+         inactive_after_hours, auto_settle_inactive,
+         auto_settle_after_days, auto_settle_on_merge
+       ) VALUES (1, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         snooze_presets = excluded.snooze_presets,
+         inactive_threads_enabled = excluded.inactive_threads_enabled,
+         inactive_after_hours = excluded.inactive_after_hours,
+         auto_settle_inactive = excluded.auto_settle_inactive,
+         auto_settle_after_days = excluded.auto_settle_after_days,
+         auto_settle_on_merge = excluded.auto_settle_on_merge`,
+    ).run(
+      values.snoozePresets,
+      values.inactiveThreadsEnabled ? 1 : 0,
+      values.inactiveAfterHours,
+      values.autoSettleInactive ? 1 : 0,
+      values.autoSettleAfterDays,
+      values.autoSettleOnMerge ? 1 : 0,
+    );
+  };
+
+  const hasStoredSidebarSettings =
+    db.prepare(`SELECT 1 FROM sidebar_settings WHERE id = 1`).get() !==
+    undefined;
+  if (!hasStoredSidebarSettings) {
+    try {
+      const legacy = await bb.sdk.plugins.getSettings({
+        pluginId: bb.pluginId,
+      });
+      const values = legacy.values;
+      const hasLegacyValues = [
+        "snoozePresets",
+        "inactiveThreadsEnabled",
+        "inactiveAfterHours",
+        "autoSettleInactive",
+        "autoSettleAfterDays",
+        "autoSettleOnMerge",
+      ].some((key) => key in values);
+      const migrated = sidebarSettingsSchema.safeParse({
+        snoozePresets:
+          typeof values.snoozePresets === "string"
+            ? values.snoozePresets
+            : DEFAULT_SIDEBAR_SETTINGS.snoozePresets,
+        inactiveThreadsEnabled:
+          typeof values.inactiveThreadsEnabled === "boolean"
+            ? values.inactiveThreadsEnabled
+            : DEFAULT_SIDEBAR_SETTINGS.inactiveThreadsEnabled,
+        inactiveAfterHours:
+          typeof values.inactiveAfterHours === "string"
+            ? Number(values.inactiveAfterHours)
+            : DEFAULT_SIDEBAR_SETTINGS.inactiveAfterHours,
+        autoSettleInactive:
+          typeof values.autoSettleInactive === "boolean"
+            ? values.autoSettleInactive
+            : DEFAULT_SIDEBAR_SETTINGS.autoSettleInactive,
+        autoSettleAfterDays:
+          typeof values.autoSettleAfterDays === "string"
+            ? Number(values.autoSettleAfterDays)
+            : DEFAULT_SIDEBAR_SETTINGS.autoSettleAfterDays,
+        autoSettleOnMerge:
+          typeof values.autoSettleOnMerge === "boolean"
+            ? values.autoSettleOnMerge
+            : DEFAULT_SIDEBAR_SETTINGS.autoSettleOnMerge,
+      });
+      if (hasLegacyValues && migrated.success) {
+        writeSidebarSettings(migrated.data);
+      }
+    } catch {
+      // A new install has no previous settings generation to migrate.
+    }
+  }
 
   const projectIconCache = new Map<
     string,
@@ -283,6 +453,17 @@ export default function plugin(bb: BbPluginApi) {
         )
         .get(projectId) as StoredProjectIconRow | undefined
     )?.path ?? null;
+  const readProjectIconUpload = (
+    projectId: string,
+  ): StoredProjectIconUploadRow | null =>
+    (db
+      .prepare(
+        `SELECT project_id, filename, mime_type, content_base64,
+                size_bytes, updated_at
+           FROM project_icon_uploads
+          WHERE project_id = ?`,
+      )
+      .get(projectId) as StoredProjectIconUploadRow | undefined) ?? null;
   const clearProjectIconCache = (projectId: string): void => {
     for (const key of projectIconCache.keys()) {
       if (key.startsWith(`${projectId}\0`)) projectIconCache.delete(key);
@@ -345,6 +526,21 @@ export default function plugin(bb: BbPluginApi) {
     environmentId: string | null,
   ): Promise<ResolvedProjectIcon | null> => {
     const cacheKey = `${projectId}\0${environmentId ?? ""}`;
+    const upload = readProjectIconUpload(projectId);
+    if (upload) {
+      const icon = {
+        content: upload.content_base64,
+        contentEncoding: "base64" as const,
+        mimeType: upload.mime_type,
+        path: upload.filename,
+        sizeBytes: upload.size_bytes,
+      };
+      projectIconCache.set(cacheKey, {
+        expiresAt: Date.now() + PROJECT_ICON_CACHE_MS,
+        icon,
+      });
+      return icon;
+    }
     const candidates: string[] = [];
     const customPath = readProjectIconOverride(projectId);
     if (customPath) candidates.push(customPath);
@@ -661,10 +857,8 @@ export default function plugin(bb: BbPluginApi) {
   const evaluatePolicies = (): Promise<string[]> => {
     if (policyEvaluation !== null) return policyEvaluation;
     policyEvaluation = (async () => {
-      const [configured, threads] = await Promise.all([
-        settings.get(),
-        loadPolicyThreads(),
-      ]);
+      const configured = readSidebarSettings();
+      const threads = await loadPolicyThreads();
       const environmentIds = [
         ...new Set(
           threads.flatMap((thread) =>
@@ -680,7 +874,7 @@ export default function plugin(bb: BbPluginApi) {
       const policySettings = {
         afterDays: parseAutoSettleAfterDays(
           configured.autoSettleInactive,
-          configured.autoSettleAfterDays,
+          String(configured.autoSettleAfterDays),
         ),
         onMerge: configured.autoSettleOnMerge,
       };
@@ -713,19 +907,24 @@ export default function plugin(bb: BbPluginApi) {
     return policyEvaluation;
   };
 
-  settings.onChange(() => {
-    void evaluatePolicies().catch((error) => {
-      bb.log.error(
-        `Automatic settle evaluation failed after a settings change: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    });
-  });
-
   bb.background.schedule("auto-settle", "*/5 * * * *", async () => {
     await evaluatePolicies();
   });
 
   bb.rpc.register(bbSidebarRpcContract, {
+    async getSidebarSettings() {
+      return readSidebarSettings();
+    },
+    async updateSidebarSettings(values) {
+      writeSidebarSettings(values);
+      bb.realtime.publish(SIDEBAR_SETTINGS_CHANNEL, {});
+      void evaluatePolicies().catch((error) => {
+        bb.log.error(
+          `Automatic settle evaluation failed after a settings change: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
+      return readSidebarSettings();
+    },
     async listLifecycle() {
       return { rows: readAll() };
     },
@@ -845,6 +1044,8 @@ export default function plugin(bb: BbPluginApi) {
             id: project.id,
             name: project.name,
             customPath: readProjectIconOverride(project.id),
+            customUploadName:
+              readProjectIconUpload(project.id)?.filename ?? null,
           })),
       };
     },
@@ -879,21 +1080,79 @@ export default function plugin(bb: BbPluginApi) {
         throw new Error("Choose a relative image path inside the project");
       }
       if (normalized === null) {
-        db.prepare(`DELETE FROM project_icons WHERE project_id = ?`).run(
-          projectId,
-        );
+        db.transaction(() => {
+          db.prepare(`DELETE FROM project_icons WHERE project_id = ?`).run(
+            projectId,
+          );
+          db.prepare(
+            `DELETE FROM project_icon_uploads WHERE project_id = ?`,
+          ).run(projectId);
+        })();
       } else {
-        db.prepare(
-          `INSERT INTO project_icons (project_id, path, updated_at)
-           VALUES (?, ?, ?)
-           ON CONFLICT(project_id) DO UPDATE SET
-             path = excluded.path,
-             updated_at = excluded.updated_at`,
-        ).run(projectId, normalized, Date.now());
+        db.transaction(() => {
+          db.prepare(
+            `INSERT INTO project_icons (project_id, path, updated_at)
+             VALUES (?, ?, ?)
+             ON CONFLICT(project_id) DO UPDATE SET
+               path = excluded.path,
+               updated_at = excluded.updated_at`,
+          ).run(projectId, normalized, Date.now());
+          db.prepare(
+            `DELETE FROM project_icon_uploads WHERE project_id = ?`,
+          ).run(projectId);
+        })();
       }
       clearProjectIconCache(projectId);
       bb.realtime.publish(PROJECT_ICONS_CHANNEL, { projectId });
-      return { customPath: normalized };
+      return { customPath: normalized, customUploadName: null };
+    },
+    async uploadProjectIcon({
+      projectId,
+      filename,
+      mimeType,
+      contentBase64,
+    }) {
+      await bb.sdk.projects.get({ projectId });
+      const bytes = Buffer.from(contentBase64, "base64");
+      if (bytes.byteLength === 0 || bytes.byteLength > PROJECT_ICON_MAX_BYTES) {
+        throw new Error("Choose an image smaller than 1 MB");
+      }
+      const normalizedFilename = filename.trim();
+      const canonicalBase64 = bytes.toString("base64");
+      if (canonicalBase64 !== contentBase64) {
+        throw new Error("The selected image data is invalid");
+      }
+      const resolvedMimeType = iconMimeType(normalizedFilename, mimeType);
+      db.transaction(() => {
+        db.prepare(
+          `INSERT INTO project_icon_uploads (
+             project_id, filename, mime_type, content_base64,
+             size_bytes, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(project_id) DO UPDATE SET
+             filename = excluded.filename,
+             mime_type = excluded.mime_type,
+             content_base64 = excluded.content_base64,
+             size_bytes = excluded.size_bytes,
+             updated_at = excluded.updated_at`,
+        ).run(
+          projectId,
+          normalizedFilename,
+          resolvedMimeType,
+          canonicalBase64,
+          bytes.byteLength,
+          Date.now(),
+        );
+        db.prepare(`DELETE FROM project_icons WHERE project_id = ?`).run(
+          projectId,
+        );
+      })();
+      clearProjectIconCache(projectId);
+      bb.realtime.publish(PROJECT_ICONS_CHANNEL, { projectId });
+      return {
+        customPath: null,
+        customUploadName: normalizedFilename,
+      };
     },
   });
 

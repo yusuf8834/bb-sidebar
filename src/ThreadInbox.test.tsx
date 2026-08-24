@@ -32,7 +32,16 @@ Object.defineProperty(Document.prototype, "elementFromPoint", {
 // empty runtime first.
 const app = await loadPluginApp(() => import("../app"));
 const inbox = app.threadLists[0]!;
-const projectIconSettings = app.settingsSections[0]!;
+const sidebarSettings = app.settingsSections[0]!;
+
+const defaultSidebarSettings = {
+  snoozePresets: "30m, 2h, 1d, 1w",
+  inactiveThreadsEnabled: true,
+  inactiveAfterHours: 6,
+  autoSettleInactive: true,
+  autoSettleAfterDays: 3,
+  autoSettleOnMerge: true,
+};
 
 function thread(
   overrides: Partial<PluginSidebarThread> = {},
@@ -116,41 +125,104 @@ describe("BB Sidebar registration", () => {
     expect(inbox.title).toBe("BB Sidebar");
   });
 
-  it("registers project icon settings", () => {
-    expect(projectIconSettings.id).toBe("project-icons");
-    expect(projectIconSettings.title).toBe("Project icons");
+  it("registers one custom settings page", () => {
+    expect(app.settingsSections).toHaveLength(1);
+    expect(sidebarSettings.id).toBe("sidebar-settings");
+    expect(sidebarSettings.title).toBeUndefined();
   });
 });
 
-describe("project icon settings", () => {
-  it("saves a project-relative image choice", async () => {
-    let saved: { projectId: string; path: string | null } | null = null;
-    renderSlot(projectIconSettings, {}, {
+describe("sidebar settings", () => {
+  it("groups related controls and saves them together", async () => {
+    let saved: typeof defaultSidebarSettings | null = null;
+    renderSlot(sidebarSettings, {}, {
       rpc: {
+        getSidebarSettings: () => defaultSidebarSettings,
+        updateSidebarSettings: (input) => {
+          saved = input as typeof defaultSidebarSettings;
+          return saved;
+        },
         listProjectIconSettings: () => ({
           projects: [
-            { id: "proj_1", name: "Sidebar", customPath: null },
+            {
+              id: "proj_1",
+              name: "Sidebar",
+              customPath: null,
+              customUploadName: null,
+            },
           ],
         }),
-        searchProjectIconFiles: () => ({ paths: [] }),
-        setProjectIcon: (input) => {
-          saved = input as { projectId: string; path: string | null };
-          return { customPath: saved.path };
+      },
+    });
+
+    expect(await screen.findByText("Thread organization")).toBeDefined();
+    expect(screen.getByText("Automatic cleanup")).toBeDefined();
+    expect(screen.getByText("Project icons")).toBeDefined();
+    expect(
+      screen
+        .getByRole("switch", { name: "Inactive shelf" })
+        .querySelector("span")?.className,
+    ).toContain("left-0.5");
+
+    fireEvent.change(screen.getByLabelText("Snooze shortcuts"), {
+      target: { value: "15m, Lunch=3h" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() =>
+      expect(saved).toEqual({
+        ...defaultSidebarSettings,
+        snoozePresets: "15m, Lunch=3h",
+      }),
+    );
+  });
+
+  it("uploads a project icon from the file picker", async () => {
+    let upload:
+      | {
+          projectId: string;
+          filename: string;
+          mimeType: string;
+          contentBase64: string;
+        }
+      | null = null;
+    renderSlot(sidebarSettings, {}, {
+      rpc: {
+        getSidebarSettings: () => defaultSidebarSettings,
+        listProjectIconSettings: () => ({
+          projects: [
+            {
+              id: "proj_1",
+              name: "Sidebar",
+              customPath: null,
+              customUploadName: null,
+            },
+          ],
+        }),
+        uploadProjectIcon: (input) => {
+          upload = input as typeof upload;
+          return {
+            customPath: null,
+            customUploadName: "brand.svg",
+          };
         },
       },
     });
 
-    const input = await screen.findByPlaceholderText(
-      "Search or enter a relative path",
-    );
-    fireEvent.change(input, { target: { value: "public/brand.svg" } });
-    fireEvent.click(screen.getByRole("button", { name: "Use image" }));
+    const picker = await screen.findByLabelText("Choose project icon image");
+    fireEvent.change(picker, {
+      target: {
+        files: [new File(["<svg/>"], "brand.svg", { type: "image/svg+xml" })],
+      },
+    });
     await waitFor(() =>
-      expect(saved).toEqual({
+      expect(upload).toEqual({
         projectId: "proj_1",
-        path: "public/brand.svg",
+        filename: "brand.svg",
+        mimeType: "image/svg+xml",
+        contentBase64: "PHN2Zy8+",
       }),
     );
+    expect(screen.getByText("brand.svg")).toBeDefined();
   });
 });
 
@@ -220,6 +292,119 @@ describe("ThreadInbox", () => {
     );
     expect(within(activeShelf).getByText("Open active")).toBeDefined();
     expect(within(activeShelf).queryByText("Other active")).toBeNull();
+  });
+
+  it("moves stale unpinned threads to a collapsed Inactive shelf", () => {
+    const now = Date.now();
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({
+            id: "recent",
+            title: "Recent work",
+            updatedAt: now - 60 * 60 * 1_000,
+          }),
+          thread({
+            id: "stale",
+            title: "Stale work",
+            updatedAt: now - 7 * 60 * 60 * 1_000,
+          }),
+          thread({
+            id: "stale-pin",
+            title: "Pinned old work",
+            isPinned: true,
+            updatedAt: now - 7 * 60 * 60 * 1_000,
+          }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      settings: {
+        inactiveThreadsEnabled: true,
+        inactiveAfterHours: "6",
+      },
+      rpc: { listLifecycle: () => ({ rows: [] }) },
+    });
+
+    const active = screen.getByRole("region", { name: "Active" });
+    const inactive = screen.getByRole("region", { name: "Inactive" });
+    const pinned = screen.getByRole("region", { name: "Pinned" });
+    expect(within(active).getByText("Recent work")).toBeDefined();
+    expect(within(active).queryByText("Stale work")).toBeNull();
+    expect(within(inactive).getByText("Inactive (1)")).toBeDefined();
+    expect(within(inactive).queryByText("Stale work")).toBeNull();
+    expect(within(pinned).getByText("Pinned old work")).toBeDefined();
+
+    fireEvent.click(
+      within(inactive).getByRole("button", { expanded: false }),
+    );
+    expect(within(inactive).getByText("Stale work")).toBeDefined();
+  });
+
+  it("keeps stale threads Active when the feature is disabled", () => {
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({
+            id: "stale",
+            title: "Still active",
+            updatedAt: Date.now() - 24 * 60 * 60 * 1_000,
+          }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      settings: {
+        inactiveThreadsEnabled: false,
+        inactiveAfterHours: "6",
+      },
+      rpc: { listLifecycle: () => ({ rows: [] }) },
+    });
+
+    expect(
+      within(screen.getByRole("region", { name: "Active" })).getByText(
+        "Still active",
+      ),
+    ).toBeDefined();
+    expect(screen.queryByRole("region", { name: "Inactive" })).toBeNull();
+  });
+
+  it("uses the configured inactivity threshold", () => {
+    const now = Date.now();
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({
+            id: "seven-hours",
+            title: "Seven hours old",
+            updatedAt: now - 7 * 60 * 60 * 1_000,
+          }),
+          thread({
+            id: "nine-hours",
+            title: "Nine hours old",
+            updatedAt: now - 9 * 60 * 60 * 1_000,
+          }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      settings: {
+        inactiveThreadsEnabled: true,
+        inactiveAfterHours: "8",
+      },
+      rpc: { listLifecycle: () => ({ rows: [] }) },
+    });
+
+    expect(
+      within(screen.getByRole("region", { name: "Active" })).getByText(
+        "Seven hours old",
+      ),
+    ).toBeDefined();
+    expect(
+      within(screen.getByRole("region", { name: "Inactive" })).getByText(
+        "Inactive (1)",
+      ),
+    ).toBeDefined();
   });
 
   it("sorts active threads from the subtle header menu", async () => {
@@ -1453,35 +1638,51 @@ describe("parking threads", () => {
       sidebarThreads: {
         status: "ready" as const,
         threads: [
-          thread({ id: "thr_active", title: "Active work" }),
+          thread({ id: "thr_active", title: "Active work", updatedAt: now }),
+          thread({
+            id: "thr_inactive",
+            title: "Inactive work",
+            updatedAt: now - 7 * 60 * 60 * 1_000,
+          }),
           thread({ id: "thr_done", title: "Finished work" }),
           thread({ id: "thr_later", title: "Later work" }),
         ],
         projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      settings: {
+        inactiveThreadsEnabled: true,
+        inactiveAfterHours: "6",
       },
       rpc: { listLifecycle: () => ({ rows }) },
     };
 
     renderSlot(inbox, listProps, options);
     let activeShelf = screen.getByRole("region", { name: "Active" });
+    let inactiveShelf = screen.getByRole("region", { name: "Inactive" });
     let settledShelf = await screen.findByRole("region", { name: "Settled" });
     let snoozedShelf = await screen.findByRole("region", { name: "Snoozed" });
     fireEvent.click(
       within(activeShelf).getByRole("button", { expanded: true }),
     );
+    fireEvent.click(within(inactiveShelf).getByRole("button"));
     fireEvent.click(within(settledShelf).getByRole("button"));
     fireEvent.click(within(snoozedShelf).getByRole("button"));
     expect(within(activeShelf).queryByText("Active work")).toBeNull();
+    expect(within(inactiveShelf).getByText("Inactive work")).toBeDefined();
     expect(within(settledShelf).getByText("Finished work")).toBeDefined();
     expect(within(snoozedShelf).getByText("Later work")).toBeDefined();
 
     cleanup();
     renderSlot(inbox, listProps, options);
     activeShelf = screen.getByRole("region", { name: "Active" });
+    inactiveShelf = screen.getByRole("region", { name: "Inactive" });
     settledShelf = await screen.findByRole("region", { name: "Settled" });
     snoozedShelf = await screen.findByRole("region", { name: "Snoozed" });
     expect(
       within(activeShelf).getByRole("button", { expanded: false }),
+    ).toBeDefined();
+    expect(
+      within(inactiveShelf).getByRole("button", { expanded: true }),
     ).toBeDefined();
     expect(
       within(settledShelf).getByRole("button", { expanded: true }),
@@ -1490,6 +1691,7 @@ describe("parking threads", () => {
       within(snoozedShelf).getByRole("button", { expanded: true }),
     ).toBeDefined();
     expect(within(activeShelf).queryByText("Active work")).toBeNull();
+    expect(within(inactiveShelf).getByText("Inactive work")).toBeDefined();
     expect(within(settledShelf).getByText("Finished work")).toBeDefined();
     expect(within(snoozedShelf).getByText("Later work")).toBeDefined();
   });

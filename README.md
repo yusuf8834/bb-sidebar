@@ -15,7 +15,7 @@ A stable thread list for [bb](https://github.com/get-bb/bb). Threads stay where 
 
 - Manual ordering plus Recent activity, Date created, and Project sort modes
 - Subtle project grouping for projects with multiple active threads
-- Pinned, Snoozed, and Settled shelves
+- Pinned, Active, Inactive, Snoozed, and Settled shelves
 - Project filtering and multi-select bulk actions
 - Automatic and per-project custom favicons
 - Live status, branch, pull request, and provider details
@@ -33,6 +33,10 @@ Project icons use `t3.json`, common favicon and app icon paths, and local icon
 metadata. To pick a different image, open BB Sidebar's plugin settings and use
 the **Project icons** section. Projects without a matching image keep the
 icon-free layout.
+
+The Inactive shelf is enabled by default and moves unpinned threads after six
+hours without activity. Both the switch and hour threshold are available in
+BB Sidebar's plugin settings.
 
 ## Development
 

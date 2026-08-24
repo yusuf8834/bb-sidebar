@@ -100,27 +100,78 @@ async function loadPlugin(
 }
 
 describe("lifecycle RPC", () => {
-  it("registers the configurable snooze preset setting", async () => {
+  it("stores the grouped sidebar settings through RPC", async () => {
     const harness = await loadPlugin();
-    expect(
-      harness.inspection.registrations.settingsDescriptors.snoozePresets,
-    ).toMatchObject({
-      type: "string",
-      default: "30m, 2h, 1d, 1w",
+    expect(harness.inspection.registrations.settingsDescriptors).toEqual({});
+    await expect(
+      harness.behavior.callRpc("getSidebarSettings", {}),
+    ).resolves.toEqual({
+      snoozePresets: "30m, 2h, 1d, 1w",
+      inactiveThreadsEnabled: true,
+      inactiveAfterHours: 6,
+      autoSettleInactive: true,
+      autoSettleAfterDays: 3,
+      autoSettleOnMerge: true,
     });
     await expect(
-      harness.behavior.setSettings({ snoozePresets: "10m, 4h" }),
-    ).resolves.toBeUndefined();
-    expect(
-      harness.inspection.registrations.settingsDescriptors,
-    ).toMatchObject({
-      autoSettleInactive: { type: "boolean", default: true },
-      autoSettleAfterDays: { type: "string", default: "3" },
-      autoSettleOnMerge: { type: "boolean", default: true },
+      harness.behavior.callRpc("updateSidebarSettings", {
+        snoozePresets: "10m, 4h",
+        inactiveThreadsEnabled: false,
+        inactiveAfterHours: 12,
+        autoSettleInactive: false,
+        autoSettleAfterDays: 7,
+        autoSettleOnMerge: false,
+      }),
+    ).resolves.toEqual({
+      snoozePresets: "10m, 4h",
+      inactiveThreadsEnabled: false,
+      inactiveAfterHours: 12,
+      autoSettleInactive: false,
+      autoSettleAfterDays: 7,
+      autoSettleOnMerge: false,
+    });
+    expect(harness.inspection.realtimeSignals).toContainEqual({
+      channel: "sidebar-settings",
+      payload: {},
     });
     expect(harness.inspection.registrations.schedules).toContainEqual(
       expect.objectContaining({ name: "auto-settle", cron: "*/5 * * * *" }),
     );
+  });
+
+  it("migrates values from the previous flat settings form", async () => {
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "bb-sidebar",
+      sdk: {
+        plugins: {
+          getSettings: async () => ({
+            ok: true as const,
+            schema: {},
+            values: {
+              snoozePresets: "20m, 6h",
+              inactiveThreadsEnabled: false,
+              inactiveAfterHours: "18",
+              autoSettleInactive: false,
+              autoSettleAfterDays: "14",
+              autoSettleOnMerge: false,
+            },
+          }),
+        },
+      },
+    });
+    await plugin(bb);
+    disposers.push(() => harness.lifecycle.dispose());
+
+    await expect(
+      harness.behavior.callRpc("getSidebarSettings", {}),
+    ).resolves.toEqual({
+      snoozePresets: "20m, 6h",
+      inactiveThreadsEnabled: false,
+      inactiveAfterHours: 18,
+      autoSettleInactive: false,
+      autoSettleAfterDays: 14,
+      autoSettleOnMerge: false,
+    });
   });
 
   it("settles and restores a thread", async () => {
@@ -408,7 +459,12 @@ describe("project icons", () => {
       harness.behavior.callRpc("listProjectIconSettings", {}),
     ).resolves.toEqual({
       projects: [
-        { id: "proj_1", name: "Sidebar", customPath: null },
+        {
+          id: "proj_1",
+          name: "Sidebar",
+          customPath: null,
+          customUploadName: null,
+        },
       ],
     });
     await expect(
@@ -423,7 +479,10 @@ describe("project icons", () => {
         projectId: "proj_1",
         path: "public/brand.svg",
       }),
-    ).resolves.toEqual({ customPath: "public/brand.svg" });
+    ).resolves.toEqual({
+      customPath: "public/brand.svg",
+      customUploadName: null,
+    });
     await expect(
       harness.behavior.callRpc("listProjectIconSettings", {}),
     ).resolves.toEqual({
@@ -432,6 +491,7 @@ describe("project icons", () => {
           id: "proj_1",
           name: "Sidebar",
           customPath: "public/brand.svg",
+          customUploadName: null,
         },
       ],
     });
@@ -439,6 +499,37 @@ describe("project icons", () => {
       channel: "project-icons",
       payload: { projectId: "proj_1" },
     });
+
+    await expect(
+      harness.behavior.callRpc("uploadProjectIcon", {
+        projectId: "proj_1",
+        filename: "brand.svg",
+        mimeType: "image/svg+xml",
+        contentBase64: "PHN2Zy8+",
+      }),
+    ).resolves.toEqual({
+      customPath: null,
+      customUploadName: "brand.svg",
+    });
+    await expect(
+      harness.behavior.callRpc("listProjectIconSettings", {}),
+    ).resolves.toEqual({
+      projects: [
+        {
+          id: "proj_1",
+          name: "Sidebar",
+          customPath: null,
+          customUploadName: "brand.svg",
+        },
+      ],
+    });
+    const response = await harness.behavior.fetchHttp(
+      "GET",
+      "/project-icon?projectId=proj_1",
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("image/svg+xml");
+    await expect(response.text()).resolves.toBe("<svg/>");
   });
 
   it("serves an automatically discovered favicon through the local route", async () => {

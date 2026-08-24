@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.2.0] - 2026-08-24
+
+### Added
+
+- Added a separate Pinned shelf above Active.
+- Added an optional Inactive shelf for unpinned threads without recent activity, with a configurable hour threshold.
+- Added automatic project icon detection and per-project image uploads.
+- Added an empty state when no active threads remain.
+
+### Improved
+
+- Rebuilt the plugin settings page with related controls grouped into clear sections.
+- Added a native file picker and current-icon preview to the project icon settings.
+- Kept Pinned, Active, Inactive, Snoozed, and Settled expansion states across reloads.
+
+### Fixed
+
+- Kept the settings toggle thumb inside its track in both states.
+
 ## [0.1.3] - 2026-08-24
 
 ### Added
@@ -46,6 +65,7 @@
 
 - Initial public release.
 
+[0.2.0]: https://github.com/yusuf8834/bb-sidebar/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/yusuf8834/bb-sidebar/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/yusuf8834/bb-sidebar/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/yusuf8834/bb-sidebar/compare/v0.1.0...v0.1.1
