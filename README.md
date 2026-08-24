@@ -9,6 +9,8 @@ A stable thread list for [bb](https://github.com/get-bb/bb). Threads stay where 
 
 ![BB Sidebar in dark mode](docs/screenshots/sidebar-dark.jpeg)
 
+![BB Sidebar empty state](docs/screenshots/sidebar-empty.jpeg)
+
 </details>
 
 ## Features
