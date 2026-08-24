@@ -1177,9 +1177,12 @@ describe("ThreadInbox", () => {
     expect(screen.queryAllByRole("listitem")).toHaveLength(0);
   });
 
-  it("reports an empty inbox and a fruitless search differently", () => {
-    render([]);
-    expect(screen.getByText("No threads yet")).toBeDefined();
+  it("invites a break when there are no active threads", () => {
+    const view = render([]);
+    expect(
+      screen.getByText("All clear. Time to touch some grass."),
+    ).toBeDefined();
+    expect(view.container.querySelector("svg")).not.toBeNull();
   });
 });
 

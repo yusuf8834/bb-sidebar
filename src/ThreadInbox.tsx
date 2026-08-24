@@ -895,15 +895,12 @@ export function ThreadInbox({
           >
             Could not load threads.
           </p>
-        ) : (isSearching
-            ? searchResults.length
-            : pinned.length + inbox.length + snoozed.length + settled.length) ===
-          0 ? (
+        ) : isSearching && searchResults.length === 0 ? (
           <p
             role="status"
             className="px-2 py-6 text-center text-xs text-muted-foreground"
           >
-            {isSearching ? "No threads found" : "No threads yet"}
+            No threads found
           </p>
         ) : isSearching ? (
           <SearchResults
@@ -998,7 +995,9 @@ export function ThreadInbox({
                   </>
                 )}
               </CollapsibleShelf>
-            ) : null}
+            ) : (
+              <ActiveEmptyState />
+            )}
             <ParkedShelf
               label="Snoozed"
               threads={snoozed}
@@ -1046,6 +1045,51 @@ export function ThreadInbox({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function ActiveEmptyState() {
+  return (
+    <div
+      role="status"
+      className="flex flex-col items-center px-5 pb-7 pt-8 text-center text-muted-foreground"
+    >
+      <svg
+        viewBox="0 0 180 104"
+        className="mb-3 h-auto w-36"
+        aria-hidden="true"
+      >
+        <circle cx="132" cy="24" r="11" fill="currentColor" opacity="0.12" />
+        <path
+          d="M16 77c18-18 36-24 55-17 14 5 23 5 36-3 18-11 36-7 57 20"
+          fill="currentColor"
+          opacity="0.08"
+        />
+        <path
+          d="M12 78c22-13 43-14 64-3 16 8 31 8 45 0 16-9 31-8 47 3"
+          fill="none"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeWidth="1.5"
+          opacity="0.38"
+        />
+        <g
+          fill="none"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.5"
+          opacity="0.55"
+        >
+          <path d="M51 76c0-13-2-22-8-30M51 66c-6-3-10-7-13-12M51 61c5-5 8-10 9-16" />
+          <path d="M104 77c1-12 5-21 12-28M107 66c6-2 11-6 15-11M108 62c-2-6-2-11-1-16" />
+          <path d="M76 75c0-8-2-14-6-20M77 69c4-3 7-6 9-11" />
+        </g>
+      </svg>
+      <p className="text-xs font-medium text-foreground/75">
+        All clear. Time to touch some grass.
+      </p>
     </div>
   );
 }
