@@ -22,6 +22,7 @@ import { STATUS_SLOT_CLASS, StatusOrTime } from "./StatusSlot";
 import { threadDisplayTitle } from "./inbox";
 import { InlineThreadTitle } from "./InlineThreadTitle";
 import type { ConfiguredSnoozePreset } from "./lifecycle";
+import { ProjectFavicon } from "./ProjectFavicon";
 
 export interface ThreadReorderControls {
   disabled: boolean;
@@ -42,6 +43,7 @@ export interface ThreadReorderControls {
 export function ThreadCard({
   thread,
   projectName,
+  projectIconUrl,
   isActive,
   isSelected,
   isWoke,
@@ -57,6 +59,7 @@ export function ThreadCard({
 }: {
   thread: PluginSidebarThread;
   projectName: string | null;
+  projectIconUrl: string | null;
   isActive: boolean;
   isSelected: boolean;
   /** A snooze ended and has not yet been acknowledged. */
@@ -153,8 +156,11 @@ export function ThreadCard({
             )}
           />
           <div className="pointer-events-none relative flex h-5 items-center gap-1.5">
-            <span className="min-w-0 flex-1 truncate text-2xs font-medium text-muted-foreground">
-              {projectName ?? " "}
+            <span className="flex min-w-0 flex-1 items-center gap-1.5 text-2xs font-medium text-muted-foreground">
+              {projectName ? (
+                <ProjectFavicon src={projectIconUrl} className="size-3" />
+              ) : null}
+              <span className="min-w-0 truncate">{projectName ?? " "}</span>
             </span>
             {thread.isPinned ? (
               <Tooltip label="Unpin thread">

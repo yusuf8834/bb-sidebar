@@ -11,6 +11,7 @@ import {
   experimental_useSidebarThreads as useSidebarThreads,
   type PluginSidebarThread,
   type PluginThreadListProps,
+  useRealtime,
   useSettings,
 } from "@get-bb/plugin-sdk/app";
 import { autoAnimate } from "@formkit/auto-animate";
@@ -61,6 +62,11 @@ import {
   updateThreadSelection,
   type ThreadSelectionState,
 } from "./selection";
+import {
+  PROJECT_ICONS_CHANNEL,
+  projectIconUrl,
+} from "./project-icons";
+import { ProjectFavicon } from "./ProjectFavicon";
 
 const ALL_PROJECTS = "__all__";
 const ACTIVE_GROUPING_STORAGE_KEY = "bb-sidebar:active-grouping:v1";
@@ -100,12 +106,14 @@ function suppressNextClick(threadId: string): void {
 
 interface ShelfExpansionState {
   active: boolean;
+  pinned: boolean;
   snoozed: boolean;
   settled: boolean;
 }
 
 const DEFAULT_SHELF_EXPANSION: ShelfExpansionState = {
   active: true,
+  pinned: true,
   snoozed: false,
   settled: false,
 };
@@ -118,6 +126,8 @@ function readShelfExpansion(): ShelfExpansionState {
     return {
       // Keep Active expanded for people with the older stored shape.
       active: parsed.active !== false,
+      // Pinned became independently collapsible after the first stored shape.
+      pinned: parsed.pinned !== false,
       snoozed: parsed.snoozed === true,
       settled: parsed.settled === true,
     };
@@ -231,6 +241,10 @@ export function ThreadInbox({
   const actions = useSidebarThreadActions();
   const { values: settings } = useSettings();
   const lifecycle = useLifecycle(threads);
+  const [projectIconRevision, setProjectIconRevision] = useState(0);
+  useRealtime(PROJECT_ICONS_CHANNEL, () => {
+    setProjectIconRevision((revision) => revision + 1);
+  });
   const attachShelvesAutoAnimateRef = useListAutoAnimate<HTMLDivElement>();
   const activeThreadIdRef = useRef(activeThreadId);
   activeThreadIdRef.current = activeThreadId;
@@ -369,8 +383,17 @@ export function ThreadInbox({
   }, [dragOrder, inboxBase, inboxReorder.ids]);
   const visiblePinned = useMemo(
     () =>
-      visibleShelfThreads(pinned, expandedShelves.active, activeThreadId),
-    [activeThreadId, expandedShelves.active, pinned],
+      visibleShelfThreads(
+        pinned,
+        expandedShelves.active && expandedShelves.pinned,
+        activeThreadId,
+      ),
+    [
+      activeThreadId,
+      expandedShelves.active,
+      expandedShelves.pinned,
+      pinned,
+    ],
   );
   const visibleInbox = useMemo(
     () => visibleShelfThreads(inbox, expandedShelves.active, activeThreadId),
@@ -384,14 +407,23 @@ export function ThreadInbox({
     () => sortActiveThreads(visibleInbox, activeSortMode),
     [activeSortMode, visibleInbox],
   );
-  const activeThreadGroups = useMemo(
+  const pinnedProjectGroups = useMemo(
     () =>
       groupActiveThreadsByProject(
         visiblePinned,
+        [],
+        projectNameById,
+      ),
+    [projectNameById, visiblePinned],
+  );
+  const inboxProjectGroups = useMemo(
+    () =>
+      groupActiveThreadsByProject(
+        [],
         visibleInbox,
         projectNameById,
       ),
-    [projectNameById, visibleInbox, visiblePinned],
+    [projectNameById, visibleInbox],
   );
 
   const threadReorderControls = (
@@ -801,6 +833,7 @@ export function ThreadInbox({
       key={thread.id}
       thread={thread}
       projectName={projectNameById.get(thread.projectId) ?? null}
+      projectIconUrl={projectIconUrl(thread.projectId, projectIconRevision)}
       isActive={thread.id === activeThreadId}
       isSelected={selection.selectedIds.has(thread.id)}
       isWoke={wokeThreadIds.has(thread.id)}
@@ -867,7 +900,20 @@ export function ThreadInbox({
               className="h-7 min-w-0 flex-1 border-0 px-1.5 py-1 text-xs font-medium text-muted-foreground shadow-none hover:bg-sidebar-accent focus:ring-0"
               aria-label={`Project scope: ${scopeLabel}`}
             >
-              <SelectValue />
+              <SelectValue>
+                <span className="flex min-w-0 items-center gap-1.5">
+                  {scope !== ALL_PROJECTS ? (
+                    <ProjectFavicon
+                      src={projectIconUrl(
+                        scope,
+                        projectIconRevision,
+                      )}
+                      className="size-3"
+                    />
+                  ) : null}
+                  <span className="truncate">{scopeLabel}</span>
+                </span>
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={ALL_PROJECTS} className="text-xs">
@@ -879,7 +925,16 @@ export function ThreadInbox({
                   value={project.id}
                   className="text-xs"
                 >
-                  {project.name}
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <ProjectFavicon
+                      src={projectIconUrl(
+                        project.id,
+                        projectIconRevision,
+                      )}
+                      className="size-3"
+                    />
+                    <span className="truncate">{project.name}</span>
+                  </span>
                 </SelectItem>
               ))}
             </SelectContent>
@@ -906,6 +961,7 @@ export function ThreadInbox({
           <SearchResults
             threads={searchResults}
             projectNameById={projectNameById}
+            projectIconRevision={projectIconRevision}
             activeThreadId={activeThreadId}
             now={now}
             wokeThreadIds={wokeThreadIds}
@@ -957,43 +1013,47 @@ export function ThreadInbox({
                   </Select>
                 }
               >
-                {activeSortMode === "project" ? (
-                  <div
-                    aria-label="Active threads grouped by project"
-                    className="flex flex-col gap-1.5"
+                {(expandedShelves.active && pinned.length > 0) ||
+                visiblePinned.length > 0 ? (
+                  <CollapsibleShelf
+                    label="Pinned"
+                    count={pinned.length}
+                    expanded={expandedShelves.pinned}
+                    onToggle={() =>
+                      setExpandedShelves((current) => ({
+                        ...current,
+                        pinned: !current.pinned,
+                      }))
+                    }
                   >
-                    {activeThreadGroups.map((group) => (
-                      <ActiveProjectGroup
-                        key={group.projectId}
-                        projectName={
-                          projectNameById.get(group.projectId) ?? "Project"
-                        }
-                        threadCount={group.entries.length}
-                      >
-                        {group.entries.map(({ thread, shelf }) =>
-                          renderActiveThread(thread, shelf),
-                        )}
-                      </ActiveProjectGroup>
-                    ))}
-                  </div>
-                ) : (
-                  <>
-                    {visiblePinned.length > 0 ? (
-                      <Shelf label="Pinned">
+                    {activeSortMode === "project" ? (
+                      <ProjectGroups
+                        groups={pinnedProjectGroups}
+                        projectNameById={projectNameById}
+                        renderThread={renderActiveThread}
+                      />
+                    ) : (
+                      <Shelf label={null}>
                         {sortedVisiblePinned.map((thread) =>
                           renderActiveThread(thread, "pinned"),
                         )}
                       </Shelf>
-                    ) : null}
-                    {visibleInbox.length > 0 ? (
-                      <Shelf label={pinned.length > 0 ? "Inbox" : null}>
-                        {sortedVisibleInbox.map((thread) =>
-                          renderActiveThread(thread, "inbox"),
-                        )}
-                      </Shelf>
-                    ) : null}
-                  </>
-                )}
+                    )}
+                  </CollapsibleShelf>
+                ) : null}
+                {activeSortMode === "project" ? (
+                  <ProjectGroups
+                    groups={inboxProjectGroups}
+                    projectNameById={projectNameById}
+                    renderThread={renderActiveThread}
+                  />
+                ) : visibleInbox.length > 0 ? (
+                  <Shelf label={null}>
+                    {sortedVisibleInbox.map((thread) =>
+                      renderActiveThread(thread, "inbox"),
+                    )}
+                  </Shelf>
+                ) : null}
               </CollapsibleShelf>
             ) : (
               <ActiveEmptyState />
@@ -1017,6 +1077,7 @@ export function ThreadInbox({
               onNavigate={onNavigate}
               selectedThreadIds={selection.selectedIds}
               onSelectionClick={handleSelectionClick}
+              projectIconRevision={projectIconRevision}
             />
             <ParkedShelf
               label="Settled"
@@ -1037,6 +1098,7 @@ export function ThreadInbox({
               onNavigate={onNavigate}
               selectedThreadIds={selection.selectedIds}
               onSelectionClick={handleSelectionClick}
+              projectIconRevision={projectIconRevision}
               settledLimit={settledLimit}
               onLoadMore={() =>
                 setSettledLimit((limit) => limit + SETTLED_PAGE_SIZE)
@@ -1113,6 +1175,7 @@ function ParkedShelf({
   onNavigate,
   selectedThreadIds,
   onSelectionClick,
+  projectIconRevision,
   settledLimit,
   onLoadMore,
 }: {
@@ -1128,6 +1191,7 @@ function ParkedShelf({
   snoozePresets: readonly ConfiguredSnoozePreset[];
   onNavigate: () => void;
   selectedThreadIds: ReadonlySet<string>;
+  projectIconRevision: number;
   onSelectionClick: (
     threadId: string,
     event: ReactMouseEvent<HTMLAnchorElement>,
@@ -1154,6 +1218,10 @@ function ParkedShelf({
             key={thread.id}
             thread={thread}
             projectName={projectNameById?.get(thread.projectId) ?? null}
+            projectIconUrl={projectIconUrl(
+              thread.projectId,
+              projectIconRevision,
+            )}
             isActive={thread.id === activeThreadId}
             isSelected={selectedThreadIds.has(thread.id)}
             shelf={shelf}
@@ -1259,6 +1327,35 @@ function ActiveProjectGroup({
   );
 }
 
+function ProjectGroups({
+  groups,
+  projectNameById,
+  renderThread,
+}: {
+  groups: readonly ActiveThreadGroup[];
+  projectNameById: ReadonlyMap<string, string>;
+  renderThread: (
+    thread: PluginSidebarThread,
+    shelf: ActiveShelfKind,
+  ) => React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      {groups.map((group) => (
+        <ActiveProjectGroup
+          key={group.projectId}
+          projectName={projectNameById.get(group.projectId) ?? "Project"}
+          threadCount={group.entries.length}
+        >
+          {group.entries.map(({ thread, shelf }) =>
+            renderThread(thread, shelf),
+          )}
+        </ActiveProjectGroup>
+      ))}
+    </div>
+  );
+}
+
 function Shelf({
   label,
   children,
@@ -1268,8 +1365,8 @@ function Shelf({
 }) {
   const attachListAutoAnimateRef = useListAutoAnimate<HTMLUListElement>();
   return (
-    // A named section is exposed as a landmark region; an unnamed one is not,
-    // which is exactly right for the single unlabelled inbox list.
+    // A named section is exposed as a landmark region; the ordinary active
+    // rows stay in an unnamed list beneath Pinned.
     <section {...(label ? { "aria-label": label } : {})}>
       {label ? (
         <h2 className={cn("flex items-center gap-2 px-2.5 pb-1 pt-3")}>

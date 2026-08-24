@@ -8,8 +8,16 @@ import { definePluginApp } from "@get-bb/plugin-sdk/app";
 import { ThreadInbox } from "./src/ThreadInbox";
 import { ParentChip } from "./src/ParentChip";
 import { SubagentsChip } from "./src/SubagentsChip";
+import { ProjectIconSettings } from "./src/ProjectIconSettings";
 
 export default definePluginApp((app) => {
+  app.slots.settingsSection({
+    id: "project-icons",
+    title: "Project icons",
+    description: "Choose a project image or use automatic favicon detection.",
+    component: ProjectIconSettings,
+  });
+
   app.slots.experimental_threadList({
     id: "inbox",
     title: "BB Sidebar",

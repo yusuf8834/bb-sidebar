@@ -12,6 +12,8 @@ import {
 import { cn } from "./lib/utils";
 import { STATUS_SLOT_CLASS, StatusOrTime } from "./StatusSlot";
 import { threadDisplayTitle } from "./inbox";
+import { ProjectFavicon } from "./ProjectFavicon";
+import { projectIconUrl } from "./project-icons";
 
 /**
  * Search is a separate flat mode. A parked match must not disappear behind
@@ -24,6 +26,7 @@ import { threadDisplayTitle } from "./inbox";
 export function SearchResults({
   threads,
   projectNameById,
+  projectIconRevision,
   activeThreadId,
   now,
   wokeThreadIds,
@@ -34,6 +37,7 @@ export function SearchResults({
 }: {
   threads: readonly PluginSidebarThread[];
   projectNameById: ReadonlyMap<string, string>;
+  projectIconRevision: number;
   activeThreadId: string | null;
   now: number;
   wokeThreadIds: ReadonlySet<string>;
@@ -98,6 +102,10 @@ export function SearchResults({
           key={thread.id}
           thread={thread}
           projectName={projectNameById.get(thread.projectId) ?? null}
+          projectIconUrl={projectIconUrl(
+            thread.projectId,
+            projectIconRevision,
+          )}
           isActive={thread.id === activeThreadId}
           isHighlighted={highlightedIndex === index}
           isSelected={selectedThreadIds.has(thread.id)}
@@ -119,6 +127,7 @@ export function SearchResults({
 function SearchResultRow({
   thread,
   projectName,
+  projectIconUrl,
   isActive,
   isHighlighted,
   isSelected,
@@ -132,6 +141,7 @@ function SearchResultRow({
 }: {
   thread: PluginSidebarThread;
   projectName: string | null;
+  projectIconUrl: string | null;
   isActive: boolean;
   isHighlighted: boolean;
   isSelected: boolean;
@@ -182,8 +192,9 @@ function SearchResultRow({
       >
         <span className="min-w-0 flex-1 truncate">{title}</span>
         {projectName ? (
-          <span className="max-w-24 shrink-0 truncate text-2xs text-muted-foreground/70">
-            {projectName}
+          <span className="flex max-w-28 shrink-0 items-center gap-1.5 text-2xs text-muted-foreground/70">
+            <ProjectFavicon src={projectIconUrl} className="size-3" />
+            <span className="min-w-0 truncate">{projectName}</span>
           </span>
         ) : null}
         <span

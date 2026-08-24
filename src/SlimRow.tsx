@@ -12,6 +12,7 @@ import { threadDisplayTitle } from "./inbox";
 import { snoozeWakeLabel } from "./lifecycle";
 import type { ConfiguredSnoozePreset } from "./lifecycle";
 import { InlineThreadTitle } from "./InlineThreadTitle";
+import { ProjectFavicon } from "./ProjectFavicon";
 
 /**
  * A parked thread: one line instead of a card. Density comes from the user
@@ -23,6 +24,7 @@ import { InlineThreadTitle } from "./InlineThreadTitle";
 export function SlimRow({
   thread,
   projectName,
+  projectIconUrl,
   isActive,
   isSelected,
   shelf,
@@ -36,6 +38,7 @@ export function SlimRow({
 }: {
   thread: PluginSidebarThread;
   projectName: string | null;
+  projectIconUrl: string | null;
   isActive: boolean;
   isSelected: boolean;
   shelf: "snoozed" | "settled";
@@ -102,6 +105,7 @@ export function SlimRow({
           >
             {projectName && !isRenaming ? (
               <>
+                <ProjectFavicon src={projectIconUrl} className="size-3" />
                 <span
                   className={cn(
                     "max-w-[40%] shrink truncate",

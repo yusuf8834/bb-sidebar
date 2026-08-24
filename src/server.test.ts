@@ -11,6 +11,29 @@ interface LifecycleListResult {
 
 const disposers: Array<() => Promise<void>> = [];
 
+function standardProject() {
+  return {
+    id: "proj_1",
+    name: "Sidebar",
+    kind: "standard" as const,
+    gitRemoteUrl: null,
+    createdAt: 1,
+    updatedAt: 1,
+    sources: [
+      {
+        id: "source_1",
+        projectId: "proj_1",
+        type: "local_path" as const,
+        hostId: "host_1",
+        path: "/workspace/sidebar",
+        isDefault: true,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ],
+  };
+}
+
 function availablePullRequest(
   state: "closed" | "draft" | "merged" | "open",
   updatedAt = new Date().toISOString(),
@@ -344,6 +367,132 @@ describe("lifecycle RPC", () => {
     await expect(
       harness.behavior.callRpc("listLifecycle", {}),
     ).resolves.toEqual({ rows: [] });
+  });
+});
+
+describe("project icons", () => {
+  it("stores per-project choices and searches only supported image files", async () => {
+    const project = standardProject();
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "bb-sidebar",
+      sdk: {
+        projects: {
+          get: async () => project,
+          list: async () => [project],
+          paths: async () => ({
+            paths: [
+              {
+                kind: "file" as const,
+                name: "brand.svg",
+                path: "public/brand.svg",
+                positions: [],
+                score: 1,
+              },
+              {
+                kind: "file" as const,
+                name: "readme.md",
+                path: "README.md",
+                positions: [],
+                score: 0.5,
+              },
+            ],
+            truncated: false,
+          }),
+        },
+      },
+    });
+    await plugin(bb);
+    disposers.push(() => harness.lifecycle.dispose());
+
+    await expect(
+      harness.behavior.callRpc("listProjectIconSettings", {}),
+    ).resolves.toEqual({
+      projects: [
+        { id: "proj_1", name: "Sidebar", customPath: null },
+      ],
+    });
+    await expect(
+      harness.behavior.callRpc("searchProjectIconFiles", {
+        projectId: "proj_1",
+        query: "brand",
+      }),
+    ).resolves.toEqual({ paths: ["public/brand.svg"] });
+
+    await expect(
+      harness.behavior.callRpc("setProjectIcon", {
+        projectId: "proj_1",
+        path: "public/brand.svg",
+      }),
+    ).resolves.toEqual({ customPath: "public/brand.svg" });
+    await expect(
+      harness.behavior.callRpc("listProjectIconSettings", {}),
+    ).resolves.toEqual({
+      projects: [
+        {
+          id: "proj_1",
+          name: "Sidebar",
+          customPath: "public/brand.svg",
+        },
+      ],
+    });
+    expect(harness.inspection.realtimeSignals).toContainEqual({
+      channel: "project-icons",
+      payload: { projectId: "proj_1" },
+    });
+  });
+
+  it("serves an automatically discovered favicon through the local route", async () => {
+    const project = standardProject();
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "bb-sidebar",
+      sdk: {
+        projects: {
+          get: async () => project,
+          fileContent: async ({ path }) => {
+            if (path !== "favicon.svg") throw new Error("not found");
+            return {
+              content: '<svg xmlns="http://www.w3.org/2000/svg"/>',
+              contentEncoding: "utf8" as const,
+              mimeType: "image/svg+xml",
+              sizeBytes: 46,
+            };
+          },
+        },
+      },
+    });
+    await plugin(bb);
+    disposers.push(() => harness.lifecycle.dispose());
+
+    const [response, concurrentResponse] = await Promise.all([
+      harness.behavior.fetchHttp(
+        "GET",
+        "/project-icon?projectId=proj_1",
+      ),
+      harness.behavior.fetchHttp(
+        "GET",
+        "/project-icon?projectId=proj_1",
+      ),
+    ]);
+    expect(response.status).toBe(200);
+    expect(concurrentResponse.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("image/svg+xml");
+    await expect(response.text()).resolves.toContain("<svg");
+    expect(harness.inspection.sdk.callsTo("projects.fileContent")).toEqual([
+      [
+        {
+          projectId: "proj_1",
+          hostId: "host_1",
+          path: "t3.json",
+        },
+      ],
+      [
+        {
+          projectId: "proj_1",
+          hostId: "host_1",
+          path: "favicon.svg",
+        },
+      ],
+    ]);
   });
 });
 

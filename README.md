@@ -17,6 +17,7 @@ A stable thread list for [bb](https://github.com/get-bb/bb). Threads stay where 
 - Subtle project grouping for projects with multiple active threads
 - Pinned, Snoozed, and Settled shelves
 - Project filtering and multi-select bulk actions
+- Automatic and per-project custom favicons
 - Live status, branch, pull request, and provider details
 - Native bb navigation, split, rename, archive, and delete flows
 
@@ -27,6 +28,11 @@ bb plugin install git:https://github.com/yusuf8834/bb-sidebar.git
 ```
 
 Then choose **BB Sidebar** under **Settings > Appearance > Sidebar**.
+
+Project icons use `t3.json`, common favicon and app icon paths, and local icon
+metadata. To pick a different image, open BB Sidebar's plugin settings and use
+the **Project icons** section. Projects without a matching image keep the
+icon-free layout.
 
 ## Development
 

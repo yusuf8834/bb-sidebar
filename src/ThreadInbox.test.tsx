@@ -32,6 +32,7 @@ Object.defineProperty(Document.prototype, "elementFromPoint", {
 // empty runtime first.
 const app = await loadPluginApp(() => import("../app"));
 const inbox = app.threadLists[0]!;
+const projectIconSettings = app.settingsSections[0]!;
 
 function thread(
   overrides: Partial<PluginSidebarThread> = {},
@@ -114,9 +115,74 @@ describe("BB Sidebar registration", () => {
     expect(inbox.id).toBe("inbox");
     expect(inbox.title).toBe("BB Sidebar");
   });
+
+  it("registers project icon settings", () => {
+    expect(projectIconSettings.id).toBe("project-icons");
+    expect(projectIconSettings.title).toBe("Project icons");
+  });
+});
+
+describe("project icon settings", () => {
+  it("saves a project-relative image choice", async () => {
+    let saved: { projectId: string; path: string | null } | null = null;
+    renderSlot(projectIconSettings, {}, {
+      rpc: {
+        listProjectIconSettings: () => ({
+          projects: [
+            { id: "proj_1", name: "Sidebar", customPath: null },
+          ],
+        }),
+        searchProjectIconFiles: () => ({ paths: [] }),
+        setProjectIcon: (input) => {
+          saved = input as { projectId: string; path: string | null };
+          return { customPath: saved.path };
+        },
+      },
+    });
+
+    const input = await screen.findByPlaceholderText(
+      "Search or enter a relative path",
+    );
+    fireEvent.change(input, { target: { value: "public/brand.svg" } });
+    fireEvent.click(screen.getByRole("button", { name: "Use image" }));
+    await waitFor(() =>
+      expect(saved).toEqual({
+        projectId: "proj_1",
+        path: "public/brand.svg",
+      }),
+    );
+  });
 });
 
 describe("ThreadInbox", () => {
+  it("loads a project favicon beside the project name", async () => {
+    const view = render([
+      thread({
+        id: "icon-thread",
+        environment: {
+          id: "env_1",
+          name: "main",
+          branchName: "main",
+          workspaceDisplayKind: "other",
+        },
+      }),
+    ]);
+
+    const preload = await waitFor(() => {
+      const image = view.container.querySelector<HTMLImageElement>(
+        'img[src*="project-icon"]',
+      );
+      expect(image).not.toBeNull();
+      return image!;
+    });
+    expect(preload.src).toContain("projectId=proj_1");
+    expect(preload.src).not.toContain("environmentId");
+    fireEvent.load(preload);
+    expect(
+      view.container.querySelector('img.object-contain[src*="project-icon"]'),
+    ).not.toBeNull();
+  });
+
   it("shows active threads in a collapsible Active shelf", () => {
     render([
       thread({ id: "a", title: "First active" }),
@@ -571,13 +637,28 @@ describe("ThreadInbox", () => {
     expect(bulkInput!.snoozedUntil).toBeGreaterThan(Date.now());
   });
 
-  it("separates pinned threads from the inbox", () => {
+  it("keeps a collapsible pinned block above unpinned active rows", () => {
     render([
       thread({ id: "a", title: "Plain" }),
       thread({ id: "b", title: "Stuck", isPinned: true }),
     ]);
-    const pinned = screen.getByRole("region", { name: /pinned/i });
+
+    const active = screen.getByRole("region", { name: "Active" });
+    const pinned = within(active).getByRole("region", { name: "Pinned" });
+    expect(
+      within(active)
+        .getAllByRole("listitem")
+        .map((row) => row.textContent),
+    ).toEqual([
+      expect.stringContaining("Stuck"),
+      expect.stringContaining("Plain"),
+    ]);
+    expect(within(active).queryByText("Inbox")).toBeNull();
     expect(within(pinned).getByText("Stuck")).toBeDefined();
+    fireEvent.click(within(pinned).getByRole("button", { expanded: true }));
+    expect(within(pinned).getByText("Pinned (1)")).toBeDefined();
+    expect(within(pinned).queryByText("Stuck")).toBeNull();
+    expect(within(active).getByText("Plain")).toBeDefined();
   });
 
   it("keeps pinned threads in the host's persisted order", () => {

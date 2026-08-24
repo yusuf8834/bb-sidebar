@@ -13,6 +13,13 @@ import {
   type SettledOverride,
 } from "./auto-settle";
 import { runBulkAction } from "./bulk-actions";
+import {
+  PROJECT_ICON_CANDIDATES,
+  PROJECT_ICONS_CHANNEL,
+  extractProjectIconHref,
+  iconPathsForHref,
+  normalizeProjectIconPath,
+} from "./project-icons";
 
 const migrations = [
   `CREATE TABLE IF NOT EXISTS thread_lifecycle (
@@ -31,6 +38,11 @@ const migrations = [
   `UPDATE thread_lifecycle
       SET settled_override = 'settled'
     WHERE settled_at IS NOT NULL AND settled_override IS NULL`,
+  `CREATE TABLE IF NOT EXISTS project_icons (
+     project_id  TEXT PRIMARY KEY,
+     path        TEXT NOT NULL,
+     updated_at  INTEGER NOT NULL
+   )`,
 ];
 
 export interface StoredLifecycleRow {
@@ -62,6 +74,15 @@ const orderedThreadIdsSchema = z
     }
   });
 const bulkThreadIdsSchema = orderedThreadIdsSchema.min(1);
+const projectIdSchema = z.string().trim().min(1);
+const projectIconPathSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(1_000)
+  .refine((path) => normalizeProjectIconPath(path) !== null, {
+    message: "Choose a relative SVG, PNG, ICO, JPEG, GIF, AVIF, or WebP path",
+  });
 const bulkMutationOutputSchema = z
   .object({
     succeededThreadIds: z.array(z.string()),
@@ -138,11 +159,83 @@ export const bbSidebarRpcContract = defineRpcContract({
     input: z.object({}).strict(),
     output: z.object({ changedThreadIds: z.array(z.string()) }).strict(),
   },
+  listProjectIconSettings: {
+    input: z.object({}).strict(),
+    output: z
+      .object({
+        projects: z.array(
+          z
+            .object({
+              id: z.string(),
+              name: z.string(),
+              customPath: z.string().nullable(),
+            })
+            .strict(),
+        ),
+      })
+      .strict(),
+  },
+  searchProjectIconFiles: {
+    input: z
+      .object({
+        projectId: projectIdSchema,
+        query: z.string().trim().max(200),
+      })
+      .strict(),
+    output: z.object({ paths: z.array(z.string()) }).strict(),
+  },
+  setProjectIcon: {
+    input: z
+      .object({
+        projectId: projectIdSchema,
+        path: projectIconPathSchema.nullable(),
+      })
+      .strict(),
+    output: z.object({ customPath: z.string().nullable() }).strict(),
+  },
 });
 
 /** Channel the frontend re-reads on. */
 export const LIFECYCLE_CHANNEL = "lifecycle";
 export const INBOX_ORDER_CHANNEL = "inbox-order";
+interface StoredProjectIconRow {
+  project_id: string;
+  path: string;
+  updated_at: number;
+}
+
+interface ResolvedProjectIcon {
+  content: string;
+  contentEncoding: "base64" | "utf8";
+  mimeType: string;
+  path: string;
+  sizeBytes: number;
+}
+
+const PROJECT_ICON_SOURCE_FILES = [
+  "index.html",
+  "public/index.html",
+  "app/routes/__root.tsx",
+  "src/routes/__root.tsx",
+  "app/root.tsx",
+  "src/root.tsx",
+  "src/index.html",
+] as const;
+const PROJECT_ICON_MAX_BYTES = 1_000_000;
+const PROJECT_ICON_CACHE_MS = 5 * 60_000;
+const PROJECT_ICON_MISS_CACHE_MS = 30_000;
+
+function iconMimeType(path: string, reported: string): string {
+  const lower = path.toLowerCase();
+  if (lower.endsWith(".svg")) return "image/svg+xml";
+  if (lower.endsWith(".png")) return "image/png";
+  if (lower.endsWith(".ico")) return "image/x-icon";
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+  if (lower.endsWith(".gif")) return "image/gif";
+  if (lower.endsWith(".avif")) return "image/avif";
+  if (lower.endsWith(".webp")) return "image/webp";
+  return reported;
+}
 
 export default function plugin(bb: BbPluginApi) {
   const settings = bb.settings.define({
@@ -170,6 +263,191 @@ export default function plugin(bb: BbPluginApi) {
 
   const db = bb.storage.database();
   bb.storage.migrate(db, migrations);
+
+  const projectIconCache = new Map<
+    string,
+    { expiresAt: number; icon: ResolvedProjectIcon | null }
+  >();
+  const pendingProjectIconResolutions = new Map<
+    string,
+    Promise<ResolvedProjectIcon | null>
+  >();
+  const defaultProjectHostIds = new Map<string, Promise<string | null>>();
+  const readProjectIconOverride = (projectId: string): string | null =>
+    (
+      db
+        .prepare(
+          `SELECT project_id, path, updated_at
+             FROM project_icons
+            WHERE project_id = ?`,
+        )
+        .get(projectId) as StoredProjectIconRow | undefined
+    )?.path ?? null;
+  const clearProjectIconCache = (projectId: string): void => {
+    for (const key of projectIconCache.keys()) {
+      if (key.startsWith(`${projectId}\0`)) projectIconCache.delete(key);
+    }
+  };
+
+  const defaultProjectHostId = async (
+    projectId: string,
+  ): Promise<string | null> => {
+    let pending = defaultProjectHostIds.get(projectId);
+    if (!pending) {
+      pending = bb.sdk.projects.get({ projectId }).then(
+        (project) =>
+          project.sources.find((source) => source.isDefault)?.hostId ??
+          project.sources[0]?.hostId ??
+          null,
+      );
+      defaultProjectHostIds.set(projectId, pending);
+      void pending.catch(() => defaultProjectHostIds.delete(projectId));
+    }
+    return pending;
+  };
+
+  const readProjectFile = async (
+    projectId: string,
+    environmentId: string | null,
+    path: string,
+  ) => {
+    if (environmentId) {
+      return bb.sdk.projects.fileContent({ projectId, environmentId, path });
+    }
+    const hostId = await defaultProjectHostId(projectId);
+    return hostId
+      ? bb.sdk.projects.fileContent({ projectId, hostId, path })
+      : bb.sdk.projects.fileContent({ projectId, path });
+  };
+
+  const tryProjectIcon = async (
+    projectId: string,
+    environmentId: string | null,
+    path: string,
+  ): Promise<ResolvedProjectIcon | null> => {
+    const normalized = normalizeProjectIconPath(path);
+    if (!normalized) return null;
+    try {
+      const file = await readProjectFile(projectId, environmentId, normalized);
+      if (file.sizeBytes > PROJECT_ICON_MAX_BYTES) return null;
+      return {
+        ...file,
+        mimeType: iconMimeType(normalized, file.mimeType),
+        path: normalized,
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  const resolveProjectIconUncached = async (
+    projectId: string,
+    environmentId: string | null,
+  ): Promise<ResolvedProjectIcon | null> => {
+    const cacheKey = `${projectId}\0${environmentId ?? ""}`;
+    const candidates: string[] = [];
+    const customPath = readProjectIconOverride(projectId);
+    if (customPath) candidates.push(customPath);
+    try {
+      const projectFile = await readProjectFile(
+        projectId,
+        environmentId,
+        "t3.json",
+      );
+      if (
+        projectFile.contentEncoding === "utf8" &&
+        projectFile.sizeBytes <= 100_000
+      ) {
+        const parsed = JSON.parse(projectFile.content) as { iconPath?: unknown };
+        if (typeof parsed.iconPath === "string") {
+          candidates.push(parsed.iconPath);
+        }
+      }
+    } catch {
+      // t3.json is optional.
+    }
+    candidates.push(...PROJECT_ICON_CANDIDATES);
+
+    let icon: ResolvedProjectIcon | null = null;
+    for (const candidate of new Set(candidates)) {
+      icon = await tryProjectIcon(projectId, environmentId, candidate);
+      if (icon) break;
+    }
+
+    if (!icon) {
+      for (const sourcePath of PROJECT_ICON_SOURCE_FILES) {
+        try {
+          const source = await readProjectFile(
+            projectId,
+            environmentId,
+            sourcePath,
+          );
+          if (
+            source.contentEncoding !== "utf8" ||
+            source.sizeBytes > PROJECT_ICON_MAX_BYTES
+          ) {
+            continue;
+          }
+          const href = extractProjectIconHref(source.content);
+          if (!href) continue;
+          for (const path of iconPathsForHref(href)) {
+            icon = await tryProjectIcon(projectId, environmentId, path);
+            if (icon) break;
+          }
+          if (icon) break;
+        } catch {
+          // Each source file is optional.
+        }
+      }
+    }
+
+    projectIconCache.set(cacheKey, {
+      expiresAt:
+        Date.now() + (icon ? PROJECT_ICON_CACHE_MS : PROJECT_ICON_MISS_CACHE_MS),
+      icon,
+    });
+    return icon;
+  };
+
+  const resolveProjectIcon = (
+    projectId: string,
+    environmentId: string | null,
+  ): Promise<ResolvedProjectIcon | null> => {
+    const cacheKey = `${projectId}\0${environmentId ?? ""}`;
+    const cached = projectIconCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return Promise.resolve(cached.icon);
+    }
+    const pending = pendingProjectIconResolutions.get(cacheKey);
+    if (pending) return pending;
+    const resolution = resolveProjectIconUncached(
+      projectId,
+      environmentId,
+    ).finally(() => pendingProjectIconResolutions.delete(cacheKey));
+    pendingProjectIconResolutions.set(cacheKey, resolution);
+    return resolution;
+  };
+
+  bb.http.route("GET", "/project-icon", async (context) => {
+    const projectId = context.req.query("projectId")?.trim();
+    const environmentId = context.req.query("environmentId")?.trim() || null;
+    if (!projectId) return context.text("Missing projectId", 400);
+    const icon = await resolveProjectIcon(projectId, environmentId);
+    if (!icon) return context.body(null, 404, { "cache-control": "no-store" });
+    const body =
+      icon.contentEncoding === "base64"
+        ? Uint8Array.from(Buffer.from(icon.content, "base64")).buffer
+        : icon.content;
+    return new Response(body, {
+      headers: {
+        "cache-control": "private, max-age=0, must-revalidate",
+        "content-security-policy":
+          "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+        "content-type": icon.mimeType,
+        "x-content-type-options": "nosniff",
+      },
+    });
+  });
 
   const readAll = (): StoredLifecycleRow[] =>
     (
@@ -557,6 +835,65 @@ export default function plugin(bb: BbPluginApi) {
     },
     async evaluateAutoSettle() {
       return { changedThreadIds: await evaluatePolicies() };
+    },
+    async listProjectIconSettings() {
+      const projects = await bb.sdk.projects.list();
+      return {
+        projects: projects
+          .filter((project) => project.kind === "standard")
+          .map((project) => ({
+            id: project.id,
+            name: project.name,
+            customPath: readProjectIconOverride(project.id),
+          })),
+      };
+    },
+    async searchProjectIconFiles({ projectId, query }) {
+      const hostId = await defaultProjectHostId(projectId);
+      const request = {
+        projectId,
+        includeFiles: "true" as const,
+        includeDirectories: "false" as const,
+        limit: "100",
+        query,
+      };
+      const result = hostId
+        ? await bb.sdk.projects.paths({ ...request, hostId })
+        : await bb.sdk.projects.paths(request);
+      return {
+        paths: [
+          ...new Set(
+            result.paths.flatMap((entry) => {
+              if (entry.kind !== "file") return [];
+              const path = normalizeProjectIconPath(entry.path);
+              return path ? [path] : [];
+            }),
+          ),
+        ].slice(0, 30),
+      };
+    },
+    async setProjectIcon({ projectId, path }) {
+      await bb.sdk.projects.get({ projectId });
+      const normalized = path === null ? null : normalizeProjectIconPath(path);
+      if (path !== null && normalized === null) {
+        throw new Error("Choose a relative image path inside the project");
+      }
+      if (normalized === null) {
+        db.prepare(`DELETE FROM project_icons WHERE project_id = ?`).run(
+          projectId,
+        );
+      } else {
+        db.prepare(
+          `INSERT INTO project_icons (project_id, path, updated_at)
+           VALUES (?, ?, ?)
+           ON CONFLICT(project_id) DO UPDATE SET
+             path = excluded.path,
+             updated_at = excluded.updated_at`,
+        ).run(projectId, normalized, Date.now());
+      }
+      clearProjectIconCache(projectId);
+      bb.realtime.publish(PROJECT_ICONS_CHANNEL, { projectId });
+      return { customPath: normalized };
     },
   });
 
