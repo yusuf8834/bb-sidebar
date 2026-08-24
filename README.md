@@ -2,7 +2,14 @@
 
 A stable thread list for [bb](https://github.com/get-bb/bb). Threads stay where you put them while status, snooze, settle, and bulk actions remain close at hand.
 
-![BB Sidebar running in bb](docs/screenshots/sidebar.png)
+![BB Sidebar in light mode](docs/screenshots/sidebar-light.jpeg)
+
+<details>
+<summary>More screenshots</summary>
+
+![BB Sidebar in dark mode](docs/screenshots/sidebar-dark.jpeg)
+
+</details>
 
 ## Features
 
