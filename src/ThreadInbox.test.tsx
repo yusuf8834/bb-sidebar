@@ -315,6 +315,33 @@ describe("ThreadInbox", () => {
     );
   });
 
+  it("outlines only project groups with more than one thread", () => {
+    window.localStorage.setItem("bb-sidebar:active-sort:v1", "project");
+    render(
+      [
+        thread({ id: "alpha-1", projectId: "alpha", title: "Alpha one" }),
+        thread({ id: "alpha-2", projectId: "alpha", title: "Alpha two" }),
+        thread({ id: "beta-1", projectId: "beta", title: "Beta one" }),
+      ],
+      [
+        { id: "alpha", name: "Alpha", isPersonal: false },
+        { id: "beta", name: "Beta", isPersonal: false },
+      ],
+    );
+
+    const repeatedProject = screen.getByRole("list", {
+      name: "Alpha active threads",
+    });
+    const singleThreadProject = screen.getByRole("list", {
+      name: "Beta active threads",
+    });
+    expect(repeatedProject.classList.contains("border")).toBe(true);
+    expect(repeatedProject.className).not.toContain("shadow");
+    expect(repeatedProject.className).not.toContain("bg-");
+    expect(singleThreadProject.classList.contains("border")).toBe(false);
+    expect(singleThreadProject.classList.contains("p-px")).toBe(false);
+  });
+
   it("lists threads newest first", () => {
     render([
       thread({ id: "a", title: "Older", createdAt: 1 }),

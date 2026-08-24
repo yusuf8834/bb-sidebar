@@ -971,6 +971,7 @@ export function ThreadInbox({
                         projectName={
                           projectNameById.get(group.projectId) ?? "Project"
                         }
+                        threadCount={group.entries.length}
                       >
                         {group.entries.map(({ thread, shelf }) =>
                           renderActiveThread(thread, shelf),
@@ -1191,9 +1192,11 @@ function CollapsibleShelf({
 
 function ActiveProjectGroup({
   projectName,
+  threadCount,
   children,
 }: {
   projectName: string;
+  threadCount: number;
   children: React.ReactNode;
 }) {
   const attachListAutoAnimateRef = useListAutoAnimate<HTMLUListElement>();
@@ -1201,7 +1204,11 @@ function ActiveProjectGroup({
     <ul
       ref={attachListAutoAnimateRef}
       aria-label={`${projectName} active threads`}
-      className="flex flex-col gap-px rounded-lg border border-sidebar-border/40 p-px"
+      className={cn(
+        "flex flex-col gap-px",
+        threadCount > 1 &&
+          "rounded-lg border border-sidebar-border/30 p-px",
+      )}
     >
       {children}
     </ul>
