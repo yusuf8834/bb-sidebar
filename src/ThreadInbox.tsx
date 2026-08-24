@@ -943,7 +943,7 @@ export function ThreadInbox({
                       aria-label={`Sort active threads: ${ACTIVE_SORT_LABELS[activeSortMode]}`}
                       title={`Sort active threads: ${ACTIVE_SORT_LABELS[activeSortMode]}`}
                       className={cn(
-                        "absolute bottom-1 right-[1.875rem] z-10 size-4 h-4 w-4 border-0 p-0 text-muted-foreground/40 shadow-none hover:bg-sidebar-accent hover:text-muted-foreground focus:ring-1 [&>svg:last-child]:hidden",
+                        "absolute bottom-1 right-[1.875rem] z-10 size-4 h-4 w-4 border-0 p-0 text-muted-foreground/40 shadow-none hover:bg-sidebar-accent hover:text-muted-foreground focus:ring-0 focus-visible:ring-1 focus-visible:ring-ring [&>svg:last-child]:hidden",
                         activeSortMode !== "manual" &&
                           "bg-sidebar-accent/60 text-muted-foreground/80",
                       )}

@@ -199,6 +199,9 @@ describe("ThreadInbox", () => {
       name: "Sort active threads: Manual order",
     });
     expect(sortMenu.querySelector('[data-icon="ArrowUpDown"]')).not.toBeNull();
+    expect(sortMenu.classList.contains("focus:ring-0")).toBe(true);
+    expect(sortMenu.classList.contains("focus-visible:ring-1")).toBe(true);
+    expect(sortMenu.classList.contains("focus:ring-1")).toBe(false);
     expect(
       within(activeShelf)
         .getAllByRole("listitem")
