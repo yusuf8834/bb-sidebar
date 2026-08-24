@@ -6,7 +6,8 @@ A stable thread list for [bb](https://github.com/get-bb/bb). Threads stay where 
 
 ## Features
 
-- Stable inbox ordering with drag and keyboard reordering
+- Manual ordering plus Recent activity, Date created, and Project sort modes
+- Subtle project grouping for projects with multiple active threads
 - Pinned, Snoozed, and Settled shelves
 - Project filtering and multi-select bulk actions
 - Live status, branch, pull request, and provider details

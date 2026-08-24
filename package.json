@@ -1,8 +1,8 @@
 {
   "name": "bb-plugin-bb-sidebar",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "module",
-  "description": "A stable bb thread sidebar with manual ordering, snooze, settle, and bulk actions.",
+  "description": "A bb thread sidebar with manual and automatic sorting, snooze, settle, and bulk actions.",
   "license": "MIT",
   "author": "Yusuf Akbulut",
   "repository": {
@@ -19,7 +19,7 @@
   },
   "bb": {
     "name": "BB Sidebar",
-    "description": "Keeps bb threads in a stable, manually ordered inbox with snooze, settle, and bulk actions.",
+    "description": "Organizes bb threads with manual and automatic sorting, snooze, settle, and bulk actions.",
     "branding": {
       "icon": "PanelLeft"
     },
