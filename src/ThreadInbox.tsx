@@ -75,6 +75,8 @@ import {
 import { ProjectFavicon } from "./ProjectFavicon";
 import type { bbSidebarRpcContract } from "./server";
 import {
+  cachedSidebarSettings,
+  cacheSidebarSettings,
   SIDEBAR_SETTINGS_CHANNEL,
   type SidebarSettingsValues,
 } from "./sidebar-settings";
@@ -256,10 +258,11 @@ export function ThreadInbox({
   const rpc = useRpc<typeof bbSidebarRpcContract>();
   const { values: legacySettings } = useSettings();
   const [sidebarSettings, setSidebarSettings] =
-    useState<SidebarSettingsValues | null>(null);
+    useState<SidebarSettingsValues | null>(() => cachedSidebarSettings(rpc));
   const loadSidebarSettings = useCallback(async () => {
     try {
-      setSidebarSettings(await rpc.call("getSidebarSettings", {}));
+      const result = await rpc.call("getSidebarSettings", {});
+      setSidebarSettings(cacheSidebarSettings(rpc, result));
     } catch {
       // Older test harnesses and a backend still reloading have no method yet.
     }

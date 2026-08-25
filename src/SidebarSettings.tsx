@@ -3,6 +3,8 @@ import { useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
 import type { bbSidebarRpcContract } from "./server";
 import {
+  cachedSidebarSettings,
+  cacheSidebarSettings,
   DEFAULT_SIDEBAR_SETTINGS,
   SIDEBAR_SETTINGS_CHANNEL,
   type SidebarSettingsValues,
@@ -97,20 +99,22 @@ const numberInputClass =
 
 export function SidebarSettings() {
   const rpc = useRpc<typeof bbSidebarRpcContract>();
+  const initialSettings = cachedSidebarSettings(rpc);
   const [saved, setSaved] = useState<SidebarSettingsValues>(
-    DEFAULT_SIDEBAR_SETTINGS,
+    initialSettings ?? DEFAULT_SIDEBAR_SETTINGS,
   );
   const [draft, setDraft] = useState<SidebarSettingsValues>(
-    DEFAULT_SIDEBAR_SETTINGS,
+    initialSettings ?? DEFAULT_SIDEBAR_SETTINGS,
   );
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(initialSettings === null);
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const result = await rpc.call("getSidebarSettings", {});
-      setSaved(result);
-      setDraft(result);
+      const cached = cacheSidebarSettings(rpc, result);
+      setSaved(cached);
+      setDraft(cached);
     } catch (error) {
       toast.error("Could not load sidebar settings", {
         description: error instanceof Error ? error.message : undefined,
@@ -138,8 +142,9 @@ export function SidebarSettings() {
     setSaving(true);
     try {
       const result = await rpc.call("updateSidebarSettings", draft);
-      setSaved(result);
-      setDraft(result);
+      const cached = cacheSidebarSettings(rpc, result);
+      setSaved(cached);
+      setDraft(cached);
       toast.success("Sidebar settings saved");
     } catch (error) {
       toast.error("Could not save sidebar settings", {

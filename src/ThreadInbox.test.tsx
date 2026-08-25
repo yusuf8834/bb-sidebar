@@ -1696,6 +1696,74 @@ describe("parking threads", () => {
     expect(within(snoozedShelf).getByText("Later work")).toBeDefined();
   });
 
+  it("does not flash cached inactive and parked threads as Active after returning", async () => {
+    const now = Date.now();
+    const pendingSettings = deferred<typeof defaultSidebarSettings>();
+    const pendingLifecycle = deferred<{
+      rows: Array<{
+        threadId: string;
+        settledAt: number;
+        snoozedUntil: null;
+        snoozedAt: null;
+      }>;
+    }>();
+    let settingsReads = 0;
+    let lifecycleReads = 0;
+    const props = { ...listProps };
+    const InboxComponent = inbox.component;
+    const rendered = renderSlot(inbox, props, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({
+            id: "inactive",
+            title: "Inactive work",
+            updatedAt: now - 7 * 60 * 60 * 1_000,
+          }),
+          thread({ id: "settled", title: "Settled work" }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: {
+        getSidebarSettings: () =>
+          settingsReads++ === 0
+            ? defaultSidebarSettings
+            : pendingSettings.promise,
+        listLifecycle: () =>
+          lifecycleReads++ === 0
+            ? {
+                rows: [
+                  {
+                    threadId: "settled",
+                    settledAt: now,
+                    snoozedUntil: null,
+                    snoozedAt: null,
+                  },
+                ],
+              }
+            : pendingLifecycle.promise,
+      },
+    });
+
+    await screen.findByRole("region", { name: "Inactive" });
+    await screen.findByRole("region", { name: "Settled" });
+
+    rendered.rerender(<div>Settings</div>);
+    rendered.rerender(<InboxComponent {...props} />);
+
+    const inactiveShelf = screen.getByRole("region", { name: "Inactive" });
+    const settledShelf = screen.getByRole("region", { name: "Settled" });
+    expect(
+      within(inactiveShelf).getByRole("button", { expanded: false }),
+    ).toBeDefined();
+    expect(
+      within(settledShelf).getByRole("button", { expanded: false }),
+    ).toBeDefined();
+    expect(screen.queryByRole("region", { name: "Active" })).toBeNull();
+    expect(screen.queryByText("Inactive work")).toBeNull();
+    expect(screen.queryByText("Settled work")).toBeNull();
+  });
+
   it("keeps the currently open parked row visible while collapsed", async () => {
     renderSlot(inbox, { ...listProps, activeThreadId: "thr_open" }, {
       sidebarThreads: {

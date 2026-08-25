@@ -59,6 +59,11 @@ type LifecycleMutationRequest =
       threadId: string;
     };
 
+const lifecycleRowsByRpcClient = new WeakMap<
+  object,
+  ReadonlyMap<string, ThreadLifecycleRow>
+>();
+
 const SUCCESS_MESSAGE: Record<
   Exclude<LifecycleMutation, "snooze" | "acknowledgeWake">,
   string
@@ -94,7 +99,7 @@ export function useLifecycle(
 ): LifecycleApi {
   const rpc = useRpc<typeof bbSidebarRpcContract>();
   const [rows, setRows] = useState<ReadonlyMap<string, ThreadLifecycleRow>>(
-    () => new Map(),
+    () => lifecycleRowsByRpcClient.get(rpc) ?? new Map(),
   );
   const [now, setNow] = useState(() => Date.now());
 
@@ -107,7 +112,11 @@ export function useLifecycle(
     const seq = ++requestSeq.current;
     const result = await rpc.call("listLifecycle", {});
     if (seq !== requestSeq.current) return;
-    setRows(new Map(result.rows.map((row) => [row.threadId, row])));
+    const nextRows = new Map(
+      result.rows.map((row) => [row.threadId, row] as const),
+    );
+    lifecycleRowsByRpcClient.set(rpc, nextRows);
+    setRows(nextRows);
   }, [rpc]);
 
   useEffect(() => {

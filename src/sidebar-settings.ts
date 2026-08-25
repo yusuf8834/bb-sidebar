@@ -17,3 +17,19 @@ export const DEFAULT_SIDEBAR_SETTINGS: SidebarSettingsValues = {
   autoSettleAfterDays: 3,
   autoSettleOnMerge: true,
 };
+
+const settingsByRpcClient = new WeakMap<object, SidebarSettingsValues>();
+
+export function cachedSidebarSettings(
+  rpcClient: object,
+): SidebarSettingsValues | null {
+  return settingsByRpcClient.get(rpcClient) ?? null;
+}
+
+export function cacheSidebarSettings(
+  rpcClient: object,
+  values: SidebarSettingsValues,
+): SidebarSettingsValues {
+  settingsByRpcClient.set(rpcClient, values);
+  return values;
+}
