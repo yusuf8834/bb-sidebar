@@ -1696,7 +1696,7 @@ describe("parking threads", () => {
     expect(within(snoozedShelf).getByText("Later work")).toBeDefined();
   });
 
-  it("does not flash cached inactive and parked threads as Active after returning", async () => {
+  it("does not flash inactive and parked threads as Active after an app restart", async () => {
     const now = Date.now();
     const pendingSettings = deferred<typeof defaultSidebarSettings>();
     const pendingLifecycle = deferred<{
@@ -1707,49 +1707,47 @@ describe("parking threads", () => {
         snoozedAt: null;
       }>;
     }>();
-    let settingsReads = 0;
-    let lifecycleReads = 0;
     const props = { ...listProps };
-    const InboxComponent = inbox.component;
-    const rendered = renderSlot(inbox, props, {
-      sidebarThreads: {
-        status: "ready",
-        threads: [
-          thread({
-            id: "inactive",
-            title: "Inactive work",
-            updatedAt: now - 7 * 60 * 60 * 1_000,
-          }),
-          thread({ id: "settled", title: "Settled work" }),
-        ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
-      },
+    const sidebarThreads = {
+      status: "ready" as const,
+      threads: [
+        thread({
+          id: "inactive",
+          title: "Inactive work",
+          updatedAt: now - 7 * 60 * 60 * 1_000,
+        }),
+        thread({ id: "settled", title: "Settled work" }),
+      ],
+      projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+    };
+    renderSlot(inbox, props, {
+      sidebarThreads,
       rpc: {
-        getSidebarSettings: () =>
-          settingsReads++ === 0
-            ? defaultSidebarSettings
-            : pendingSettings.promise,
-        listLifecycle: () =>
-          lifecycleReads++ === 0
-            ? {
-                rows: [
-                  {
-                    threadId: "settled",
-                    settledAt: now,
-                    snoozedUntil: null,
-                    snoozedAt: null,
-                  },
-                ],
-              }
-            : pendingLifecycle.promise,
+        getSidebarSettings: () => defaultSidebarSettings,
+        listLifecycle: () => ({
+          rows: [
+            {
+              threadId: "settled",
+              settledAt: now,
+              snoozedUntil: null,
+              snoozedAt: null,
+            },
+          ],
+        }),
       },
     });
 
     await screen.findByRole("region", { name: "Inactive" });
     await screen.findByRole("region", { name: "Settled" });
+    cleanup();
 
-    rendered.rerender(<div>Settings</div>);
-    rendered.rerender(<InboxComponent {...props} />);
+    renderSlot(inbox, props, {
+      sidebarThreads,
+      rpc: {
+        getSidebarSettings: () => pendingSettings.promise,
+        listLifecycle: () => pendingLifecycle.promise,
+      },
+    });
 
     const inactiveShelf = screen.getByRole("region", { name: "Inactive" });
     const settledShelf = screen.getByRole("region", { name: "Settled" });

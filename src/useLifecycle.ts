@@ -63,6 +63,61 @@ const lifecycleRowsByRpcClient = new WeakMap<
   object,
   ReadonlyMap<string, ThreadLifecycleRow>
 >();
+const LIFECYCLE_ROWS_CACHE_KEY = "bb-sidebar:lifecycle-cache:v1";
+
+function isNullableNumber(value: unknown): value is number | null {
+  return (
+    value === null || (typeof value === "number" && Number.isFinite(value))
+  );
+}
+
+function readStoredLifecycleRows(): ReadonlyMap<
+  string,
+  ThreadLifecycleRow
+> | null {
+  try {
+    const stored = window.localStorage.getItem(LIFECYCLE_ROWS_CACHE_KEY);
+    if (!stored) return null;
+    const values = JSON.parse(stored) as unknown;
+    if (!Array.isArray(values)) return null;
+    const rows = new Map<string, ThreadLifecycleRow>();
+    for (const value of values) {
+      if (typeof value !== "object" || value === null) return null;
+      const row = value as Partial<ThreadLifecycleRow>;
+      if (
+        typeof row.threadId !== "string" ||
+        !isNullableNumber(row.settledAt) ||
+        !isNullableNumber(row.snoozedUntil) ||
+        !isNullableNumber(row.snoozedAt) ||
+        (row.settledOverride !== undefined &&
+          row.settledOverride !== null &&
+          row.settledOverride !== "active" &&
+          row.settledOverride !== "settled")
+      ) {
+        return null;
+      }
+      rows.set(row.threadId, row as ThreadLifecycleRow);
+    }
+    return rows;
+  } catch {
+    return null;
+  }
+}
+
+function cacheLifecycleRows(
+  rpcClient: object,
+  rows: ReadonlyMap<string, ThreadLifecycleRow>,
+): void {
+  lifecycleRowsByRpcClient.set(rpcClient, rows);
+  try {
+    window.localStorage.setItem(
+      LIFECYCLE_ROWS_CACHE_KEY,
+      JSON.stringify([...rows.values()]),
+    );
+  } catch {
+    // Keep the current runtime correct even when durable storage is blocked.
+  }
+}
 
 const SUCCESS_MESSAGE: Record<
   Exclude<LifecycleMutation, "snooze" | "acknowledgeWake">,
@@ -99,7 +154,10 @@ export function useLifecycle(
 ): LifecycleApi {
   const rpc = useRpc<typeof bbSidebarRpcContract>();
   const [rows, setRows] = useState<ReadonlyMap<string, ThreadLifecycleRow>>(
-    () => lifecycleRowsByRpcClient.get(rpc) ?? new Map(),
+    () =>
+      lifecycleRowsByRpcClient.get(rpc) ??
+      readStoredLifecycleRows() ??
+      new Map(),
   );
   const [now, setNow] = useState(() => Date.now());
 
@@ -115,7 +173,7 @@ export function useLifecycle(
     const nextRows = new Map(
       result.rows.map((row) => [row.threadId, row] as const),
     );
-    lifecycleRowsByRpcClient.set(rpc, nextRows);
+    cacheLifecycleRows(rpc, nextRows);
     setRows(nextRows);
   }, [rpc]);
 
