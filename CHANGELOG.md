@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.1] - 2026-08-25
+
+### Fixed
+
+- Prevented inactive, snoozed, and settled threads from briefly appearing under Active when returning from Settings or restarting bb.
+
 ## [0.2.0] - 2026-08-24
 
 ### Added
@@ -65,6 +71,7 @@
 
 - Initial public release.
 
+[0.2.1]: https://github.com/yusuf8834/bb-sidebar/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/yusuf8834/bb-sidebar/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/yusuf8834/bb-sidebar/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/yusuf8834/bb-sidebar/compare/v0.1.1...v0.1.2
