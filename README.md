@@ -4,14 +4,9 @@ A stable thread list for [bb](https://github.com/get-bb/bb). Threads stay where 
 
 ![BB Sidebar in light mode](docs/screenshots/sidebar-light.jpeg)
 
-<details>
-<summary>More screenshots</summary>
-
 ![BB Sidebar in dark mode](docs/screenshots/sidebar-dark.jpeg)
 
 ![BB Sidebar empty state](docs/screenshots/sidebar-empty.jpeg)
-
-</details>
 
 ## Features
 
@@ -20,6 +15,7 @@ A stable thread list for [bb](https://github.com/get-bb/bb). Threads stay where 
 - Pinned, Active, Inactive, Snoozed, and Settled shelves
 - Project filtering and multi-select bulk actions
 - Automatic and per-project custom favicons
+- Expandable child-thread indicators with running and attention states
 - Live status, branch, pull request, and provider details
 - Native bb navigation, split, rename, archive, and delete flows
 

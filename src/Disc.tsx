@@ -1,4 +1,5 @@
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
+import { cn } from "./lib/utils";
 
 /**
  * A per-thread dot. Colour comes from the thread's id so the same thread keeps
@@ -7,11 +8,20 @@ import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
  *
  * `thread` is null for the "and more" disc in a cluster.
  */
-export function Disc({ thread }: { thread: PluginSidebarThread | null }) {
+export function Disc({
+  thread,
+  className,
+}: {
+  thread: PluginSidebarThread | null;
+  className?: string;
+}) {
   const hue = thread === null ? 0 : hashHue(thread.id);
   return (
     <span
-      className="inline-block size-3.5 shrink-0 rounded-full border border-background"
+      className={cn(
+        "inline-block size-3.5 shrink-0 rounded-full border border-background",
+        className,
+      )}
       style={{
         backgroundColor:
           thread === null

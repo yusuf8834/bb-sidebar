@@ -139,13 +139,3 @@ export function parentOf(
   if (!parentThreadId) return null;
   return threads.find((candidate) => candidate.id === parentThreadId) ?? null;
 }
-
-/** The children of one thread, oldest first (the order they were spawned). */
-export function childrenOf(
-  threads: readonly PluginSidebarThread[],
-  parentThreadId: string,
-): PluginSidebarThread[] {
-  return threads
-    .filter((thread) => thread.parentThreadId === parentThreadId)
-    .sort((left, right) => left.createdAt - right.createdAt);
-}

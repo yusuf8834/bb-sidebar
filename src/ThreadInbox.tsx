@@ -31,6 +31,7 @@ import { ThreadCard, type ThreadReorderControls } from "./ThreadCard";
 import { SlimRow } from "./SlimRow";
 import { SearchResults } from "./SearchResults";
 import { BulkSelectionBar } from "./BulkSelectionBar";
+import { childThreadsByParent } from "./ChildThreadList";
 import { runBulkAction, type BulkActionResult } from "./bulk-actions";
 import { useLifecycle } from "./useLifecycle";
 import { usePinnedReorder } from "./usePinnedReorder";
@@ -86,8 +87,21 @@ const ALL_PROJECTS = "__all__";
 const ACTIVE_GROUPING_STORAGE_KEY = "bb-sidebar:active-grouping:v1";
 const ACTIVE_SORT_STORAGE_KEY = "bb-sidebar:active-sort:v1";
 const SHELF_EXPANSION_STORAGE_KEY = "bb-sidebar:shelf-expansion:v1";
+const CHILD_EXPANSION_STORAGE_KEY = "bb-sidebar:child-expansion:v1";
 const SETTLED_INITIAL_LIMIT = 10;
 const SETTLED_PAGE_SIZE = 25;
+
+function readChildExpansion(): Set<string> {
+  try {
+    const stored = window.localStorage.getItem(CHILD_EXPANSION_STORAGE_KEY);
+    if (!stored) return new Set();
+    const parsed = JSON.parse(stored) as unknown;
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((value): value is string => typeof value === "string"));
+  } catch {
+    return new Set();
+  }
+}
 
 function useListAutoAnimate<T extends HTMLElement>() {
   return useCallback((node: T | null) => {
@@ -317,6 +331,8 @@ export function ThreadInbox({
   const now = nowMinute * 60_000;
   const [expandedShelves, setExpandedShelves] =
     useState<ShelfExpansionState>(readShelfExpansion);
+  const [expandedChildParentIds, setExpandedChildParentIds] =
+    useState<Set<string>>(readChildExpansion);
   const [activeSortMode, setActiveSortMode] =
     useState<ActiveSortMode>(readActiveSort);
   const [settledLimit, setSettledLimit] = useState(SETTLED_INITIAL_LIMIT);
@@ -324,6 +340,16 @@ export function ThreadInbox({
     EMPTY_THREAD_SELECTION,
   );
   const [bulkBusy, setBulkBusy] = useState(false);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        CHILD_EXPANSION_STORAGE_KEY,
+        JSON.stringify([...expandedChildParentIds].sort()),
+      );
+    } catch {
+      // Expansion remains usable for this mount when storage is unavailable.
+    }
+  }, [expandedChildParentIds]);
   useEffect(() => {
     try {
       window.localStorage.setItem(
@@ -354,6 +380,18 @@ export function ThreadInbox({
     () => new Map(providers.map((provider) => [provider.id, provider])),
     [providers],
   );
+  const childrenByParentId = useMemo(
+    () => childThreadsByParent(threads),
+    [threads],
+  );
+  const toggleChildExpansion = useCallback((parentThreadId: string) => {
+    setExpandedChildParentIds((current) => {
+      const next = new Set(current);
+      if (next.has(parentThreadId)) next.delete(parentThreadId);
+      else next.add(parentThreadId);
+      return next;
+    });
+  }, []);
 
   const {
     pinnedBase,
@@ -907,6 +945,9 @@ export function ThreadInbox({
       }
       onAcknowledgeWake={() => void lifecycle.acknowledgeWake(thread.id)}
       onSelectionClick={(event) => handleSelectionClick(thread.id, event)}
+      childThreads={childrenByParentId.get(thread.id) ?? []}
+      childrenExpanded={expandedChildParentIds.has(thread.id)}
+      onToggleChildren={() => toggleChildExpansion(thread.id)}
       reorder={
         !reorderable ||
         (shelf === "inbox" &&

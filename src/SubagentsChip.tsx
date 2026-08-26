@@ -2,16 +2,16 @@ import { useState } from "react";
 import {
   experimental_useSidebarThreadActions as useSidebarThreadActions,
   experimental_useSidebarThreads as useSidebarThreads,
-  type PluginSidebarThread,
   type PluginThreadHeaderActionProps,
 } from "@get-bb/plugin-sdk/app";
+import {
+  ChildThreadDots,
+  ChildThreadList,
+  childNeedsYouCount,
+  childrenOf,
+} from "./ChildThreadList";
 import { cn } from "./lib/utils";
 import { Tooltip } from "./components/Tooltip";
-import { Disc } from "./Disc";
-import { StatusGlyph } from "./StatusGlyph";
-import { childrenOf, threadDisplayTitle } from "./inbox";
-
-const MAX_DISCS = 3;
 
 /**
  * The home for child threads the flat list hides: a chip in the thread header
@@ -32,7 +32,7 @@ export function SubagentsChip({
   const children = childrenOf(threads, threadId);
   if (children.length === 0) return null;
 
-  const needsYou = children.some((child) => child.hasPendingInteraction);
+  const needsYou = childNeedsYouCount(children) > 0;
   const label = needsYou ? "Needs you" : `${children.length} children`;
 
   return (
@@ -49,7 +49,7 @@ export function SubagentsChip({
             open && "bg-accent text-foreground",
           )}
         >
-          <DiscCluster threads={children} />
+          <ChildThreadDots threads={children} />
           {isCompactViewport ? null : (
             <span className="truncate">{label}</span>
           )}
@@ -75,55 +75,16 @@ export function SubagentsChip({
                 {children.length}
               </span>
             </div>
-            <ul className="flex flex-col gap-px p-1.5 pt-0.5">
-              {children.map((child) => (
-                <li key={child.id} className="list-none">
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setOpen(false);
-                      actions.open(child.id);
-                    }}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent"
-                  >
-                    <Disc thread={child} />
-                    <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate text-xs">
-                        {threadDisplayTitle(child)}
-                      </span>
-                      <span className="truncate text-2xs text-muted-foreground">
-                        {child.originKind ?? "thread"}
-                      </span>
-                    </span>
-                    <StatusGlyph
-                      indicator={child.indicator}
-                      label={child.indicatorLabel}
-                    />
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <ChildThreadList
+              threads={children}
+              variant="header"
+              onOpenThread={(childId) => {
+                setOpen(false);
+                actions.open(childId);
+              }}
+            />
           </div>
         </>
-      ) : null}
-    </span>
-  );
-}
-
-function DiscCluster({ threads }: { threads: readonly PluginSidebarThread[] }) {
-  const shown = threads.slice(0, MAX_DISCS);
-  return (
-    <span className="flex shrink-0 items-center" aria-hidden>
-      {shown.map((thread, index) => (
-        <span key={thread.id} className={cn(index > 0 && "-ml-1.5")}>
-          <Disc thread={thread} />
-        </span>
-      ))}
-      {threads.length > MAX_DISCS ? (
-        <span className="-ml-1.5">
-          <Disc thread={null} />
-        </span>
       ) : null}
     </span>
   );

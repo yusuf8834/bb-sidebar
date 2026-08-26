@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
+import { childrenOf } from "./ChildThreadList";
 import {
-  childrenOf,
   filterByProject,
   hideChildrenOfVisibleParents,
   nextThreadAfterParking,

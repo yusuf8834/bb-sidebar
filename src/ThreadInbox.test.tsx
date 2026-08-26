@@ -744,6 +744,121 @@ describe("ThreadInbox", () => {
     expect(navigated).toBe(1);
   });
 
+  it("shows a capped child badge only on parent cards", () => {
+    const minute = Math.floor(Date.now() / 60_000) * 60_000;
+    render([
+      thread({ id: "parent", title: "Parent" }),
+      thread({
+        id: "child-1",
+        title: "One",
+        parentThreadId: "parent",
+        updatedAt: minute - 60_000,
+      }),
+      thread({ id: "child-2", title: "Two", parentThreadId: "parent" }),
+      thread({ id: "child-3", title: "Three", parentThreadId: "parent" }),
+      thread({ id: "child-4", title: "Four", parentThreadId: "parent" }),
+      thread({ id: "child-5", title: "Five", parentThreadId: "parent" }),
+      thread({ id: "root", title: "No children" }),
+    ]);
+
+    const badge = screen.getByRole("button", { name: "5 child threads" });
+    expect(badge.getAttribute("aria-expanded")).toBe("false");
+    expect(badge.querySelectorAll("[data-child-thread-dot]")).toHaveLength(3);
+    expect(badge.querySelector('[data-icon="ChevronDown"]')).not.toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /No children.*child/i }),
+    ).toBeNull();
+    expect(screen.queryByText("One")).toBeNull();
+  });
+
+  it("expands child rows with attention, running state, ages, and navigation", async () => {
+    const minute = Math.floor(Date.now() / 60_000) * 60_000;
+    const rendered = render([
+      thread({ id: "parent", title: "Parent" }),
+      thread({
+        id: "blocked",
+        title: "Blocked child",
+        parentThreadId: "parent",
+        hasPendingInteraction: true,
+        indicator: "waiting-for-input",
+        updatedAt: minute - 4 * 60_000,
+      }),
+      thread({
+        id: "running",
+        title: "Running child",
+        parentThreadId: "parent",
+        indicator: "runtime",
+        updatedAt: minute - 2 * 60_000,
+      }),
+      thread({
+        id: "idle",
+        title: "Idle child",
+        parentThreadId: "parent",
+        updatedAt: minute - 31 * 60_000,
+      }),
+    ]);
+
+    const badge = screen.getByRole("button", {
+      name: "3 child threads, 1 need you",
+    });
+    expect(badge.className).toContain("bg-[#fbf0dd]");
+    fireEvent.click(badge);
+
+    expect(badge.getAttribute("aria-expanded")).toBe("true");
+    expect(badge.querySelector('[data-icon="ChevronUp"]')).not.toBeNull();
+    const childList = screen.getByRole("list", { name: "Child threads" });
+    expect(childList.getAttribute("data-child-thread-list")).toBe("sidebar");
+    expect(within(childList).getByText("Needs you")).toBeDefined();
+    expect(within(childList).getByText("Running")).toBeDefined();
+    expect(within(childList).getByText("4m")).toBeDefined();
+    expect(within(childList).getByText("2m")).toBeDefined();
+    expect(within(childList).getByText("31m")).toBeDefined();
+    expect(
+      within(childList)
+        .getByRole("button", { name: "Open child thread: Blocked child" })
+        .className,
+    ).toContain("bg-[#fdf6ea]");
+
+    fireEvent.click(
+      within(childList).getByRole("button", {
+        name: "Open child thread: Running child",
+      }),
+    );
+    expect(rendered.sidebarActionCalls).toContainEqual({
+      method: "open",
+      threadId: "running",
+      options: { split: false },
+    });
+    await waitFor(() =>
+      expect(
+        JSON.parse(
+          window.localStorage.getItem("bb-sidebar:child-expansion:v1") ?? "[]",
+        ),
+      ).toEqual(["parent"]),
+    );
+  });
+
+  it("restores child expansion and keeps selection on the parent body", () => {
+    window.localStorage.setItem(
+      "bb-sidebar:child-expansion:v1",
+      JSON.stringify(["parent"]),
+    );
+    render([
+      thread({ id: "parent", title: "Parent" }),
+      thread({ id: "child", title: "Child", parentThreadId: "parent" }),
+    ]);
+
+    expect(screen.getByRole("list", { name: "Child threads" })).toBeDefined();
+    fireEvent.click(screen.getByRole("link", { name: "Parent" }), {
+      metaKey: true,
+    });
+    const parentBody = document.querySelector("[data-parent-card]");
+    const childList = screen.getByRole("list", { name: "Child threads" });
+    expect(parentBody?.className).toContain("ring-primary/60");
+    expect(childList.className).not.toContain("ring-primary/60");
+    expect(childList.closest("[data-parent-card]")).toBeNull();
+  });
+
   it("uses the platform modifier to select without opening", () => {
     const rendered = render([thread({ id: "thr_split" })]);
     fireEvent.click(screen.getByRole("link"), { metaKey: true });

@@ -1,4 +1,5 @@
 import {
+  useId,
   useState,
   type KeyboardEventHandler,
   type MouseEvent as ReactMouseEvent,
@@ -12,6 +13,10 @@ import {
   type PluginSidebarThread,
 } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
+import {
+  ChildThreadBadge,
+  ChildThreadList,
+} from "./ChildThreadList";
 import { Icon } from "./components/Icon";
 import { Tooltip } from "./components/Tooltip";
 import { SnoozeSelect } from "./SnoozeSelect";
@@ -55,6 +60,9 @@ export function ThreadCard({
   onSnooze,
   onAcknowledgeWake,
   onSelectionClick,
+  childThreads,
+  childrenExpanded,
+  onToggleChildren,
   reorder,
   now,
 }: {
@@ -74,6 +82,9 @@ export function ThreadCard({
   onSnooze: (snoozedUntil: number) => void;
   onAcknowledgeWake: () => void;
   onSelectionClick: (event: ReactMouseEvent<HTMLAnchorElement>) => boolean;
+  childThreads: readonly PluginSidebarThread[];
+  childrenExpanded: boolean;
+  onToggleChildren: () => void;
   reorder?: ThreadReorderControls;
   /** Quantized clock, so every card in one render agrees on "now". */
   now: number;
@@ -85,6 +96,7 @@ export function ThreadCard({
   const { pullRequest } = useSidebarThreadPullRequest(thread.id);
   const [isRenaming, setIsRenaming] = useState(false);
   const [isSnoozeOpen, setIsSnoozeOpen] = useState(false);
+  const childListId = useId();
   const emphasis = isWoke
     ? "woke"
     : thread.isUnread
@@ -110,6 +122,7 @@ export function ThreadCard({
         )}
       >
         <div
+          data-parent-card=""
           className={cn(
             "group/card relative rounded-md px-2.5 py-2 transition-colors duration-150 ease-out motion-reduce:transition-none",
             isActive ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60",
@@ -273,6 +286,14 @@ export function ThreadCard({
                 className="size-3 shrink-0 text-muted-foreground/60"
               />
             ) : null}
+            {childThreads.length > 0 ? (
+              <ChildThreadBadge
+                threads={childThreads}
+                expanded={childrenExpanded}
+                controls={childListId}
+                onToggle={onToggleChildren}
+              />
+            ) : null}
             {thread.activity.workflows > 0 ? (
               <ActivityCount
                 label="workflows"
@@ -322,6 +343,18 @@ export function ThreadCard({
             </Tooltip>
           </div>
         </div>
+        {childThreads.length > 0 && childrenExpanded ? (
+          <ChildThreadList
+            id={childListId}
+            threads={childThreads}
+            variant="sidebar"
+            now={now}
+            onOpenThread={(childId) => {
+              actions.open(childId, { split: false });
+              onNavigate();
+            }}
+          />
+        ) : null}
       </li>
     </RowContextMenu>
   );
