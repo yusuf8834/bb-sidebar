@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.2] - 2026-08-26
+
+### Added
+
+- Added expandable child-thread badges to parent cards, including identity colors, direct-child counts, running and attention states, and persistent inline child lists.
+
+### Improved
+
+- Refreshed thread card styling and tightened child-row typography.
+- Updated the README screenshots to show child threads in light and dark modes.
+
 ## [0.2.1] - 2026-08-25
 
 ### Fixed
@@ -71,6 +82,7 @@
 
 - Initial public release.
 
+[0.2.2]: https://github.com/yusuf8834/bb-sidebar/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/yusuf8834/bb-sidebar/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/yusuf8834/bb-sidebar/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/yusuf8834/bb-sidebar/compare/v0.1.2...v0.1.3
