@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   experimental_useSidebarThreadActions as useSidebarThreadActions,
   experimental_useSidebarThreads as useSidebarThreads,
@@ -7,6 +7,7 @@ import {
 import {
   ChildThreadDots,
   ChildThreadList,
+  childThreadsByParent,
   childNeedsYouCount,
   childrenOf,
 } from "./ChildThreadList";
@@ -30,18 +31,27 @@ export function SubagentsChip({
   const [open, setOpen] = useState(false);
 
   const children = childrenOf(threads, threadId);
+  const childrenByParent = useMemo(
+    () => childThreadsByParent(threads),
+    [threads],
+  );
   if (children.length === 0) return null;
 
   const needsYou = childNeedsYouCount(children) > 0;
-  const label = needsYou ? "Needs you" : `${children.length} children`;
+  const threadCountLabel = `${children.length} child thread${
+    children.length === 1 ? "" : "s"
+  }`;
+  const label = needsYou
+    ? "Needs you"
+    : `${children.length} ${children.length === 1 ? "child" : "children"}`;
 
   return (
     <span className="relative">
-      <Tooltip label={`${children.length} child threads`} side="bottom">
+      <Tooltip label={threadCountLabel} side="bottom">
         <button
           type="button"
           aria-expanded={open}
-          aria-label={`${children.length} child threads`}
+          aria-label={threadCountLabel}
           onClick={() => setOpen((value) => !value)}
           className={cn(
             "flex h-7 items-center gap-1.5 rounded-full border border-border px-2 text-2xs text-muted-foreground",
@@ -77,6 +87,7 @@ export function SubagentsChip({
             </div>
             <ChildThreadList
               threads={children}
+              childrenByParent={childrenByParent}
               variant="header"
               onOpenThread={(childId) => {
                 setOpen(false);

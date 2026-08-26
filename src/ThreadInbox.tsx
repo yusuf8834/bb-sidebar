@@ -946,6 +946,7 @@ export function ThreadInbox({
       onAcknowledgeWake={() => void lifecycle.acknowledgeWake(thread.id)}
       onSelectionClick={(event) => handleSelectionClick(thread.id, event)}
       childThreads={childrenByParentId.get(thread.id) ?? []}
+      childrenByParent={childrenByParentId}
       childrenExpanded={expandedChildParentIds.has(thread.id)}
       onToggleChildren={() => toggleChildExpansion(thread.id)}
       reorder={

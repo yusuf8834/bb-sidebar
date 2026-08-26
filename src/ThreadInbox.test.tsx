@@ -814,9 +814,9 @@ describe("ThreadInbox", () => {
     expect(within(childList).getByText("2m")).toBeDefined();
     expect(within(childList).getByText("31m")).toBeDefined();
     expect(
-      within(childList)
-        .getByRole("button", { name: "Open child thread: Blocked child" })
-        .className,
+      within(childList).getByRole("button", {
+        name: "Open child thread: Blocked child",
+      }).parentElement?.className,
     ).toContain("bg-[#fdf6ea]");
 
     fireEvent.click(
@@ -857,6 +857,67 @@ describe("ThreadInbox", () => {
     expect(parentBody?.className).toContain("ring-primary/60");
     expect(childList.className).not.toContain("ring-primary/60");
     expect(childList.closest("[data-parent-card]")).toBeNull();
+  });
+
+  it("shows one collapsed grandchild level without changing the parent count", () => {
+    const rendered = render([
+      thread({ id: "parent", title: "Parent" }),
+      thread({
+        id: "child",
+        title: "Child",
+        parentThreadId: "parent",
+      }),
+      thread({
+        id: "grandchild",
+        title: "Grandchild",
+        parentThreadId: "child",
+      }),
+      thread({
+        id: "great-grandchild",
+        title: "Great-grandchild",
+        parentThreadId: "grandchild",
+      }),
+    ]);
+
+    const parentBadge = screen.getByRole("button", {
+      name: "1 child thread",
+    });
+    fireEvent.click(parentBadge);
+
+    const childList = screen.getByRole("list", { name: "Child threads" });
+    expect(within(childList).getByText("Child")).toBeDefined();
+    expect(screen.queryByText("Grandchild")).toBeNull();
+    expect(screen.queryByText("Great-grandchild")).toBeNull();
+
+    const disclosure = within(childList).getByRole("button", {
+      name: "Show 1 grandchild thread for Child",
+    });
+    expect(disclosure.getAttribute("aria-expanded")).toBe("false");
+    expect(disclosure.querySelector('[data-icon="ChevronDown"]')).not.toBeNull();
+
+    fireEvent.click(disclosure);
+
+    const grandchildList = screen.getByRole("list", {
+      name: "Grandchildren of Child",
+    });
+    expect(grandchildList.getAttribute("data-grandchild-thread-list")).toBe(
+      "sidebar",
+    );
+    expect(within(grandchildList).getByText("Grandchild")).toBeDefined();
+    expect(screen.queryByText("Great-grandchild")).toBeNull();
+    expect(disclosure.getAttribute("aria-expanded")).toBe("true");
+    expect(disclosure.querySelector('[data-icon="ChevronUp"]')).not.toBeNull();
+
+    fireEvent.click(
+      within(grandchildList).getByRole("button", {
+        name: "Open grandchild thread: Grandchild",
+      }),
+    );
+    expect(rendered.sidebarActionCalls).toContainEqual({
+      method: "open",
+      threadId: "grandchild",
+      options: { split: false },
+    });
   });
 
   it("uses the platform modifier to select without opening", () => {

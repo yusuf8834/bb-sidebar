@@ -1,3 +1,4 @@
+import { useId, useState } from "react";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import { Icon } from "./components/Icon";
 import { Tooltip } from "./components/Tooltip";
@@ -114,7 +115,7 @@ export function ChildThreadBadge({
           onToggle();
         }}
         className={cn(
-        "pointer-events-auto flex h-5 shrink-0 items-center gap-1 rounded-full px-1.5 text-xs font-medium",
+          "pointer-events-auto flex h-5 shrink-0 items-center gap-1 rounded-full px-1.5 text-xs font-medium",
           "outline-none focus-visible:ring-1 focus-visible:ring-ring",
           needsYou > 0
             ? "bg-[#fbf0dd] text-[#c9791b] dark:bg-amber-950/60 dark:text-amber-300"
@@ -135,17 +136,38 @@ export function ChildThreadBadge({
 
 export function ChildThreadList({
   threads,
+  childrenByParent,
   variant,
   now,
   id,
   onOpenThread,
 }: {
   threads: readonly PluginSidebarThread[];
+  childrenByParent: ReadonlyMap<
+    string,
+    readonly PluginSidebarThread[]
+  >;
   variant: "header" | "sidebar";
   now?: number;
   id?: string;
   onOpenThread: (threadId: string) => void;
 }) {
+  const disclosureId = useId();
+  const [expandedGrandchildParentIds, setExpandedGrandchildParentIds] =
+    useState<ReadonlySet<string>>(() => new Set());
+
+  const toggleGrandchildren = (threadId: string) => {
+    setExpandedGrandchildParentIds((current) => {
+      const next = new Set(current);
+      if (next.has(threadId)) {
+        next.delete(threadId);
+      } else {
+        next.add(threadId);
+      }
+      return next;
+    });
+  };
+
   return (
     <ul
       id={id}
@@ -160,62 +182,183 @@ export function ChildThreadList({
     >
       {threads.map((child) => {
         const title = threadDisplayTitle(child);
-        const needsYou = child.hasPendingInteraction;
-        const running = !needsYou && isChildRunning(child);
+        const grandchildren = childrenByParent.get(child.id) ?? [];
+        const grandchildrenExpanded =
+          expandedGrandchildParentIds.has(child.id);
+        const grandchildrenId = `${disclosureId}-${child.id}`;
         return (
           <li key={child.id} className="list-none">
-            <button
-              type="button"
-              role={variant === "header" ? "menuitem" : undefined}
-              aria-label={`Open child thread: ${title}`}
-              onClick={() => onOpenThread(child.id)}
-              className={cn(
-                "flex w-full items-center text-left outline-none focus-visible:ring-1 focus-visible:ring-ring",
-                variant === "header"
-                  ? "gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
-                  : "h-7 gap-2 rounded-md px-2 hover:bg-sidebar-accent/60",
-                variant === "sidebar" && needsYou &&
-                  "bg-[#fdf6ea] hover:bg-[#fdf6ea] dark:bg-amber-950/30 dark:hover:bg-amber-950/40",
-              )}
-            >
-              <Disc
-                thread={child}
-                className={
-                  variant === "header" ? undefined : "size-2 border-0"
-                }
-              />
-              <span
+            <ChildThreadRow
+              thread={child}
+              relation="child"
+              variant={variant}
+              now={now}
+              onOpenThread={onOpenThread}
+              disclosure={
+                grandchildren.length > 0
+                  ? {
+                      count: grandchildren.length,
+                      expanded: grandchildrenExpanded,
+                      controls: grandchildrenId,
+                      onToggle: () => toggleGrandchildren(child.id),
+                    }
+                  : undefined
+              }
+            />
+            {grandchildren.length > 0 && grandchildrenExpanded ? (
+              <ul
+                id={grandchildrenId}
+                aria-label={`Grandchildren of ${title}`}
+                data-grandchild-thread-list={variant}
                 className={cn(
-                  "min-w-0 flex-1",
-                  variant === "header" ? "flex flex-col" : "truncate text-xs",
+                  "flex flex-col",
+                  variant === "header"
+                    ? "ml-5 border-l border-border pl-1"
+                    : "ml-3 border-l-[1.5px] border-[#d6d6d8] pl-2 dark:border-border",
                 )}
               >
-                <span className="truncate">{title}</span>
-                {variant === "header" ? (
-                  <span className="truncate text-2xs text-muted-foreground">
-                    {child.originKind ?? "thread"}
-                  </span>
-                ) : null}
-              </span>
-              {variant === "header" ? (
-                <StatusGlyph
-                  indicator={child.indicator}
-                  label={child.indicatorLabel}
-                />
-              ) : (
-                <>
-                  {needsYou ? <ChildStatusFlag kind="needs-you" /> : null}
-                  {running ? <ChildStatusFlag kind="running" /> : null}
-                <span className="text-2xs shrink-0 font-mono tabular-nums text-[#a0a0a4]">
-                    {relativeTimeLabel(child.updatedAt, now ?? Date.now())}
-                  </span>
-                </>
-              )}
-            </button>
+                {grandchildren.map((grandchild) => (
+                  <li key={grandchild.id} className="list-none">
+                    <ChildThreadRow
+                      thread={grandchild}
+                      relation="grandchild"
+                      variant={variant}
+                      now={now}
+                      onOpenThread={onOpenThread}
+                    />
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </li>
         );
       })}
     </ul>
+  );
+}
+
+interface GrandchildDisclosure {
+  count: number;
+  expanded: boolean;
+  controls: string;
+  onToggle: () => void;
+}
+
+function ChildThreadRow({
+  thread,
+  relation,
+  variant,
+  now,
+  onOpenThread,
+  disclosure,
+}: {
+  thread: PluginSidebarThread;
+  relation: "child" | "grandchild";
+  variant: "header" | "sidebar";
+  now?: number;
+  onOpenThread: (threadId: string) => void;
+  disclosure?: GrandchildDisclosure;
+}) {
+  const title = threadDisplayTitle(thread);
+  const needsYou = thread.hasPendingInteraction;
+  const running = !needsYou && isChildRunning(thread);
+
+  return (
+    <div
+      className={cn(
+        "flex w-full items-center rounded-md text-left",
+        variant === "header"
+          ? "hover:bg-accent"
+          : "h-7 hover:bg-sidebar-accent/60",
+        variant === "sidebar" && needsYou &&
+          "bg-[#fdf6ea] hover:bg-[#fdf6ea] dark:bg-amber-950/30 dark:hover:bg-amber-950/40",
+      )}
+    >
+      <button
+        type="button"
+        role={variant === "header" ? "menuitem" : undefined}
+        aria-label={`Open ${relation} thread: ${title}`}
+        onClick={() => onOpenThread(thread.id)}
+        className={cn(
+          "flex min-w-0 flex-1 items-center text-left outline-none focus-visible:ring-1 focus-visible:ring-ring",
+          variant === "header"
+            ? "gap-2 rounded-md px-2 py-1.5"
+            : "h-full gap-2 rounded-md pl-2",
+        )}
+      >
+        <Disc
+          thread={thread}
+          className={variant === "header" ? undefined : "size-2 border-0"}
+        />
+        <span
+          className={cn(
+            "min-w-0 flex-1",
+            variant === "header" ? "flex flex-col" : "truncate text-xs",
+          )}
+        >
+          <span className="truncate">{title}</span>
+          {variant === "header" ? (
+            <span className="truncate text-2xs text-muted-foreground">
+              {thread.originKind ?? "thread"}
+            </span>
+          ) : null}
+        </span>
+        {variant === "header" ? (
+          <span className="shrink-0">
+            <StatusGlyph
+              indicator={thread.indicator}
+              label={thread.indicatorLabel}
+            />
+          </span>
+        ) : (
+          <span className="flex shrink-0 items-center gap-1 pr-2">
+            {needsYou ? <ChildStatusFlag kind="needs-you" /> : null}
+            {running ? <ChildStatusFlag kind="running" /> : null}
+            <span className="shrink-0 font-mono text-2xs tabular-nums text-[#a0a0a4]">
+              {relativeTimeLabel(thread.updatedAt, now ?? Date.now())}
+            </span>
+          </span>
+        )}
+      </button>
+      {disclosure ? (
+        <GrandchildDisclosureButton title={title} {...disclosure} />
+      ) : null}
+    </div>
+  );
+}
+
+function GrandchildDisclosureButton({
+  title,
+  count,
+  expanded,
+  controls,
+  onToggle,
+}: GrandchildDisclosure & { title: string }) {
+  const noun = `grandchild thread${count === 1 ? "" : "s"}`;
+  const label = `${expanded ? "Hide" : "Show"} ${count} ${noun} for ${title}`;
+
+  return (
+    <Tooltip label={`${count} ${noun}`} side="bottom">
+      <button
+        type="button"
+        aria-label={label}
+        aria-expanded={expanded}
+        aria-controls={controls}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onToggle();
+        }}
+        className="mr-1 flex h-5 shrink-0 items-center gap-0.5 rounded px-1 font-mono text-2xs tabular-nums text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
+      >
+        <span>{count}</span>
+        <Icon
+          name={expanded ? "ChevronUp" : "ChevronDown"}
+          className="size-3"
+          aria-hidden
+        />
+      </button>
+    </Tooltip>
   );
 }
 

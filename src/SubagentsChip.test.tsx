@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, fireEvent, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 
@@ -84,6 +84,60 @@ describe("SubagentsChip", () => {
     expect(rendered.sidebarActionCalls).toContainEqual({
       method: "open",
       threadId: "child-b",
+      options: undefined,
+    });
+  });
+
+  it("keeps grandchildren collapsed until their child disclosure opens", () => {
+    const rendered = renderSlot(
+      childrenChip,
+      { threadId: "parent", projectId: "proj_1", isCompactViewport: false },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "parent", title: "Parent" }),
+            thread({
+              id: "child",
+              title: "Child",
+              parentThreadId: "parent",
+              createdAt: 101,
+            }),
+            thread({
+              id: "grandchild",
+              title: "Grandchild",
+              parentThreadId: "child",
+              createdAt: 102,
+            }),
+          ],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+      },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "1 child thread" }));
+    expect(screen.queryByText("Grandchild")).toBeNull();
+
+    const disclosure = screen.getByRole("button", {
+      name: "Show 1 grandchild thread for Child",
+    });
+    expect(disclosure.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(disclosure);
+
+    const grandchildList = screen.getByRole("list", {
+      name: "Grandchildren of Child",
+    });
+    expect(grandchildList.getAttribute("data-grandchild-thread-list")).toBe(
+      "header",
+    );
+    fireEvent.click(
+      within(grandchildList).getByRole("menuitem", {
+        name: "Open grandchild thread: Grandchild",
+      }),
+    );
+    expect(rendered.sidebarActionCalls).toContainEqual({
+      method: "open",
+      threadId: "grandchild",
       options: undefined,
     });
   });
