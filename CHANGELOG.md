@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.3] - 2026-08-26
+
+### Added
+
+- Added a collapsed grandchild level to the shared header and sidebar child-thread list, with per-child counts, disclosures, status styling, and thread navigation.
+
+### Improved
+
+- Kept parent badges scoped to direct children while exposing one nested level beneath each child.
+- Matched child-title typography between the header menu and sidebar rows.
+
 ## [0.2.2] - 2026-08-26
 
 ### Added
@@ -82,6 +93,7 @@
 
 - Initial public release.
 
+[0.2.3]: https://github.com/yusuf8834/bb-sidebar/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/yusuf8834/bb-sidebar/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/yusuf8834/bb-sidebar/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/yusuf8834/bb-sidebar/compare/v0.1.3...v0.2.0

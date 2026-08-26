@@ -292,8 +292,8 @@ function ChildThreadRow({
         />
         <span
           className={cn(
-            "min-w-0 flex-1",
-            variant === "header" ? "flex flex-col" : "truncate text-xs",
+            "min-w-0 flex-1 text-xs",
+            variant === "header" ? "flex flex-col" : "truncate",
           )}
         >
           <span className="truncate">{title}</span>
