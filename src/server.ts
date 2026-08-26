@@ -442,6 +442,7 @@ export default async function plugin(bb: BbPluginApi) {
     string,
     Promise<ResolvedProjectIcon | null>
   >();
+  const projectIconGenerations = new Map<string, number>();
   const defaultProjectHostIds = new Map<string, Promise<string | null>>();
   const readProjectIconOverride = (projectId: string): string | null =>
     (
@@ -465,10 +466,22 @@ export default async function plugin(bb: BbPluginApi) {
       )
       .get(projectId) as StoredProjectIconUploadRow | undefined) ?? null;
   const clearProjectIconCache = (projectId: string): void => {
+    projectIconGenerations.set(
+      projectId,
+      (projectIconGenerations.get(projectId) ?? 0) + 1,
+    );
     for (const key of projectIconCache.keys()) {
       if (key.startsWith(`${projectId}\0`)) projectIconCache.delete(key);
     }
+    for (const key of pendingProjectIconResolutions.keys()) {
+      if (key.startsWith(`${projectId}\0`)) {
+        pendingProjectIconResolutions.delete(key);
+      }
+    }
   };
+
+  const projectIconGeneration = (projectId: string): number =>
+    projectIconGenerations.get(projectId) ?? 0;
 
   const defaultProjectHostId = async (
     projectId: string,
@@ -524,6 +537,7 @@ export default async function plugin(bb: BbPluginApi) {
   const resolveProjectIconUncached = async (
     projectId: string,
     environmentId: string | null,
+    generation: number,
   ): Promise<ResolvedProjectIcon | null> => {
     const cacheKey = `${projectId}\0${environmentId ?? ""}`;
     const upload = readProjectIconUpload(projectId);
@@ -535,10 +549,12 @@ export default async function plugin(bb: BbPluginApi) {
         path: upload.filename,
         sizeBytes: upload.size_bytes,
       };
-      projectIconCache.set(cacheKey, {
-        expiresAt: Date.now() + PROJECT_ICON_CACHE_MS,
-        icon,
-      });
+      if (projectIconGeneration(projectId) === generation) {
+        projectIconCache.set(cacheKey, {
+          expiresAt: Date.now() + PROJECT_ICON_CACHE_MS,
+          icon,
+        });
+      }
       return icon;
     }
     const candidates: string[] = [];
@@ -597,11 +613,13 @@ export default async function plugin(bb: BbPluginApi) {
       }
     }
 
-    projectIconCache.set(cacheKey, {
-      expiresAt:
-        Date.now() + (icon ? PROJECT_ICON_CACHE_MS : PROJECT_ICON_MISS_CACHE_MS),
-      icon,
-    });
+    if (projectIconGeneration(projectId) === generation) {
+      projectIconCache.set(cacheKey, {
+        expiresAt:
+          Date.now() + (icon ? PROJECT_ICON_CACHE_MS : PROJECT_ICON_MISS_CACHE_MS),
+        icon,
+      });
+    }
     return icon;
   };
 
@@ -616,10 +634,16 @@ export default async function plugin(bb: BbPluginApi) {
     }
     const pending = pendingProjectIconResolutions.get(cacheKey);
     if (pending) return pending;
+    const generation = projectIconGeneration(projectId);
     const resolution = resolveProjectIconUncached(
       projectId,
       environmentId,
-    ).finally(() => pendingProjectIconResolutions.delete(cacheKey));
+      generation,
+    ).finally(() => {
+      if (pendingProjectIconResolutions.get(cacheKey) === resolution) {
+        pendingProjectIconResolutions.delete(cacheKey);
+      }
+    });
     pendingProjectIconResolutions.set(cacheKey, resolution);
     return resolution;
   };
@@ -854,9 +878,13 @@ export default async function plugin(bb: BbPluginApi) {
   );
 
   let policyEvaluation: Promise<string[]> | null = null;
+  let policyEvaluationQueued = false;
   const evaluatePolicies = (): Promise<string[]> => {
-    if (policyEvaluation !== null) return policyEvaluation;
-    policyEvaluation = (async () => {
+    if (policyEvaluation !== null) {
+      policyEvaluationQueued = true;
+      return policyEvaluation;
+    }
+    const evaluation = (async () => {
       const configured = readSidebarSettings();
       const threads = await loadPolicyThreads();
       const environmentIds = [
@@ -901,10 +929,20 @@ export default async function plugin(bb: BbPluginApi) {
       const changedThreadIds = changes.map((change) => change.threadId);
       bb.realtime.publish(LIFECYCLE_CHANNEL, { threadIds: changedThreadIds });
       return changedThreadIds;
-    })().finally(() => {
+    })();
+    const settledEvaluation = evaluation.finally(() => {
+      if (policyEvaluation !== settledEvaluation) return;
       policyEvaluation = null;
+      if (!policyEvaluationQueued) return;
+      policyEvaluationQueued = false;
+      void evaluatePolicies().catch((error) => {
+        bb.log.error(
+          `Queued automatic settle evaluation failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
     });
-    return policyEvaluation;
+    policyEvaluation = settledEvaluation;
+    return settledEvaluation;
   };
 
   bb.background.schedule("auto-settle", "*/5 * * * *", async () => {

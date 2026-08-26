@@ -94,8 +94,11 @@ export function decideAutoSettle({
       (pullRequest.state === "merged" && settings.onMerge);
     if (terminal) {
       const pullRequestUpdatedAt = Date.parse(pullRequest.updatedAt);
-      shouldSettle =
-        Number.isNaN(pullRequestUpdatedAt) || pullRequestUpdatedAt >= activityAt;
+      // A malformed terminal timestamp is not evidence that the PR finished
+      // after the thread's last activity. Keep the current state until a
+      // trustworthy response arrives rather than hiding active work.
+      if (Number.isNaN(pullRequestUpdatedAt)) return "keep";
+      shouldSettle = pullRequestUpdatedAt >= activityAt;
     }
 
     // Draft PRs are open work too. Neither state may fall through to the

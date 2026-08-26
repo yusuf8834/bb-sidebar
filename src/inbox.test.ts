@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 import { childrenOf } from "./ChildThreadList";
 import {
+  ALL_PROJECTS,
   filterByProject,
   hideChildrenOfVisibleParents,
   nextThreadAfterParking,
   parentOf,
   partitionPinned,
+  reconcileProjectScope,
   searchThreadsByTitle,
   sortByCreatedAtDescending,
   sortSettledThreads,
@@ -258,5 +260,20 @@ describe("parentOf", () => {
   it("returns null when the parent row is gone", () => {
     const threads = [thread({ id: "child", parentThreadId: "deleted" })];
     expect(parentOf(threads, "child")).toBeNull();
+  });
+});
+
+describe("reconcileProjectScope", () => {
+  const projects = [{ id: "project-a" }, { id: "project-b" }];
+
+  it("keeps an available project and the all-projects scope", () => {
+    expect(reconcileProjectScope("project-a", projects)).toBe("project-a");
+    expect(reconcileProjectScope(ALL_PROJECTS, projects)).toBe(ALL_PROJECTS);
+  });
+
+  it("returns to all projects when the selected project disappears", () => {
+    expect(reconcileProjectScope("deleted-project", projects)).toBe(
+      ALL_PROJECTS,
+    );
   });
 });

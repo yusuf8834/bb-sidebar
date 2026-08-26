@@ -63,6 +63,8 @@ export function useInboxReorder(
     async (nextIds: readonly string[]): Promise<boolean> => {
       if (inFlight.current || orderKey(nextIds) === orderKey(ids)) return false;
       inFlight.current = true;
+      // Any list read that started before this write is stale by definition.
+      requestSeq.current += 1;
       setIsReordering(true);
       setOptimisticIds([...nextIds]);
 
@@ -70,11 +72,16 @@ export function useInboxReorder(
         const result = await rpc.call("reorderInbox", {
           inboxThreadIds: [...nextIds],
         });
+        // Ignore refreshes that raced the write. The mutation response is the
+        // authoritative order for this client.
+        requestSeq.current += 1;
         setStoredIds(result.inboxThreadIds);
         setOptimisticIds(null);
         return true;
       } catch (error) {
+        requestSeq.current += 1;
         setOptimisticIds(null);
+        void refresh();
         toast.error("Could not reorder inbox thread", {
           description: error instanceof Error ? error.message : undefined,
         });
@@ -84,7 +91,7 @@ export function useInboxReorder(
         setIsReordering(false);
       }
     },
-    [ids, rpc],
+    [ids, refresh, rpc],
   );
 
   return { threads, ids, isReordering, reorder };

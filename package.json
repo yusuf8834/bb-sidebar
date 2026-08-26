@@ -44,6 +44,7 @@
   ],
   "scripts": {
     "build": "bb plugin build",
+    "check": "npm run typecheck && npm test && npm run build",
     "test": "vitest run --config vitest.config.ts",
     "typecheck": "tsc --noEmit"
   },

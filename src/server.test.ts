@@ -585,6 +585,96 @@ describe("project icons", () => {
       ],
     ]);
   });
+
+  it("does not reuse or cache an icon resolution that was invalidated", async () => {
+    const project = standardProject();
+    let oldReadStarted!: () => void;
+    const oldReadStartedPromise = new Promise<void>((resolve) => {
+      oldReadStarted = resolve;
+    });
+    let resolveOldRead!: (file: {
+      content: string;
+      contentEncoding: "utf8";
+      mimeType: string;
+      sizeBytes: number;
+    }) => void;
+    const oldRead = new Promise<{
+      content: string;
+      contentEncoding: "utf8";
+      mimeType: string;
+      sizeBytes: number;
+    }>((resolve) => {
+      resolveOldRead = resolve;
+    });
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "bb-sidebar",
+      sdk: {
+        projects: {
+          get: async () => project,
+          fileContent: async ({ path }) => {
+            if (path === "old.svg") {
+              oldReadStarted();
+              return oldRead;
+            }
+            if (path === "new.svg") {
+              return {
+                content: "new",
+                contentEncoding: "utf8" as const,
+                mimeType: "image/svg+xml",
+                sizeBytes: 3,
+              };
+            }
+            throw new Error("not found");
+          },
+        },
+      },
+    });
+    await plugin(bb);
+    disposers.push(() => harness.lifecycle.dispose());
+
+    await harness.behavior.callRpc("setProjectIcon", {
+      projectId: "proj_1",
+      path: "old.svg",
+    });
+    const firstResponse = harness.behavior.fetchHttp(
+      "GET",
+      "/project-icon?projectId=proj_1",
+    );
+    await oldReadStartedPromise;
+
+    await expect(
+      harness.behavior.callRpc("setProjectIcon", {
+        projectId: "proj_1",
+        path: "new.svg",
+      }),
+    ).resolves.toEqual({
+      customPath: "new.svg",
+      customUploadName: null,
+    });
+    const secondResponse = await harness.behavior.fetchHttp(
+      "GET",
+      "/project-icon?projectId=proj_1",
+    );
+    expect(secondResponse.status).toBe(200);
+    await expect(secondResponse.text()).resolves.toBe("new");
+
+    resolveOldRead({
+      content: "old",
+      contentEncoding: "utf8",
+      mimeType: "image/svg+xml",
+      sizeBytes: 3,
+    });
+    const first = await firstResponse;
+    expect(first.status).toBe(200);
+    await expect(first.text()).resolves.toBe("old");
+
+    const afterPendingResponse = await harness.behavior.fetchHttp(
+      "GET",
+      "/project-icon?projectId=proj_1",
+    );
+    expect(afterPendingResponse.status).toBe(200);
+    await expect(afterPendingResponse.text()).resolves.toBe("new");
+  });
 });
 
 describe("automatic settle evaluation", () => {
@@ -702,6 +792,80 @@ describe("automatic settle evaluation", () => {
     expect(
       harness.inspection.sdk.callsTo("environments.pullRequest"),
     ).toHaveLength(1);
+  });
+
+  it("queues one policy pass when settings change during evaluation", async () => {
+    const old = Date.now() - 60_000;
+    const environmentId = "env_queued";
+    const thread = makeThreadResponse({
+      id: "thr_queued",
+      environmentId,
+      createdAt: old,
+      updatedAt: old,
+      latestAttentionAt: old,
+      status: "idle",
+    });
+    let pullRequestCalls = 0;
+    let resolveFirstPullRequest!: (value: ReturnType<typeof availablePullRequest>) => void;
+    const firstPullRequest = new Promise<ReturnType<typeof availablePullRequest>>(
+      (resolve) => {
+        resolveFirstPullRequest = resolve;
+      },
+    );
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "bb-sidebar",
+      sdk: {
+        threads: { list: async () => [thread] },
+        environments: {
+          pullRequest: async () => {
+            pullRequestCalls += 1;
+            return pullRequestCalls === 1
+              ? firstPullRequest
+              : availablePullRequest("merged");
+          },
+        },
+      },
+    });
+    await plugin(bb);
+    disposers.push(() => harness.lifecycle.dispose());
+
+    const firstEvaluation = harness.behavior.callRpc("evaluateAutoSettle", {});
+    for (let attempt = 0; attempt < 10 && pullRequestCalls < 1; attempt += 1) {
+      await Promise.resolve();
+    }
+    expect(pullRequestCalls).toBe(1);
+
+    await expect(
+      harness.behavior.callRpc("updateSidebarSettings", {
+        snoozePresets: "30m, 2h, 1d, 1w",
+        inactiveThreadsEnabled: true,
+        inactiveAfterHours: 6,
+        autoSettleInactive: false,
+        autoSettleAfterDays: 3,
+        autoSettleOnMerge: false,
+      }),
+    ).resolves.toMatchObject({ autoSettleInactive: false });
+
+    resolveFirstPullRequest(availablePullRequest("merged"));
+    await expect(firstEvaluation).resolves.toEqual({
+      changedThreadIds: ["thr_queued"],
+    });
+    for (let attempt = 0; attempt < 10 && pullRequestCalls < 2; attempt += 1) {
+      await Promise.resolve();
+    }
+    expect(pullRequestCalls).toBe(2);
+    let lifecycle = (await harness.behavior.callRpc(
+      "listLifecycle",
+      {},
+    )) as LifecycleListResult;
+    for (let attempt = 0; attempt < 10 && lifecycle.rows.length > 0; attempt += 1) {
+      await Promise.resolve();
+      lifecycle = (await harness.behavior.callRpc(
+        "listLifecycle",
+        {},
+      )) as LifecycleListResult;
+    }
+    expect(lifecycle).toEqual({ rows: [] });
   });
 
   it("returns a policy-settled thread when its PR reopens", async () => {

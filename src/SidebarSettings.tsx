@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
 import type { bbSidebarRpcContract } from "./server";
@@ -99,6 +105,7 @@ const numberInputClass =
 
 export function SidebarSettings() {
   const rpc = useRpc<typeof bbSidebarRpcContract>();
+  const loadRequestSeq = useRef(0);
   const initialSettings = cachedSidebarSettings(rpc);
   const [saved, setSaved] = useState<SidebarSettingsValues>(
     initialSettings ?? DEFAULT_SIDEBAR_SETTINGS,
@@ -106,21 +113,34 @@ export function SidebarSettings() {
   const [draft, setDraft] = useState<SidebarSettingsValues>(
     initialSettings ?? DEFAULT_SIDEBAR_SETTINGS,
   );
+  const savedRef = useRef(saved);
+  const draftRef = useRef(draft);
+  savedRef.current = saved;
+  draftRef.current = draft;
   const [loading, setLoading] = useState(initialSettings === null);
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
+    const seq = ++loadRequestSeq.current;
     try {
       const result = await rpc.call("getSidebarSettings", {});
+      if (seq !== loadRequestSeq.current) return;
       const cached = cacheSidebarSettings(rpc, result);
+      const hasLocalEdits =
+        JSON.stringify(draftRef.current) !== JSON.stringify(savedRef.current);
+      savedRef.current = cached;
       setSaved(cached);
-      setDraft(cached);
+      if (!hasLocalEdits) {
+        draftRef.current = cached;
+        setDraft(cached);
+      }
     } catch (error) {
+      if (seq !== loadRequestSeq.current) return;
       toast.error("Could not load sidebar settings", {
         description: error instanceof Error ? error.message : undefined,
       });
     } finally {
-      setLoading(false);
+      if (seq === loadRequestSeq.current) setLoading(false);
     }
   }, [rpc]);
 
@@ -135,14 +155,23 @@ export function SidebarSettings() {
   const update = <Key extends keyof SidebarSettingsValues>(
     key: Key,
     value: SidebarSettingsValues[Key],
-  ) => setDraft((current) => ({ ...current, [key]: value }));
+  ) =>
+    setDraft((current) => {
+      const next = { ...current, [key]: value };
+      draftRef.current = next;
+      return next;
+    });
 
   const save = async () => {
     if (!dirty || saving) return;
+    // A load started before this write cannot overwrite its result.
+    loadRequestSeq.current += 1;
     setSaving(true);
     try {
       const result = await rpc.call("updateSidebarSettings", draft);
       const cached = cacheSidebarSettings(rpc, result);
+      savedRef.current = cached;
+      draftRef.current = cached;
       setSaved(cached);
       setDraft(cached);
       toast.success("Sidebar settings saved");

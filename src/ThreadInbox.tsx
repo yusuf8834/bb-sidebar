@@ -38,10 +38,12 @@ import { usePinnedReorder } from "./usePinnedReorder";
 import { useInboxReorder } from "./useInboxReorder";
 import { TRAILING_GLYPH_BOX_CLASS } from "./StatusSlot";
 import {
+  ALL_PROJECTS,
   filterByProject,
   hideChildrenOfVisibleParents,
   nextThreadAfterParking,
   partitionPinned,
+  reconcileProjectScope,
   searchThreadsByTitle,
   sortByCreatedAtDescending,
   sortSettledThreads,
@@ -83,7 +85,6 @@ import {
   type SidebarSettingsValues,
 } from "./sidebar-settings";
 
-const ALL_PROJECTS = "__all__";
 const ACTIVE_GROUPING_STORAGE_KEY = "bb-sidebar:active-grouping:v1";
 const ACTIVE_SORT_STORAGE_KEY = "bb-sidebar:active-sort:v1";
 const SHELF_EXPANSION_STORAGE_KEY = "bb-sidebar:shelf-expansion:v1";
@@ -256,6 +257,41 @@ function visibleShelfThreads(
   );
 }
 
+function childListContainsThread(
+  children: readonly PluginSidebarThread[],
+  childrenByParent: ReadonlyMap<string, readonly PluginSidebarThread[]>,
+  threadId: string | null,
+): boolean {
+  if (threadId === null) return false;
+  return children.some(
+    (child) =>
+      child.id === threadId ||
+      childrenByParent
+        .get(child.id)
+        ?.some((grandchild) => grandchild.id === threadId) === true,
+  );
+}
+
+function rootVisibleThreadId(
+  threads: readonly PluginSidebarThread[],
+  threadId: string | null,
+): string | null {
+  if (threadId === null) return null;
+  const visibleById = new Map(
+    visibleInboxThreads(threads).map((thread) => [thread.id, thread] as const),
+  );
+  let current = visibleById.get(threadId);
+  if (!current) return threadId;
+  const visited = new Set([current.id]);
+  while (current.parentThreadId) {
+    const parent = visibleById.get(current.parentThreadId);
+    if (!parent || visited.has(parent.id)) break;
+    visited.add(parent.id);
+    current = parent;
+  }
+  return current.id;
+}
+
 /**
  * The sidebar's scrolling list: one flat, statically ordered stack of cards.
  *
@@ -316,6 +352,9 @@ export function ThreadInbox({
         : String(DEFAULT_INACTIVE_AFTER_HOURS),
   );
   const [scope, setScope] = useState<string>(ALL_PROJECTS);
+  useEffect(() => {
+    setScope((current) => reconcileProjectScope(current, projects));
+  }, [projects]);
   // One clock for every card in a render, quantized to the minute so the
   // labels do not disagree and do not churn on unrelated re-renders.
   const [nowMinute, setNowMinute] = useState(() =>
@@ -383,6 +422,18 @@ export function ThreadInbox({
   const childrenByParentId = useMemo(
     () => childThreadsByParent(threads),
     [threads],
+  );
+  useEffect(() => {
+    setExpandedChildParentIds((current) => {
+      const next = new Set(
+        [...current].filter((threadId) => childrenByParentId.has(threadId)),
+      );
+      return next.size === current.size ? current : next;
+    });
+  }, [childrenByParentId]);
+  const activeListThreadId = useMemo(
+    () => rootVisibleThreadId(threads, activeThreadId),
+    [activeThreadId, threads],
   );
   const toggleChildExpansion = useCallback((parentThreadId: string) => {
     setExpandedChildParentIds((current) => {
@@ -488,22 +539,22 @@ export function ThreadInbox({
       visibleShelfThreads(
         pinned,
         expandedShelves.pinned,
-        activeThreadId,
+        activeListThreadId,
       ),
-    [activeThreadId, expandedShelves.pinned, pinned],
+    [activeListThreadId, expandedShelves.pinned, pinned],
   );
   const visibleInbox = useMemo(
-    () => visibleShelfThreads(inbox, expandedShelves.active, activeThreadId),
-    [activeThreadId, expandedShelves.active, inbox],
+    () => visibleShelfThreads(inbox, expandedShelves.active, activeListThreadId),
+    [activeListThreadId, expandedShelves.active, inbox],
   );
   const visibleInactive = useMemo(
     () =>
       visibleShelfThreads(
         inactive,
         expandedShelves.inactive,
-        activeThreadId,
+        activeListThreadId,
       ),
-    [activeThreadId, expandedShelves.inactive, inactive],
+    [activeListThreadId, expandedShelves.inactive, inactive],
   );
   const sortedVisibleInbox = useMemo(
     () => sortActiveThreads(visibleInbox, activeSortMode),
@@ -688,32 +739,36 @@ export function ThreadInbox({
   };
 
   const isSearching = searchQuery.trim().length > 0;
-  const searchResults = useMemo(
+  const searchCandidates = useMemo(
     () =>
-      searchThreadsByTitle(
-        [...pinned, ...inbox, ...inactive, ...snoozed, ...settled],
-        searchQuery,
+      filterByProject(
+        visibleInboxThreads(threads),
+        scope === ALL_PROJECTS ? null : scope,
       ),
-    [inactive, inbox, pinned, searchQuery, settled, snoozed],
+    [scope, threads],
+  );
+  const searchResults = useMemo(
+    () => searchThreadsByTitle(searchCandidates, searchQuery),
+    [searchCandidates, searchQuery],
   );
   const visibleSnoozed = useMemo(
     () =>
       visibleShelfThreads(
         snoozed,
         expandedShelves.snoozed,
-        activeThreadId,
+        activeListThreadId,
       ),
-    [activeThreadId, expandedShelves.snoozed, snoozed],
+    [activeListThreadId, expandedShelves.snoozed, snoozed],
   );
   const visibleSettled = useMemo(
     () =>
       visibleShelfThreads(
         settled,
         expandedShelves.settled,
-        activeThreadId,
+        activeListThreadId,
         settledLimit,
       ),
-    [activeThreadId, expandedShelves.settled, settled, settledLimit],
+    [activeListThreadId, expandedShelves.settled, settled, settledLimit],
   );
   const selectableThreads = useMemo(
     () =>
@@ -947,7 +1002,15 @@ export function ThreadInbox({
       onSelectionClick={(event) => handleSelectionClick(thread.id, event)}
       childThreads={childrenByParentId.get(thread.id) ?? []}
       childrenByParent={childrenByParentId}
-      childrenExpanded={expandedChildParentIds.has(thread.id)}
+      activeThreadId={activeThreadId}
+      childrenExpanded={
+        expandedChildParentIds.has(thread.id) ||
+        childListContainsThread(
+          childrenByParentId.get(thread.id) ?? [],
+          childrenByParentId,
+          activeThreadId,
+        )
+      }
       onToggleChildren={() => toggleChildExpansion(thread.id)}
       reorder={
         !reorderable ||

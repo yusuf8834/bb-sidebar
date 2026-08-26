@@ -37,6 +37,7 @@ function readFileAsBase64(file: File): Promise<string> {
 export function ProjectIconSettings() {
   const rpc = useRpc<typeof bbSidebarRpcContract>();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const loadRequestSeq = useRef(0);
   const [projects, setProjects] = useState<ProjectIconSetting[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [loading, setLoading] = useState(true);
@@ -45,8 +46,10 @@ export function ProjectIconSettings() {
   const [previewFailed, setPreviewFailed] = useState(false);
 
   const load = useCallback(async () => {
+    const seq = ++loadRequestSeq.current;
     try {
       const result = await rpc.call("listProjectIconSettings", {});
+      if (seq !== loadRequestSeq.current) return;
       setProjects(result.projects);
       setSelectedProjectId((current) =>
         result.projects.some((project) => project.id === current)
@@ -54,11 +57,12 @@ export function ProjectIconSettings() {
           : (result.projects[0]?.id ?? ""),
       );
     } catch (error) {
+      if (seq !== loadRequestSeq.current) return;
       toast.error("Could not load project icons", {
         description: error instanceof Error ? error.message : undefined,
       });
     } finally {
-      setLoading(false);
+      if (seq === loadRequestSeq.current) setLoading(false);
     }
   }, [rpc]);
 
@@ -79,6 +83,7 @@ export function ProjectIconSettings() {
 
   const clearCustomIcon = async () => {
     if (!selectedProjectId || saving) return;
+    loadRequestSeq.current += 1;
     setSaving(true);
     try {
       const result = await rpc.call("setProjectIcon", {
@@ -122,6 +127,7 @@ export function ProjectIconSettings() {
       toast.error("Choose an SVG, PNG, ICO, JPEG, GIF, AVIF, or WebP image");
       return;
     }
+    loadRequestSeq.current += 1;
     setSaving(true);
     try {
       const contentBase64 = await readFileAsBase64(file);

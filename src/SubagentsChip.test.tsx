@@ -75,11 +75,14 @@ describe("SubagentsChip", () => {
       },
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "2 child threads" }));
+    const trigger = screen.getByRole("button", { name: "2 child threads" });
+    fireEvent.click(trigger);
+    const popup = screen.getByRole("region", { name: "Child threads" });
+    expect(trigger.getAttribute("aria-controls")).toBe(popup.id);
     const list = screen.getByRole("list", { name: "Child threads" });
     expect(list.getAttribute("data-child-thread-list")).toBe("header");
     fireEvent.click(
-      screen.getByRole("menuitem", { name: "Open child thread: Child B" }),
+      screen.getByRole("button", { name: "Open child thread: Child B" }),
     );
     expect(rendered.sidebarActionCalls).toContainEqual({
       method: "open",
@@ -131,7 +134,7 @@ describe("SubagentsChip", () => {
       "header",
     );
     fireEvent.click(
-      within(grandchildList).getByRole("menuitem", {
+      within(grandchildList).getByRole("button", {
         name: "Open grandchild thread: Grandchild",
       }),
     );
@@ -140,5 +143,35 @@ describe("SubagentsChip", () => {
       threadId: "grandchild",
       options: undefined,
     });
+  });
+
+  it("closes on Escape and restores focus to the trigger", () => {
+    renderSlot(
+      childrenChip,
+      { threadId: "parent", projectId: "proj_1", isCompactViewport: false },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "parent", title: "Parent" }),
+            thread({
+              id: "child",
+              title: "Child",
+              parentThreadId: "parent",
+            }),
+          ],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+      },
+    );
+
+    const trigger = screen.getByRole("button", { name: "1 child thread" });
+    fireEvent.click(trigger);
+    expect(screen.getByRole("region", { name: "Child threads" })).toBeDefined();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("region", { name: "Child threads" })).toBeNull();
+    expect(document.activeElement).toBe(trigger);
   });
 });

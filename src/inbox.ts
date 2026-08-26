@@ -1,5 +1,17 @@
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 
+export const ALL_PROJECTS = "__all__";
+
+export function reconcileProjectScope(
+  scope: string,
+  projects: readonly { id: string }[],
+): string {
+  if (scope === ALL_PROJECTS) return scope;
+  return projects.some((project) => project.id === scope)
+    ? scope
+    : ALL_PROJECTS;
+}
+
 /**
  * The sort that defines this sidebar: newest thread on top, and NOTHING moves
  * it afterwards. Activity never re-orders the list, so a row holds its place

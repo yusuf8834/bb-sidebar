@@ -140,16 +140,15 @@ export function ChildThreadList({
   variant,
   now,
   id,
+  activeThreadId,
   onOpenThread,
 }: {
   threads: readonly PluginSidebarThread[];
-  childrenByParent: ReadonlyMap<
-    string,
-    readonly PluginSidebarThread[]
-  >;
+  childrenByParent: ReadonlyMap<string, readonly PluginSidebarThread[]>;
   variant: "header" | "sidebar";
   now?: number;
   id?: string;
+  activeThreadId?: string | null;
   onOpenThread: (threadId: string) => void;
 }) {
   const disclosureId = useId();
@@ -173,6 +172,7 @@ export function ChildThreadList({
       id={id}
       aria-label="Child threads"
       data-child-thread-list={variant}
+      onContextMenu={(event) => event.stopPropagation()}
       className={cn(
         "flex flex-col",
         variant === "header"
@@ -184,7 +184,8 @@ export function ChildThreadList({
         const title = threadDisplayTitle(child);
         const grandchildren = childrenByParent.get(child.id) ?? [];
         const grandchildrenExpanded =
-          expandedGrandchildParentIds.has(child.id);
+          expandedGrandchildParentIds.has(child.id) ||
+          grandchildren.some((grandchild) => grandchild.id === activeThreadId);
         const grandchildrenId = `${disclosureId}-${child.id}`;
         return (
           <li key={child.id} className="list-none">
@@ -276,8 +277,7 @@ function ChildThreadRow({
     >
       <button
         type="button"
-        role={variant === "header" ? "menuitem" : undefined}
-        aria-label={`Open ${relation} thread: ${title}`}
+        aria-label={childThreadOpenLabel(thread, relation, title)}
         onClick={() => onOpenThread(thread.id)}
         className={cn(
           "flex min-w-0 flex-1 items-center text-left outline-none focus-visible:ring-1 focus-visible:ring-ring",
@@ -325,6 +325,19 @@ function ChildThreadRow({
       ) : null}
     </div>
   );
+}
+
+function childThreadOpenLabel(
+  thread: PluginSidebarThread,
+  relation: "child" | "grandchild",
+  title: string,
+): string {
+  const status = thread.hasPendingInteraction
+    ? "Needs you"
+    : isChildRunning(thread)
+      ? "Running"
+      : thread.indicatorLabel;
+  return `Open ${relation} thread: ${title}${status ? `, ${status}` : ""}`;
 }
 
 function GrandchildDisclosureButton({

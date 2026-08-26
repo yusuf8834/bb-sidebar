@@ -168,13 +168,18 @@ export function useLifecycle(
   const inFlightThreadIds = useRef(new Set<string>());
   const refresh = useCallback(async () => {
     const seq = ++requestSeq.current;
-    const result = await rpc.call("listLifecycle", {});
-    if (seq !== requestSeq.current) return;
-    const nextRows = new Map(
-      result.rows.map((row) => [row.threadId, row] as const),
-    );
-    cacheLifecycleRows(rpc, nextRows);
-    setRows(nextRows);
+    try {
+      const result = await rpc.call("listLifecycle", {});
+      if (seq !== requestSeq.current) return;
+      const nextRows = new Map(
+        result.rows.map((row) => [row.threadId, row] as const),
+      );
+      cacheLifecycleRows(rpc, nextRows);
+      setRows(nextRows);
+    } catch {
+      // Keep the last known rows during a backend reload or transient RPC
+      // failure. The next realtime signal or mount retries the refresh.
+    }
   }, [rpc]);
 
   useEffect(() => {

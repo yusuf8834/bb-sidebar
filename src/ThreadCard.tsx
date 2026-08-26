@@ -62,6 +62,7 @@ export function ThreadCard({
   onSelectionClick,
   childThreads,
   childrenByParent,
+  activeThreadId,
   childrenExpanded,
   onToggleChildren,
   reorder,
@@ -84,10 +85,8 @@ export function ThreadCard({
   onAcknowledgeWake: () => void;
   onSelectionClick: (event: ReactMouseEvent<HTMLAnchorElement>) => boolean;
   childThreads: readonly PluginSidebarThread[];
-  childrenByParent: ReadonlyMap<
-    string,
-    readonly PluginSidebarThread[]
-  >;
+  childrenByParent: ReadonlyMap<string, readonly PluginSidebarThread[]>;
+  activeThreadId: string | null;
   childrenExpanded: boolean;
   onToggleChildren: () => void;
   reorder?: ThreadReorderControls;
@@ -353,6 +352,7 @@ export function ThreadCard({
             id={childListId}
             threads={childThreads}
             childrenByParent={childrenByParent}
+            activeThreadId={activeThreadId}
             variant="sidebar"
             now={now}
             onOpenThread={(childId) => {

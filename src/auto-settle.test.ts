@@ -115,6 +115,35 @@ describe("automatic settle policy", () => {
     ).toBe("keep");
   });
 
+  it("keeps the current state when a terminal PR timestamp is malformed", () => {
+    expect(
+      decideAutoSettle({
+        lifecycle: null,
+        now: NOW,
+        pullRequest: {
+          outcome: "available",
+          state: "closed",
+          updatedAt: "not-a-timestamp",
+        },
+        settings: { afterDays: 1, onMerge: true },
+        thread: quietThread,
+      }),
+    ).toBe("keep");
+    expect(
+      decideAutoSettle({
+        lifecycle: lifecycle({ settledAt: NOW - DAY }),
+        now: NOW,
+        pullRequest: {
+          outcome: "available",
+          state: "closed",
+          updatedAt: "not-a-timestamp",
+        },
+        settings: { afterDays: 1, onMerge: true },
+        thread: quietThread,
+      }),
+    ).toBe("keep");
+  });
+
   it("never changes explicit overrides, pinned rows, or unknown PR state", () => {
     expect(
       decideAutoSettle({

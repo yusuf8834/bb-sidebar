@@ -265,6 +265,75 @@ describe("sidebar settings", () => {
     );
     expect(screen.getByText("brand.svg")).toBeDefined();
   });
+
+  it("preserves unsaved settings when a realtime refresh arrives", async () => {
+    let remoteSettings = defaultSidebarSettings;
+    const rendered = renderSlot(sidebarSettings, {}, {
+      rpc: {
+        getSidebarSettings: () => remoteSettings,
+        listProjectIconSettings: () => ({ projects: [] }),
+      },
+    });
+
+    const shortcuts = await screen.findByLabelText("Snooze shortcuts");
+    fireEvent.change(shortcuts, { target: { value: "Local=45m" } });
+    remoteSettings = { ...defaultSidebarSettings, inactiveAfterHours: 12 };
+
+    await rendered.emitRealtime("sidebar-settings", {});
+
+    expect((shortcuts as HTMLInputElement).value).toBe("Local=45m");
+    expect(screen.getByText("Unsaved changes")).toBeDefined();
+  });
+
+  it("ignores an older project-icon load after a newer refresh", async () => {
+    const older = deferred<{
+      projects: Array<{
+        id: string;
+        name: string;
+        customPath: null;
+        customUploadName: null;
+      }>;
+    }>();
+    let loads = 0;
+    const rendered = renderSlot(sidebarSettings, {}, {
+      rpc: {
+        getSidebarSettings: () => defaultSidebarSettings,
+        listProjectIconSettings: () => {
+          loads += 1;
+          return loads === 1
+            ? older.promise
+            : {
+                projects: [
+                  {
+                    id: "new",
+                    name: "Newest project",
+                    customPath: null,
+                    customUploadName: null,
+                  },
+                ],
+              };
+        },
+      },
+    });
+
+    await waitFor(() => expect(loads).toBe(1));
+    await rendered.emitRealtime("project-icons", {});
+    expect(await screen.findByText("Newest project")).toBeDefined();
+
+    older.resolve({
+      projects: [
+        {
+          id: "old",
+          name: "Stale project",
+          customPath: null,
+          customUploadName: null,
+        },
+      ],
+    });
+    await Promise.resolve();
+    expect(screen.queryByText("Stale project")).toBeNull();
+    expect(screen.getByText("Newest project")).toBeDefined();
+  });
 });
 
 describe("ThreadInbox", () => {
@@ -815,13 +884,13 @@ describe("ThreadInbox", () => {
     expect(within(childList).getByText("31m")).toBeDefined();
     expect(
       within(childList).getByRole("button", {
-        name: "Open child thread: Blocked child",
+        name: "Open child thread: Blocked child, Needs you",
       }).parentElement?.className,
     ).toContain("bg-[#fdf6ea]");
 
     fireEvent.click(
       within(childList).getByRole("button", {
-        name: "Open child thread: Running child",
+        name: "Open child thread: Running child, Running",
       }),
     );
     expect(rendered.sidebarActionCalls).toContainEqual({
@@ -857,6 +926,123 @@ describe("ThreadInbox", () => {
     expect(parentBody?.className).toContain("ring-primary/60");
     expect(childList.className).not.toContain("ring-primary/60");
     expect(childList.closest("[data-parent-card]")).toBeNull();
+  });
+
+  it("reveals the active child without persisted expansion", () => {
+    renderSlot(
+      inbox,
+      { ...listProps, activeThreadId: "child" },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "parent", title: "Parent" }),
+            thread({ id: "child", title: "Child", parentThreadId: "parent" }),
+          ],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+        rpc: { listLifecycle: () => ({ rows: [] }) },
+      },
+    );
+
+    expect(screen.getByRole("list", { name: "Child threads" })).toBeDefined();
+    expect(screen.getByText("Child")).toBeDefined();
+  });
+
+  it("keeps an active child's parked parent visible on a collapsed shelf", async () => {
+    renderSlot(
+      inbox,
+      { ...listProps, activeThreadId: "child" },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "parent", title: "Parked parent" }),
+            thread({ id: "child", title: "Active child", parentThreadId: "parent" }),
+          ],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+        rpc: {
+          listLifecycle: () => ({
+            rows: [
+              {
+                threadId: "parent",
+                settledAt: 200,
+                snoozedUntil: null,
+                snoozedAt: null,
+              },
+            ],
+          }),
+        },
+      },
+    );
+
+    const settled = await screen.findByRole("region", { name: "Settled" });
+    expect(
+      within(settled).getByRole("button", { expanded: false }),
+    ).toBeDefined();
+    expect(within(settled).getByText("Parked parent")).toBeDefined();
+  });
+
+  it("reveals the active grandchild and its child disclosure", () => {
+    renderSlot(
+      inbox,
+      { ...listProps, activeThreadId: "grandchild" },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "parent", title: "Parent" }),
+            thread({ id: "child", title: "Child", parentThreadId: "parent" }),
+            thread({
+              id: "grandchild",
+              title: "Grandchild",
+              parentThreadId: "child",
+            }),
+          ],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+        rpc: { listLifecycle: () => ({ rows: [] }) },
+      },
+    );
+
+    expect(
+      screen.getByRole("list", { name: "Grandchildren of Child" }),
+    ).toBeDefined();
+    expect(screen.getByText("Grandchild")).toBeDefined();
+  });
+
+  it("prunes expansion state for parents that no longer have children", async () => {
+    window.localStorage.setItem(
+      "bb-sidebar:child-expansion:v1",
+      JSON.stringify(["parent", "deleted-parent"]),
+    );
+    render([
+      thread({ id: "parent", title: "Parent" }),
+      thread({ id: "child", title: "Child", parentThreadId: "parent" }),
+    ]);
+
+    await waitFor(() =>
+      expect(
+        JSON.parse(
+          window.localStorage.getItem("bb-sidebar:child-expansion:v1") ?? "[]",
+        ),
+      ).toEqual(["parent"]),
+    );
+  });
+
+  it("does not open the parent context menu from a child row", () => {
+    render([
+      thread({ id: "parent", title: "Parent" }),
+      thread({ id: "child", title: "Child", parentThreadId: "parent" }),
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "1 child thread" }));
+
+    fireEvent.contextMenu(
+      screen.getByRole("button", { name: "Open child thread: Child" }),
+    );
+
+    expect(screen.queryByRole("menu")).toBeNull();
   });
 
   it("shows one collapsed grandchild level without changing the parent count", () => {
@@ -1406,6 +1592,41 @@ describe("ThreadInbox", () => {
     );
   });
 
+  it("does not let a stale order refresh overwrite a successful reorder", async () => {
+    const staleRead = deferred<{ inboxThreadIds: string[] }>();
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "a", title: "Inbox A", createdAt: 2 }),
+          thread({ id: "b", title: "Inbox B", createdAt: 1 }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: [] }),
+        listInboxOrder: () => staleRead.promise,
+        reorderInbox: () => ({ inboxThreadIds: ["b", "a"] }),
+      },
+    });
+
+    fireEvent.keyDown(screen.getByRole("link", { name: "Inbox B" }), {
+      key: "ArrowUp",
+      altKey: true,
+    });
+    await waitFor(() =>
+      expect(screen.getAllByRole("listitem")[0]!.textContent).toContain(
+        "Inbox B",
+      ),
+    );
+
+    staleRead.resolve({ inboxThreadIds: ["a", "b"] });
+    await Promise.resolve();
+    expect(screen.getAllByRole("listitem")[0]!.textContent).toContain(
+      "Inbox B",
+    );
+  });
+
   it("rolls inbox order back when persistence fails", async () => {
     const pending = deferred<{ inboxThreadIds: string[] }>();
     renderSlot(inbox, listProps, {
@@ -1537,6 +1758,33 @@ describe("ThreadInbox", () => {
     );
     expect(screen.getAllByRole("option")).toHaveLength(1);
     expect(screen.getByText("Sidebar work")).toBeDefined();
+  });
+
+  it("includes matching child threads in search results", () => {
+    renderSlot(
+      inbox,
+      { ...listProps, searchQuery: "needle" },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "parent", title: "Parent" }),
+            thread({
+              id: "child",
+              title: "Needle child",
+              parentThreadId: "parent",
+            }),
+          ],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+        rpc: { listLifecycle: () => ({ rows: [] }) },
+      },
+    );
+
+    const results = screen.getByRole("listbox", {
+      name: "Thread search results",
+    });
+    expect(within(results).getByText("Needle child")).toBeDefined();
   });
 
   it("shows matching threads from every shelf in one flat result list", async () => {
@@ -1860,6 +2108,22 @@ describe("parking threads", () => {
     });
     fireEvent.click(await screen.findByLabelText("Settle thread"));
     await waitFor(() => expect(settled).toBe("thr_park"));
+  });
+
+  it("keeps the last usable view when lifecycle refresh fails", async () => {
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ id: "thr_available", title: "Still available" })],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: {
+        listLifecycle: () => Promise.reject(new Error("backend reloading")),
+      },
+    });
+
+    expect(screen.getByText("Still available")).toBeDefined();
+    await waitFor(() => expect(screen.getByText("Still available")).toBeDefined());
   });
 
   it("shows the wake countdown on a snoozed row", async () => {

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   experimental_useSidebarThreadActions as useSidebarThreadActions,
   experimental_useSidebarThreads as useSidebarThreads,
@@ -29,12 +29,31 @@ export function SubagentsChip({
   const { threads } = useSidebarThreads();
   const actions = useSidebarThreadActions();
   const [open, setOpen] = useState(false);
+  const popupId = useId();
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   const children = childrenOf(threads, threadId);
   const childrenByParent = useMemo(
     () => childThreadsByParent(threads),
     [threads],
   );
+  useEffect(() => {
+    setOpen(false);
+  }, [threadId]);
+  useEffect(() => {
+    if (children.length === 0) setOpen(false);
+  }, [children.length]);
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [open]);
   if (children.length === 0) return null;
 
   const needsYou = childNeedsYouCount(children) > 0;
@@ -49,8 +68,10 @@ export function SubagentsChip({
     <span className="relative">
       <Tooltip label={threadCountLabel} side="bottom">
         <button
+          ref={triggerRef}
           type="button"
           aria-expanded={open}
+          aria-controls={popupId}
           aria-label={threadCountLabel}
           onClick={() => setOpen((value) => !value)}
           className={cn(
@@ -75,7 +96,8 @@ export function SubagentsChip({
             aria-hidden
           />
           <div
-            role="menu"
+            id={popupId}
+            role="region"
             aria-label="Child threads"
             className="absolute right-0 top-9 z-50 w-80 overflow-hidden rounded-xl border border-border bg-popover shadow-lg"
           >
