@@ -10,6 +10,7 @@ import {
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 import { formatSnoozeWakeTime } from "./lifecycle";
+import type { SidebarProvider } from "./ProviderGlyph";
 
 const toastMocks = vi.hoisted(() => ({
   success: vi.fn(),
@@ -79,13 +80,52 @@ function thread(
   };
 }
 
+function provider(
+  id: string,
+  displayName: string,
+  logoUrl: string | null,
+): SidebarProvider {
+  return {
+    id,
+    pluginId: `provider-${id}`,
+    displayName,
+    available: true,
+    maintenance: {
+      health: true,
+      usage: false,
+      installation: true,
+    },
+    logoUrl,
+    capabilities: {
+      modelCatalogScope: "workspace",
+      permissionModes: ["full"],
+      supportsFork: true,
+      supportsNativeUserQuestion: false,
+      supportsServiceTier: false,
+      supportsSessionRewind: true,
+      supportsThreadArchive: false,
+      supportsThreadRename: false,
+    },
+    composerActions: [],
+  };
+}
+
+const defaultProviders = [
+  provider("codex", "Codex", "/api/v1/system/providers/codex/logo"),
+  provider(
+    "claude-code",
+    "Claude Code",
+    "/api/v1/system/providers/claude-code/logo",
+  ),
+];
+
 const listProps = {
   activeThreadId: null,
   activeProjectId: null,
   isCompactViewport: false,
   onNavigate: () => {},
   searchQuery: "",
-  experimental_Original: () => null,
+  Original: () => null,
 };
 
 function render(
@@ -94,6 +134,7 @@ function render(
 ) {
   return renderSlot(inbox, listProps, {
     sidebarThreads: { status: "ready", threads, projects },
+    providers: { status: "ready", providers: defaultProviders },
     // The lifecycle store is the plugin's own backend; an empty one means
     // every thread is active, which is what these list tests are about.
     rpc: { listLifecycle: () => ({ rows: [] }) },
@@ -227,6 +268,68 @@ describe("sidebar settings", () => {
 });
 
 describe("ThreadInbox", () => {
+  it("renders provider names, logos, and theme tints from bb's directory", () => {
+    const view = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ providerId: "pi", title: "Pi thread" })],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      providers: {
+        status: "ready",
+        providers: [
+          {
+            id: "pi",
+            pluginId: "provider-pi",
+            displayName: "Pi",
+            available: true,
+            maintenance: {
+              health: true,
+              usage: false,
+              installation: true,
+            },
+            logoUrl: "/api/v1/system/providers/pi/logo",
+            capabilities: {
+              modelCatalogScope: "workspace",
+              permissionModes: ["full"],
+              supportsFork: true,
+              supportsNativeUserQuestion: false,
+              supportsServiceTier: false,
+              supportsSessionRewind: true,
+              supportsThreadArchive: false,
+              supportsThreadRename: false,
+            },
+            composerActions: [],
+            strings: {
+              signInHint: "Run pi to sign in.",
+              expiredHint: "Run pi to sign in again.",
+              installUrl: "https://pi.dev",
+              iconTint: { light: "#6D5DFB", dark: "#A99EFF" },
+            },
+          },
+        ],
+      },
+      rpc: { listLifecycle: () => ({ rows: [] }) },
+    });
+
+    const glyph = screen.getByRole("img", { name: "Pi" });
+    const marks = glyph.querySelectorAll<HTMLElement>("[aria-hidden=true]");
+    expect(marks).toHaveLength(2);
+    expect(marks[0]!.style.maskImage).toContain(
+      "/api/v1/system/providers/pi/logo",
+    );
+    expect(marks[0]!.style.backgroundColor).toBe("rgb(109, 93, 251)");
+    expect(marks[1]!.style.backgroundColor).toBe("rgb(169, 158, 255)");
+    expect(view.container.querySelector('[aria-label="pi"]')).toBeNull();
+  });
+
+  it("falls back to the provider id when the directory has no match", () => {
+    render([thread({ providerId: "custom-agent" })]);
+
+    const glyph = screen.getByRole("img", { name: "custom-agent" });
+    expect(glyph.querySelector(".rounded-full")).not.toBeNull();
+  });
+
   it("loads a project favicon beside the project name", async () => {
     const view = render([
       thread({

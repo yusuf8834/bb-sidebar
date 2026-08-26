@@ -17,7 +17,7 @@ import { Tooltip } from "./components/Tooltip";
 import { SnoozeSelect } from "./SnoozeSelect";
 import { cn } from "./lib/utils";
 import { RowContextMenu } from "./RowContextMenu";
-import { ProviderGlyph } from "./ProviderGlyph";
+import { ProviderGlyph, type SidebarProvider } from "./ProviderGlyph";
 import { STATUS_SLOT_CLASS, StatusOrTime } from "./StatusSlot";
 import { threadDisplayTitle } from "./inbox";
 import { InlineThreadTitle } from "./InlineThreadTitle";
@@ -42,6 +42,7 @@ export interface ThreadReorderControls {
  */
 export function ThreadCard({
   thread,
+  provider,
   projectName,
   projectIconUrl,
   isActive,
@@ -58,6 +59,7 @@ export function ThreadCard({
   now,
 }: {
   thread: PluginSidebarThread;
+  provider: SidebarProvider | null;
   projectName: string | null;
   projectIconUrl: string | null;
   isActive: boolean;
@@ -303,7 +305,7 @@ export function ThreadCard({
               </Tooltip>
             ) : null}
             <Tooltip
-              label={threadMetadataLabel(thread, projectName)}
+              label={threadMetadataLabel(thread, projectName, provider)}
               side="left"
               className="whitespace-pre-line"
             >
@@ -312,7 +314,10 @@ export function ThreadCard({
                 aria-label="Thread details"
                 className="pointer-events-auto rounded-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
               >
-                <ProviderGlyph providerId={thread.providerId} />
+                <ProviderGlyph
+                  providerId={thread.providerId}
+                  provider={provider}
+                />
               </span>
             </Tooltip>
           </div>
@@ -354,12 +359,6 @@ function ThreadLocation({ thread }: { thread: PluginSidebarThread }) {
   return <span className="flex-1" />;
 }
 
-function providerLabel(providerId: string): string {
-  if (providerId === "codex") return "Codex";
-  if (providerId === "claude-code") return "Claude Code";
-  return providerId;
-}
-
 function workspaceLabel(thread: PluginSidebarThread): string | null {
   switch (thread.environment?.workspaceDisplayKind) {
     case "managed-worktree":
@@ -392,6 +391,7 @@ function activityLabel(thread: PluginSidebarThread): string {
 function threadMetadataLabel(
   thread: PluginSidebarThread,
   projectName: string | null,
+  provider: SidebarProvider | null,
 ): string {
   const workspace = workspaceLabel(thread);
   const lines = [
@@ -404,7 +404,7 @@ function threadMetadataLabel(
       ? `Branch: ${thread.environment.branchName}`
       : null,
     thread.host ? `Machine: ${thread.host.name}` : null,
-    `Provider: ${providerLabel(thread.providerId)}`,
+    `Provider: ${provider?.displayName ?? thread.providerId}`,
     `Activity: ${activityLabel(thread)}`,
   ];
   return lines.filter((line): line is string => line !== null).join("\n");

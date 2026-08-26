@@ -9,6 +9,7 @@ import {
 import {
   experimental_useSidebarThreadActions as useSidebarThreadActions,
   experimental_useSidebarThreads as useSidebarThreads,
+  experimental_useProviders as useProviders,
   type PluginSidebarThread,
   type PluginThreadListProps,
   useRealtime,
@@ -254,6 +255,7 @@ export function ThreadInbox({
   searchQuery,
 }: PluginThreadListProps) {
   const { status, threads, projects } = useSidebarThreads();
+  const { providers } = useProviders();
   const actions = useSidebarThreadActions();
   const rpc = useRpc<typeof bbSidebarRpcContract>();
   const { values: legacySettings } = useSettings();
@@ -347,6 +349,10 @@ export function ThreadInbox({
   const projectNameById = useMemo(
     () => new Map(projects.map((project) => [project.id, project.name])),
     [projects],
+  );
+  const providerById = useMemo(
+    () => new Map(providers.map((provider) => [provider.id, provider])),
+    [providers],
   );
 
   const {
@@ -884,6 +890,7 @@ export function ThreadInbox({
     <ThreadCard
       key={thread.id}
       thread={thread}
+      provider={providerById.get(thread.providerId) ?? null}
       projectName={projectNameById.get(thread.projectId) ?? null}
       projectIconUrl={projectIconUrl(thread.projectId, projectIconRevision)}
       isActive={thread.id === activeThreadId}
