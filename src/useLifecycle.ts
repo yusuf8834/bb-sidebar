@@ -7,6 +7,7 @@ import type { BulkActionResult } from "./bulk-actions";
 import {
   canPark,
   formatSnoozeWakeTime,
+  isThreadWorking,
   nextWakeDelayMs,
   resolveShelf,
   resolveWakeReason,
@@ -16,16 +17,7 @@ import {
 
 /** Any live work at all, which blocks parking and wakes a parked thread. */
 export function isWorking(thread: PluginSidebarThread): boolean {
-  const { activity } = thread;
-  return (
-    activity.workflows > 0 ||
-    activity.backgroundAgents > 0 ||
-    activity.backgroundCommands > 0 ||
-    activity.planMode > 0 ||
-    activity.goals > 0 ||
-    thread.indicator === "runtime" ||
-    thread.indicator === "working-draft"
-  );
+  return isThreadWorking(thread);
 }
 
 export interface LifecycleApi {

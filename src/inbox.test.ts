@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
-import { childrenOf } from "./ChildThreadList";
+import {
+  childNeedsYouCount,
+  childThreadsByParent,
+  childrenOf,
+} from "./ChildThreadList";
 import {
   ALL_PROJECTS,
   filterByProject,
@@ -236,6 +240,31 @@ describe("child threads", () => {
       "parent",
     );
     expect(children.map((t) => t.id)).toEqual(["a", "b"]);
+  });
+
+  it("excludes archived children from child helpers and attention counts", () => {
+    const threads = [
+      thread({ id: "parent" }),
+      thread({
+        id: "visible",
+        parentThreadId: "parent",
+        hasPendingInteraction: true,
+      }),
+      thread({
+        id: "archived",
+        parentThreadId: "parent",
+        hasPendingInteraction: true,
+        isArchived: true,
+      }),
+    ];
+
+    expect(childrenOf(threads, "parent").map((thread) => thread.id)).toEqual([
+      "visible",
+    ]);
+    expect(
+      childThreadsByParent(threads).get("parent")?.map((thread) => thread.id),
+    ).toEqual(["visible"]);
+    expect(childNeedsYouCount(threads)).toBe(1);
   });
 });
 

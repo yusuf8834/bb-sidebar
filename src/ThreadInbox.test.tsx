@@ -1031,8 +1031,8 @@ describe("ThreadInbox", () => {
     );
   });
 
-  it("does not open the parent context menu from a child row", () => {
-    render([
+  it("archives the selected child instead of its parent", async () => {
+    const rendered = render([
       thread({ id: "parent", title: "Parent" }),
       thread({ id: "child", title: "Child", parentThreadId: "parent" }),
     ]);
@@ -1042,8 +1042,49 @@ describe("ThreadInbox", () => {
       screen.getByRole("button", { name: "Open child thread: Child" }),
     );
 
-    expect(screen.queryByRole("menu")).toBeNull();
+    fireEvent.click(
+      within(await screen.findByRole("menu", { name: "Thread actions" })).getByText(
+        "Archive",
+      ),
+    );
+    expect(rendered.sidebarActionCalls).toContainEqual({
+      method: "archive",
+      threadId: "child",
+    });
+    expect(rendered.sidebarActionCalls).not.toContainEqual({
+      method: "archive",
+      threadId: "parent",
+    });
   });
+
+  for (const busyChild of [
+    thread({ id: "running", title: "Running child", indicator: "runtime" }),
+    thread({
+      id: "needs-input",
+      title: "Needs input child",
+      hasPendingInteraction: true,
+    }),
+  ]) {
+    it(`disables Archive for a busy child: ${busyChild.id}`, async () => {
+      render([
+        thread({ id: "parent", title: "Parent" }),
+        { ...busyChild, parentThreadId: "parent" },
+      ]);
+      fireEvent.click(screen.getByRole("button", { name: /^1 child thread/ }));
+      fireEvent.contextMenu(
+        screen.getByRole("button", {
+          name: `Open child thread: ${busyChild.title}${
+            busyChild.hasPendingInteraction ? ", Needs you" : ", Running"
+          }`,
+        }),
+      );
+
+      const archive = within(
+        await screen.findByRole("menu", { name: "Thread actions" }),
+      ).getByText("Archive");
+      expect(archive.getAttribute("data-disabled")).not.toBeNull();
+    });
+  }
 
   it("shows one collapsed grandchild level without changing the parent count", () => {
     const rendered = render([
@@ -1104,6 +1145,27 @@ describe("ThreadInbox", () => {
       threadId: "grandchild",
       options: { split: false },
     });
+  });
+
+  it("removes archived children from the sidebar badge and list", () => {
+    render([
+      thread({ id: "parent", title: "Parent" }),
+      thread({
+        id: "visible-child",
+        title: "Visible child",
+        parentThreadId: "parent",
+      }),
+      thread({
+        id: "archived-child",
+        title: "Archived child",
+        parentThreadId: "parent",
+        isArchived: true,
+      }),
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: "1 child thread" }));
+    expect(screen.getByText("Visible child")).toBeDefined();
+    expect(screen.queryByText("Archived child")).toBeNull();
   });
 
   it("uses the platform modifier to select without opening", () => {

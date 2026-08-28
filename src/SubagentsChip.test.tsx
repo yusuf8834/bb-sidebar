@@ -145,6 +145,66 @@ describe("SubagentsChip", () => {
     });
   });
 
+  it("archives the selected child or grandchild from the header list", async () => {
+    const rendered = renderSlot(
+      childrenChip,
+      { threadId: "parent", projectId: "proj_1", isCompactViewport: false },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "parent", title: "Parent" }),
+            thread({ id: "child", title: "Child", parentThreadId: "parent" }),
+            thread({
+              id: "grandchild",
+              title: "Grandchild",
+              parentThreadId: "child",
+            }),
+          ],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+      },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "1 child thread" }));
+    fireEvent.contextMenu(
+      screen.getByRole("button", { name: "Open child thread: Child" }),
+    );
+    fireEvent.click(
+      within(await screen.findByRole("menu", { name: "Thread actions" })).getByText(
+        "Archive",
+      ),
+    );
+    expect(rendered.sidebarActionCalls).toContainEqual({
+      method: "archive",
+      threadId: "child",
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Show 1 grandchild thread for Child",
+      }),
+    );
+    fireEvent.contextMenu(
+      screen.getByRole("button", {
+        name: "Open grandchild thread: Grandchild",
+      }),
+    );
+    fireEvent.click(
+      within(await screen.findByRole("menu", { name: "Thread actions" })).getByText(
+        "Archive",
+      ),
+    );
+    expect(rendered.sidebarActionCalls).toContainEqual({
+      method: "archive",
+      threadId: "grandchild",
+    });
+    expect(rendered.sidebarActionCalls).not.toContainEqual({
+      method: "archive",
+      threadId: "parent",
+    });
+  });
+
   it("closes on Escape and restores focus to the trigger", () => {
     renderSlot(
       childrenChip,

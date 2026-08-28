@@ -1,3 +1,5 @@
+import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
+
 /**
  * The settled / snoozed lifecycle, as pure functions over stored rows.
  *
@@ -65,6 +67,30 @@ export function resolveWakeReason(
  */
 export function canPark(signals: ThreadActivitySignals): boolean {
   return !signals.hasPendingInteraction && !signals.isWorking;
+}
+
+/** Any live work at all, which blocks parking and wakes a parked thread. */
+export function isThreadWorking(thread: PluginSidebarThread): boolean {
+  const { activity } = thread;
+  return (
+    activity.workflows > 0 ||
+    activity.backgroundAgents > 0 ||
+    activity.backgroundCommands > 0 ||
+    activity.planMode > 0 ||
+    activity.goals > 0 ||
+    thread.indicator === "runtime" ||
+    thread.indicator === "working-draft"
+  );
+}
+
+/** Whether a sidebar thread is idle enough for archive and parking actions. */
+export function canParkThread(thread: PluginSidebarThread): boolean {
+  return canPark({
+    hasPendingInteraction: thread.hasPendingInteraction,
+    isWorking: isThreadWorking(thread),
+    isUnread: thread.isUnread,
+    latestAttentionAt: thread.latestAttentionAt,
+  });
 }
 
 /**
