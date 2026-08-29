@@ -283,19 +283,19 @@ export function ThreadCard({
                 machine takes the branch's place rather than leaving the line
                 blank. */}
             <ThreadLocation thread={thread} />
-            {thread.environment?.branchName && thread.host ? (
-              <Icon
-                name="Computer"
-                aria-label={`Machine: ${thread.host.name}`}
-                className="size-3 shrink-0 text-muted-foreground/60"
-              />
-            ) : null}
             {childThreads.length > 0 ? (
               <ChildThreadBadge
                 threads={childThreads}
                 expanded={childrenExpanded}
                 controls={childListId}
                 onToggle={onToggleChildren}
+              />
+            ) : null}
+            {thread.environment?.branchName && thread.host ? (
+              <Icon
+                name="Computer"
+                aria-label={`Machine: ${thread.host.name}`}
+                className="size-3 shrink-0 text-muted-foreground/60"
               />
             ) : null}
             {thread.activity.workflows > 0 ? (
