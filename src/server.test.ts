@@ -677,6 +677,67 @@ describe("project icons", () => {
   });
 });
 
+describe("project management", () => {
+  it("requires the project name before removing a standard project", async () => {
+    const project = standardProject();
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "bb-sidebar",
+      sdk: {
+        projects: {
+          delete: async () => ({ ok: true as const }),
+          get: async () => project,
+          list: async () => [project],
+        },
+      },
+    });
+    await plugin(bb);
+    disposers.push(() => harness.lifecycle.dispose());
+
+    await expect(harness.behavior.callRpc("listProjects", {})).resolves.toEqual({
+      projects: [{ id: "proj_1", name: "Sidebar" }],
+    });
+    await expect(
+      harness.behavior.callRpc("removeProject", {
+        projectId: "proj_1",
+        confirmation: "sidebar",
+      }),
+    ).rejects.toThrow("Enter the project name exactly as shown");
+    expect(harness.inspection.sdk.callsTo("projects.delete")).toEqual([]);
+
+    await harness.behavior.callRpc("uploadProjectIcon", {
+      projectId: "proj_1",
+      filename: "brand.svg",
+      mimeType: "image/svg+xml",
+      contentBase64: "PHN2Zy8+",
+    });
+    await expect(
+      harness.behavior.callRpc("removeProject", {
+        projectId: "proj_1",
+        confirmation: "Sidebar",
+      }),
+    ).resolves.toEqual({ ok: true });
+    expect(harness.inspection.sdk.callsTo("projects.delete")).toEqual([
+      [{ projectId: "proj_1" }],
+    ]);
+    await expect(
+      harness.behavior.callRpc("listProjectIconSettings", {}),
+    ).resolves.toEqual({
+      projects: [
+        {
+          id: "proj_1",
+          name: "Sidebar",
+          customPath: null,
+          customUploadName: null,
+        },
+      ],
+    });
+    expect(harness.inspection.realtimeSignals).toContainEqual({
+      channel: "project-icons",
+      payload: { projectId: "proj_1" },
+    });
+  });
+});
+
 describe("automatic settle evaluation", () => {
   it("settles inactive threads and publishes one batched refresh", async () => {
     const old = Date.now() - 4 * 24 * 60 * 60 * 1_000;

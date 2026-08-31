@@ -16,6 +16,7 @@ import {
   type SidebarSettingsValues,
 } from "./sidebar-settings";
 import { ProjectIconSettings } from "./ProjectIconSettings";
+import { ProjectRemovalSettings } from "./ProjectRemovalSettings";
 
 function SettingsGroup({
   children,
@@ -302,6 +303,7 @@ export function SidebarSettings() {
       </div>
 
       <ProjectIconSettings />
+      <ProjectRemovalSettings />
     </div>
   );
 }

@@ -242,6 +242,30 @@ export const bbSidebarRpcContract = defineRpcContract({
       })
       .strict(),
   },
+  listProjects: {
+    input: z.object({}).strict(),
+    output: z
+      .object({
+        projects: z.array(
+          z
+            .object({
+              id: z.string(),
+              name: z.string(),
+            })
+            .strict(),
+        ),
+      })
+      .strict(),
+  },
+  removeProject: {
+    input: z
+      .object({
+        projectId: projectIdSchema,
+        confirmation: z.string().max(500),
+      })
+      .strict(),
+    output: z.object({ ok: z.literal(true) }).strict(),
+  },
   searchProjectIconFiles: {
     input: z
       .object({
@@ -1086,6 +1110,37 @@ export default async function plugin(bb: BbPluginApi) {
               readProjectIconUpload(project.id)?.filename ?? null,
           })),
       };
+    },
+    async listProjects() {
+      const projects = await bb.sdk.projects.list();
+      return {
+        projects: projects
+          .filter((project) => project.kind === "standard")
+          .map((project) => ({ id: project.id, name: project.name })),
+      };
+    },
+    async removeProject({ projectId, confirmation }) {
+      const project = await bb.sdk.projects.get({ projectId });
+      if (project.kind !== "standard") {
+        throw new Error("Personal projects cannot be removed");
+      }
+      if (confirmation !== project.name) {
+        throw new Error("Enter the project name exactly as shown");
+      }
+
+      await bb.sdk.projects.delete({ projectId });
+      db.transaction(() => {
+        db.prepare(`DELETE FROM project_icons WHERE project_id = ?`).run(
+          projectId,
+        );
+        db.prepare(
+          `DELETE FROM project_icon_uploads WHERE project_id = ?`,
+        ).run(projectId);
+      })();
+      defaultProjectHostIds.delete(projectId);
+      clearProjectIconCache(projectId);
+      bb.realtime.publish(PROJECT_ICONS_CHANNEL, { projectId });
+      return { ok: true as const };
     },
     async searchProjectIconFiles({ projectId, query }) {
       const hostId = await defaultProjectHostId(projectId);

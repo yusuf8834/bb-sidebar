@@ -334,6 +334,45 @@ describe("sidebar settings", () => {
     expect(screen.queryByText("Stale project")).toBeNull();
     expect(screen.getByText("Newest project")).toBeDefined();
   });
+
+  it("requires a second inline click before removing a project", async () => {
+    let removal: { projectId: string; confirmation: string } | null = null;
+    renderSlot(sidebarSettings, {}, {
+      rpc: {
+        getSidebarSettings: () => defaultSidebarSettings,
+        listProjectIconSettings: () => ({ projects: [] }),
+        listProjects: () => ({
+          projects: [{ id: "proj_1", name: "Sidebar" }],
+        }),
+        removeProject: (input) => {
+          removal = input as typeof removal;
+          return { ok: true as const };
+        },
+      },
+    });
+
+    expect(await screen.findByText("Projects")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Remove..." }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    const confirmation = screen.getByRole("group", {
+      name: "Confirm removal of Sidebar",
+    });
+    expect(within(confirmation).getByText("Remove Sidebar?")).toBeDefined();
+    expect(removal).toBeNull();
+
+    fireEvent.click(
+      within(confirmation).getByRole("button", { name: "Remove from BB" }),
+    );
+
+    await waitFor(() =>
+      expect(removal).toEqual({
+        projectId: "proj_1",
+        confirmation: "Sidebar",
+      }),
+    );
+    expect(await screen.findByText("No removable projects.")).toBeDefined();
+    expect(toastMocks.success).toHaveBeenCalledWith("Sidebar removed from BB");
+  });
 });
 
 describe("ThreadInbox", () => {
