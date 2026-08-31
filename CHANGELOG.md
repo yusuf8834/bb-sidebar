@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.2.4] - 2026-08-30
+
+### Added
+
+- Added project removal to plugin settings with a compact two-step confirmation and server-side checks.
+- Added archive actions to child and grandchild thread menus. Archived descendants no longer appear in badges, counts, or lists.
+- Added CI checks for the SDK contract, tests, type checking, and production build.
+
+### Improved
+
+- Kept active child and grandchild threads visible when their surrounding shelves or lists are collapsed.
+- Included matching child threads in search and made lifecycle, ordering, icon, and settings refreshes resilient to stale responses.
+- Kept thread-card metadata in a stable reading order.
+
 ## [0.2.3] - 2026-08-26
 
 ### Added
@@ -93,6 +107,7 @@
 
 - Initial public release.
 
+[0.2.4]: https://github.com/yusuf8834/bb-sidebar/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/yusuf8834/bb-sidebar/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/yusuf8834/bb-sidebar/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/yusuf8834/bb-sidebar/compare/v0.2.0...v0.2.1
