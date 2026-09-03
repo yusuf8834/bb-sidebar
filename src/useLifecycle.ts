@@ -14,6 +14,11 @@ import {
   type ThreadLifecycleRow,
   type ThreadShelf,
 } from "./lifecycle";
+import {
+  MAX_CACHED_LIFECYCLE_ROWS,
+  pruneLifecycleRows,
+  safeSetItem,
+} from "./lib/safe-storage";
 
 /** Any live work at all, which blocks parking and wakes a parked thread. */
 export function isWorking(thread: PluginSidebarThread): boolean {
@@ -90,6 +95,10 @@ function readStoredLifecycleRows(): ReadonlyMap<
       }
       rows.set(row.threadId, row as ThreadLifecycleRow);
     }
+    if (rows.size > MAX_CACHED_LIFECYCLE_ROWS) {
+      const pruned = pruneLifecycleRows([...rows.values()]);
+      return new Map(pruned.map((row) => [row.threadId, row] as const));
+    }
     return rows;
   } catch {
     return null;
@@ -101,14 +110,8 @@ function cacheLifecycleRows(
   rows: ReadonlyMap<string, ThreadLifecycleRow>,
 ): void {
   lifecycleRowsByRpcClient.set(rpcClient, rows);
-  try {
-    window.localStorage.setItem(
-      LIFECYCLE_ROWS_CACHE_KEY,
-      JSON.stringify([...rows.values()]),
-    );
-  } catch {
-    // Keep the current runtime correct even when durable storage is blocked.
-  }
+  const pruned = pruneLifecycleRows([...rows.values()]);
+  safeSetItem(LIFECYCLE_ROWS_CACHE_KEY, JSON.stringify(pruned));
 }
 
 const SUCCESS_MESSAGE: Record<
@@ -169,7 +172,7 @@ export function useLifecycle(
       cacheLifecycleRows(rpc, nextRows);
       setRows(nextRows);
     } catch {
-      // Keep the last known rows during a backend reload or transient RPC
+      void 0; // Keep the last known rows during a backend reload or transient RPC
       // failure. The next realtime signal or mount retries the refresh.
     }
   }, [rpc]);
@@ -188,7 +191,7 @@ export function useLifecycle(
         if (changedThreadIds.length > 0) void refresh();
       })
       .catch(() => {
-        // A backend generation can briefly lag the app bundle during reload.
+        void 0; // A backend generation can briefly lag the app bundle during reload.
         // The scheduled evaluator and realtime refresh will reconcile later.
       });
   }, [refresh, rpc]);

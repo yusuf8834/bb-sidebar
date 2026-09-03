@@ -33,7 +33,7 @@ import { SearchResults } from "./SearchResults";
 import { BulkSelectionBar } from "./BulkSelectionBar";
 import { childThreadsByParent } from "./ChildThreadList";
 import { runBulkAction, type BulkActionResult } from "./bulk-actions";
-import { useLifecycle } from "./useLifecycle";
+import { useLifecycle, type LifecycleApi } from "./useLifecycle";
 import { usePinnedReorder } from "./usePinnedReorder";
 import { useInboxReorder } from "./useInboxReorder";
 import { TRAILING_GLYPH_BOX_CLASS } from "./StatusSlot";
@@ -84,6 +84,11 @@ import {
   SIDEBAR_SETTINGS_CHANNEL,
   type SidebarSettingsValues,
 } from "./sidebar-settings";
+import {
+  MAX_CHILD_EXPANSION,
+  pruneChildExpansion,
+  safeSetItem,
+} from "./lib/safe-storage";
 
 const ACTIVE_GROUPING_STORAGE_KEY = "bb-sidebar:active-grouping:v1";
 const ACTIVE_SORT_STORAGE_KEY = "bb-sidebar:active-sort:v1";
@@ -98,7 +103,14 @@ function readChildExpansion(): Set<string> {
     if (!stored) return new Set();
     const parsed = JSON.parse(stored) as unknown;
     if (!Array.isArray(parsed)) return new Set();
-    return new Set(parsed.filter((value): value is string => typeof value === "string"));
+    const filtered = parsed.filter(
+      (value): value is string => typeof value === "string",
+    );
+    const trimmed =
+      filtered.length > MAX_CHILD_EXPANSION
+        ? filtered.slice(-MAX_CHILD_EXPANSION)
+        : filtered;
+    return new Set(trimmed);
   } catch {
     return new Set();
   }
@@ -316,7 +328,7 @@ export function ThreadInbox({
       const result = await rpc.call("getSidebarSettings", {});
       setSidebarSettings(cacheSidebarSettings(rpc, result));
     } catch {
-      // Older test harnesses and a backend still reloading have no method yet.
+      void 0; // Older test harnesses and a backend still reloading have no method yet.
     }
   }, [rpc]);
   useEffect(() => {
@@ -380,35 +392,17 @@ export function ThreadInbox({
   );
   const [bulkBusy, setBulkBusy] = useState(false);
   useEffect(() => {
-    try {
-      window.localStorage.setItem(
-        CHILD_EXPANSION_STORAGE_KEY,
-        JSON.stringify([...expandedChildParentIds].sort()),
-      );
-    } catch {
-      // Expansion remains usable for this mount when storage is unavailable.
-    }
+    const pruned = pruneChildExpansion([...expandedChildParentIds]);
+    safeSetItem(
+      CHILD_EXPANSION_STORAGE_KEY,
+      JSON.stringify(pruned.sort()),
+    );
   }, [expandedChildParentIds]);
   useEffect(() => {
-    try {
-      window.localStorage.setItem(
-        SHELF_EXPANSION_STORAGE_KEY,
-        JSON.stringify(expandedShelves),
-      );
-    } catch {
-      // Storage may be unavailable in a hardened browser. The shelves still
-      // work for this mount; only the preference becomes non-durable.
-    }
+    safeSetItem(SHELF_EXPANSION_STORAGE_KEY, JSON.stringify(expandedShelves));
   }, [expandedShelves]);
   useEffect(() => {
-    try {
-      window.localStorage.setItem(
-        ACTIVE_SORT_STORAGE_KEY,
-        activeSortMode,
-      );
-    } catch {
-      // Keep the view usable when browser storage is unavailable.
-    }
+    safeSetItem(ACTIVE_SORT_STORAGE_KEY, activeSortMode);
   }, [activeSortMode]);
 
   const projectNameById = useMemo(
@@ -1366,7 +1360,7 @@ function ParkedShelf({
   shelf: "snoozed" | "settled";
   visibleThreads: readonly PluginSidebarThread[];
   activeThreadId: string | null;
-  lifecycle: ReturnType<typeof useLifecycle>;
+  lifecycle: LifecycleApi;
   snoozePresets: readonly ConfiguredSnoozePreset[];
   onNavigate: () => void;
   selectedThreadIds: ReadonlySet<string>;
