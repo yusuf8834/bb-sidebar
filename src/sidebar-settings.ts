@@ -9,6 +9,8 @@ export interface SidebarSettingsValues {
   autoSettleOnMerge: boolean;
 }
 
+import { safeSetItem } from "./lib/safe-storage";
+
 export const DEFAULT_SIDEBAR_SETTINGS: SidebarSettingsValues = {
   snoozePresets: "30m, 2h, 1d, 1w",
   inactiveThreadsEnabled: true,
@@ -57,14 +59,6 @@ export function cacheSidebarSettings(
   values: SidebarSettingsValues,
 ): SidebarSettingsValues {
   settingsByRpcClient.set(rpcClient, values);
-  try {
-    window.localStorage.setItem(
-      SIDEBAR_SETTINGS_CACHE_KEY,
-      JSON.stringify(values),
-    );
-  } catch {
-    // A hardened browser can disable storage. The in-memory cache still
-    // prevents flicker while this app runtime remains open.
-  }
+  safeSetItem(SIDEBAR_SETTINGS_CACHE_KEY, JSON.stringify(values));
   return values;
 }

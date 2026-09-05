@@ -970,6 +970,30 @@ describe("ThreadInbox", () => {
     );
   });
 
+  it("retains the newest child expansions after saving and remounting", async () => {
+    const key = "bb-sidebar:child-expansion:v1";
+    const oldIds = Array.from({ length: 100 }, (_, index) => `z${String(index).padStart(3, "0")}`);
+    const allThreads = [...oldIds, "a-newest", "b-next"].flatMap((id) => [
+      thread({ id, title: id }),
+      thread({ id: `${id}-child`, title: `${id}-child`, parentThreadId: id }),
+    ]);
+    localStorage.setItem(key, JSON.stringify(oldIds));
+    const first = render(allThreads);
+    const expand = (id: string) => {
+      const card = screen.getByRole("link", { name: id }).closest("li")!;
+      fireEvent.click(within(card).getByRole("button", { name: "1 child thread" }));
+    };
+    expand("a-newest");
+    await waitFor(() => expect(JSON.parse(localStorage.getItem(key)!)).toHaveLength(100));
+    first.lifecycle.unmount();
+
+    render(allThreads);
+    expand("b-next");
+    await waitFor(() => expect(JSON.parse(localStorage.getItem(key)!)).toEqual([
+      ...oldIds.slice(2), "a-newest", "b-next",
+    ]));
+  });
+
   it("restores child expansion and keeps selection on the parent body", () => {
     window.localStorage.setItem(
       "bb-sidebar:child-expansion:v1",
