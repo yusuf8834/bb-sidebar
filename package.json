@@ -1,6 +1,6 @@
 {
   "name": "bb-plugin-bb-sidebar",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "type": "module",
   "description": "A bb thread sidebar with manual and automatic sorting, snooze, settle, and bulk actions.",
   "license": "MIT",

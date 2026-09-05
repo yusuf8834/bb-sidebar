@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.6] - 2026-09-05
+
+### Fixed
+
+- Bounded the browser cache to 500 lifecycle records and 100 expanded-thread IDs to prevent unbounded storage growth.
+- Recovered from storage-quota errors by evicting sidebar caches one at a time, stopping as soon as the write succeeds to preserve remaining preferences.
+- Preserved expansion recency across restarts so pruning removes the oldest entries.
+
+Thanks to [@elianiva](https://github.com/elianiva) for identifying the storage issue and contributing the fix in [#1](https://github.com/yusuf8834/bb-sidebar/pull/1).
+
 ## [0.2.5] - 2026-09-05
 
 ### Added
