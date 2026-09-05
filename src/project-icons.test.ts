@@ -3,6 +3,7 @@ import {
   extractProjectIconHref,
   iconPathsForHref,
   normalizeProjectIconPath,
+  PROJECT_ICON_CANDIDATES,
   projectIconUrl,
 } from "./project-icons";
 
@@ -13,6 +14,12 @@ describe("project icon paths", () => {
     );
     expect(normalizeProjectIconPath("assets\\icon.PNG")).toBe(
       "assets/icon.PNG",
+    );
+  });
+
+  it("discovers conventional root-level project icons", () => {
+    expect(PROJECT_ICON_CANDIDATES).toEqual(
+      expect.arrayContaining(["icon.svg", "icon.png", "icon.ico"]),
     );
   });
 
