@@ -17,6 +17,18 @@ import {
 } from "./sidebar-settings";
 import { ProjectIconSettings } from "./ProjectIconSettings";
 import { ProjectRemovalSettings } from "./ProjectRemovalSettings";
+import {
+  configuredSnoozePresetError,
+  parseConfiguredSnoozePresets,
+} from "./lifecycle";
+import {
+  MAX_INACTIVE_AFTER_HOURS,
+  MIN_INACTIVE_AFTER_HOURS,
+} from "./inactive";
+import {
+  MAX_AUTO_SETTLE_AFTER_DAYS,
+  MIN_AUTO_SETTLE_AFTER_DAYS,
+} from "./auto-settle";
 
 function SettingsGroup({
   children,
@@ -153,6 +165,24 @@ export function SidebarSettings() {
   });
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
+  const inactiveHoursValid =
+    Number.isInteger(draft.inactiveAfterHours) &&
+    draft.inactiveAfterHours >= MIN_INACTIVE_AFTER_HOURS &&
+    draft.inactiveAfterHours <= MAX_INACTIVE_AFTER_HOURS;
+  const autoSettleDaysValid =
+    Number.isInteger(draft.autoSettleAfterDays) &&
+    draft.autoSettleAfterDays >= MIN_AUTO_SETTLE_AFTER_DAYS &&
+    draft.autoSettleAfterDays <= MAX_AUTO_SETTLE_AFTER_DAYS;
+  const snoozePresetsError = configuredSnoozePresetError(draft.snoozePresets);
+  const hasValidationError =
+    (draft.inactiveThreadsEnabled && !inactiveHoursValid) ||
+    (draft.autoSettleInactive && !autoSettleDaysValid) ||
+    snoozePresetsError !== null;
+  const snoozePreview = snoozePresetsError
+    ? null
+    : parseConfiguredSnoozePresets(draft.snoozePresets)
+        .map((preset) => preset.label)
+        .join(", ");
   const update = <Key extends keyof SidebarSettingsValues>(
     key: Key,
     value: SidebarSettingsValues[Key],
@@ -164,12 +194,20 @@ export function SidebarSettings() {
     });
 
   const save = async () => {
-    if (!dirty || saving) return;
+    if (!dirty || saving || hasValidationError) return;
     // A load started before this write cannot overwrite its result.
     loadRequestSeq.current += 1;
     setSaving(true);
     try {
-      const result = await rpc.call("updateSidebarSettings", draft);
+      const result = await rpc.call("updateSidebarSettings", {
+        ...draft,
+        inactiveAfterHours: inactiveHoursValid
+          ? draft.inactiveAfterHours
+          : DEFAULT_SIDEBAR_SETTINGS.inactiveAfterHours,
+        autoSettleAfterDays: autoSettleDaysValid
+          ? draft.autoSettleAfterDays
+          : DEFAULT_SIDEBAR_SETTINGS.autoSettleAfterDays,
+      });
       const cached = cacheSidebarSettings(rpc, result);
       savedRef.current = cached;
       draftRef.current = cached;
@@ -221,6 +259,14 @@ export function SidebarSettings() {
               max={720}
               value={draft.inactiveAfterHours}
               disabled={!draft.inactiveThreadsEnabled}
+              aria-invalid={
+                draft.inactiveThreadsEnabled && !inactiveHoursValid
+              }
+              aria-describedby={
+                draft.inactiveThreadsEnabled && !inactiveHoursValid
+                  ? "inactive-hours-error"
+                  : undefined
+              }
               onChange={(event) =>
                 update("inactiveAfterHours", Number(event.target.value))
               }
@@ -228,6 +274,14 @@ export function SidebarSettings() {
             />
             <span className="w-10 text-xs text-muted-foreground">hours</span>
           </div>
+          {draft.inactiveThreadsEnabled && !inactiveHoursValid ? (
+            <p
+              id="inactive-hours-error"
+              className="mt-1 max-w-40 text-right text-2xs text-destructive"
+            >
+              Enter a whole number from 1 to 720.
+            </p>
+          ) : null}
         </SettingRow>
         <SettingRow
           title="Snooze shortcuts"
@@ -235,10 +289,22 @@ export function SidebarSettings() {
         >
           <input
             aria-label="Snooze shortcuts"
+            aria-invalid={snoozePresetsError !== null}
+            aria-describedby="snooze-shortcuts-feedback"
             value={draft.snoozePresets}
             onChange={(event) => update("snoozePresets", event.target.value)}
             className="h-9 w-56 rounded-md border border-border bg-background px-2.5 text-sm text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
           />
+          <p
+            id="snooze-shortcuts-feedback"
+            className={`mt-1 max-w-56 text-right text-2xs ${
+              snoozePresetsError
+                ? "text-destructive"
+                : "text-muted-foreground"
+            }`}
+          >
+            {snoozePresetsError ?? `Menu: ${snoozePreview}`}
+          </p>
         </SettingRow>
       </SettingsGroup>
 
@@ -268,6 +334,12 @@ export function SidebarSettings() {
               max={90}
               value={draft.autoSettleAfterDays}
               disabled={!draft.autoSettleInactive}
+              aria-invalid={draft.autoSettleInactive && !autoSettleDaysValid}
+              aria-describedby={
+                draft.autoSettleInactive && !autoSettleDaysValid
+                  ? "auto-settle-days-error"
+                  : undefined
+              }
               onChange={(event) =>
                 update("autoSettleAfterDays", Number(event.target.value))
               }
@@ -275,10 +347,21 @@ export function SidebarSettings() {
             />
             <span className="w-10 text-xs text-muted-foreground">days</span>
           </div>
+          {draft.autoSettleInactive && !autoSettleDaysValid ? (
+            <p
+              id="auto-settle-days-error"
+              className="mt-1 max-w-40 text-right text-2xs text-destructive"
+            >
+              Enter a whole number from 1 to 90.
+            </p>
+          ) : null}
         </SettingRow>
         <SettingRow
           title="Settle merged pull requests"
-          description="Settle a thread when its pull request is merged."
+          description={
+            "Settle a thread when its pull request is merged. " +
+            "Closed pull requests are always treated as finished."
+          }
         >
           <Switch
             label="Settle merged pull requests"
@@ -294,7 +377,7 @@ export function SidebarSettings() {
         ) : null}
         <button
           type="button"
-          disabled={!dirty || saving}
+          disabled={!dirty || saving || hasValidationError}
           onClick={() => void save()}
           className="h-9 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
         >

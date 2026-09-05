@@ -35,6 +35,31 @@ export interface AutoSettleSettings {
 
 export type AutoSettleDecision = "keep" | "settle" | "unsettle";
 
+function cannotAutoSettle(
+  lifecycle: AutoSettleLifecycleState | null,
+  thread: AutoSettleThread,
+): boolean {
+  return (
+    thread.pinnedAt !== null ||
+    thread.status === "active" ||
+    thread.status === "pending" ||
+    thread.status === "starting" ||
+    thread.status === "stopping" ||
+    lifecycle?.snoozedUntil != null
+  );
+}
+
+/** Whether deciding this thread's policy state requires a PR lookup. */
+export function autoSettleNeedsPullRequest(
+  lifecycle: AutoSettleLifecycleState | null,
+  thread: AutoSettleThread,
+): boolean {
+  return (
+    lifecycle?.settledOverride == null &&
+    !cannotAutoSettle(lifecycle, thread)
+  );
+}
+
 /** Invalid settings disable inactivity settling instead of hiding work. */
 export function parseAutoSettleAfterDays(
   enabled: boolean,
@@ -69,14 +94,9 @@ export function decideAutoSettle({
   if (lifecycle?.settledOverride != null) return "keep";
 
   const isAutomaticallySettled = lifecycle?.settledAt != null;
-  const cannotSettle =
-    thread.pinnedAt !== null ||
-    thread.status === "active" ||
-    thread.status === "pending" ||
-    thread.status === "starting" ||
-    thread.status === "stopping" ||
-    lifecycle?.snoozedUntil != null;
-  if (cannotSettle) return isAutomaticallySettled ? "unsettle" : "keep";
+  if (cannotAutoSettle(lifecycle, thread)) {
+    return isAutomaticallySettled ? "unsettle" : "keep";
+  }
 
   // A failed lookup is not evidence that no open PR exists. Keep the current
   // state until the next evaluation can make a safe decision.

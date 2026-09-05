@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Avoided pull request lookups for pinned, running, pending, snoozed, and manually overridden threads during automatic cleanup.
+- Added inline validation for automatic cleanup thresholds and snooze shortcuts, including a preview of the saved snooze menu.
+
+### Improved
+
+- Updated the plugin description and source comments to reflect optional sort modes.
+- Documented how closed and merged pull requests participate in automatic cleanup.
+
 ## [0.2.6] - 2026-09-05
 
 ### Fixed
@@ -130,6 +142,8 @@ Thanks to [@elianiva](https://github.com/elianiva) for identifying the storage i
 
 - Initial public release.
 
+[0.2.6]: https://github.com/yusuf8834/bb-sidebar/compare/v0.2.5...v0.2.6
+[0.2.5]: https://github.com/yusuf8834/bb-sidebar/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/yusuf8834/bb-sidebar/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/yusuf8834/bb-sidebar/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/yusuf8834/bb-sidebar/compare/v0.2.1...v0.2.2

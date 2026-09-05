@@ -217,6 +217,38 @@ describe("sidebar settings", () => {
     );
   });
 
+  it("blocks invalid settings and previews valid snooze shortcuts", async () => {
+    renderSlot(sidebarSettings, {}, {
+      rpc: {
+        getSidebarSettings: () => defaultSidebarSettings,
+        listProjectIconSettings: () => ({ projects: [] }),
+      },
+    });
+
+    const snoozeInput = await screen.findByLabelText("Snooze shortcuts");
+    const saveButton = screen.getByRole("button", { name: "Save changes" });
+    fireEvent.change(snoozeInput, { target: { value: "later" } });
+    expect(snoozeInput.getAttribute("aria-invalid")).toBe("true");
+    expect(
+      screen.getByText(
+        "Use comma-separated durations such as 30m, 2h, or Lunch=3h.",
+      ),
+    ).toBeDefined();
+    expect((saveButton as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.change(snoozeInput, {
+      target: { value: "15m, Lunch=3h" },
+    });
+    expect(screen.getByText("Menu: 15 minutes, Lunch")).toBeDefined();
+    expect((saveButton as HTMLButtonElement).disabled).toBe(false);
+
+    const inactiveHours = screen.getByLabelText("Hours before inactive");
+    fireEvent.change(inactiveHours, { target: { value: "0" } });
+    expect(inactiveHours.getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByText("Enter a whole number from 1 to 720.")).toBeDefined();
+    expect((saveButton as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it("uploads a project icon from the file picker", async () => {
     let upload:
       | {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  autoSettleNeedsPullRequest,
   decideAutoSettle,
   parseAutoSettleAfterDays,
   type AutoSettleLifecycleState,
@@ -30,6 +31,31 @@ const quietThread = {
 const settings = { afterDays: 3, onMerge: true };
 
 describe("automatic settle policy", () => {
+  it("looks up pull requests only for threads the policy can change", () => {
+    expect(autoSettleNeedsPullRequest(null, quietThread)).toBe(true);
+    expect(
+      autoSettleNeedsPullRequest(null, {
+        ...quietThread,
+        status: "active",
+      }),
+    ).toBe(false);
+    expect(
+      autoSettleNeedsPullRequest(null, { ...quietThread, pinnedAt: NOW }),
+    ).toBe(false);
+    expect(
+      autoSettleNeedsPullRequest(
+        lifecycle({ settledOverride: "active" }),
+        quietThread,
+      ),
+    ).toBe(false);
+    expect(
+      autoSettleNeedsPullRequest(
+        lifecycle({ snoozedUntil: NOW + DAY }),
+        quietThread,
+      ),
+    ).toBe(false);
+  });
+
   it("keeps a pending thread available", () => {
     expect(decideAutoSettle({
       lifecycle: null,

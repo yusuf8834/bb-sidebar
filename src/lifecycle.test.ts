@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  configuredSnoozePresetError,
   canPark,
   formatSnoozeWakeTime,
   DEFAULT_SNOOZE_PRESET_CONFIG,
@@ -221,7 +222,7 @@ describe("resolveSnoozePresets", () => {
   });
 });
 
-describe("parseConfiguredSnoozePresets", () => {
+  describe("parseConfiguredSnoozePresets", () => {
   it("parses durations and optional labels", () => {
     expect(parseConfiguredSnoozePresets("15m, Focus block=2.5h, 1d")).toEqual([
       { id: "preset-0", label: "15 minutes", durationMs: 15 * 60_000 },
@@ -240,11 +241,27 @@ describe("parseConfiguredSnoozePresets", () => {
     ]);
   });
 
-  it("falls back to defaults when every entry is invalid", () => {
+    it("falls back to defaults when every entry is invalid", () => {
     expect(parseConfiguredSnoozePresets("later, eventually")).toEqual(
       parseConfiguredSnoozePresets(DEFAULT_SNOOZE_PRESET_CONFIG),
     );
-  });
+    });
+
+    it("reports settings that would silently fall back or discard entries", () => {
+      expect(configuredSnoozePresetError("")).toBe(
+        "Enter at least one snooze shortcut.",
+      );
+      expect(configuredSnoozePresetError("later")).toContain(
+        "comma-separated durations",
+      );
+      expect(configuredSnoozePresetError("15m, later")).toContain(
+        "comma-separated durations",
+      );
+      expect(
+        configuredSnoozePresetError("1m,2m,3m,4m,5m,6m,7m,8m,9m"),
+      ).toBe("Use no more than eight snooze shortcuts.");
+      expect(configuredSnoozePresetError("15m, Lunch=3h")).toBeNull();
+    });
 });
 
 describe("nextWakeDelayMs", () => {

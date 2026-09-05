@@ -7,6 +7,7 @@
 import { defineRpcContract, type BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import {
+  autoSettleNeedsPullRequest,
   decideAutoSettle,
   parseAutoSettleAfterDays,
   type AutoSettlePullRequest,
@@ -26,6 +27,7 @@ import {
   SIDEBAR_SETTINGS_CHANNEL,
   type SidebarSettingsValues,
 } from "./sidebar-settings";
+import { configuredSnoozePresetError } from "./lifecycle";
 
 const migrations = [
   `CREATE TABLE IF NOT EXISTS thread_lifecycle (
@@ -117,7 +119,14 @@ const projectIconPathSchema = z
   });
 const sidebarSettingsSchema = z
   .object({
-    snoozePresets: z.string().trim().min(1).max(500),
+    snoozePresets: z
+      .string()
+      .trim()
+      .min(1)
+      .max(500)
+      .refine((value) => configuredSnoozePresetError(value) === null, {
+        message: "Use one to eight valid snooze shortcuts",
+      }),
     inactiveThreadsEnabled: z.boolean(),
     inactiveAfterHours: z.number().int().min(1).max(720),
     autoSettleInactive: z.boolean(),
@@ -917,17 +926,26 @@ export default async function plugin(bb: BbPluginApi) {
     const evaluation = (async () => {
       const configured = readSidebarSettings();
       const threads = await loadPolicyThreads();
-      const environmentIds = [
-        ...new Set(
-          threads.flatMap((thread) =>
-            thread.environmentId === null ? [] : [thread.environmentId],
-          ),
-        ),
-      ];
-      const pullRequests = await loadPullRequests(environmentIds);
       const lifecycleByThreadId = new Map(
         readAll().map((row) => [row.threadId, row]),
       );
+      const environmentIds = [
+        ...new Set(
+          threads.flatMap((thread) => {
+            if (
+              thread.environmentId === null ||
+              !autoSettleNeedsPullRequest(
+                lifecycleByThreadId.get(thread.id) ?? null,
+                thread,
+              )
+            ) {
+              return [];
+            }
+            return [thread.environmentId];
+          }),
+        ),
+      ];
+      const pullRequests = await loadPullRequests(environmentIds);
       const now = Date.now();
       const policySettings = {
         afterDays: parseAutoSettleAfterDays(

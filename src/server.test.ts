@@ -139,6 +139,24 @@ describe("lifecycle RPC", () => {
     );
   });
 
+  it("rejects invalid snooze shortcuts at the RPC boundary", async () => {
+    const harness = await loadPlugin();
+
+    await expect(
+      harness.behavior.callRpc("updateSidebarSettings", {
+        snoozePresets: "later",
+        inactiveThreadsEnabled: true,
+        inactiveAfterHours: 6,
+        autoSettleInactive: true,
+        autoSettleAfterDays: 3,
+        autoSettleOnMerge: true,
+      }),
+    ).rejects.toThrow("rpc input validation failed");
+    await expect(
+      harness.behavior.callRpc("getSidebarSettings", {}),
+    ).resolves.toMatchObject({ snoozePresets: "30m, 2h, 1d, 1w" });
+  });
+
   it("migrates values from the previous flat settings form", async () => {
     const { bb, harness } = createFakePluginHost({
       pluginId: "bb-sidebar",
@@ -835,6 +853,23 @@ describe("automatic settle evaluation", () => {
               createdAt: old,
               updatedAt: old,
               latestAttentionAt: old,
+              status: "idle",
+            }),
+            makeThreadResponse({
+              id: "thr_running",
+              environmentId: "env_running",
+              createdAt: old,
+              updatedAt: old,
+              latestAttentionAt: old,
+              status: "active",
+            }),
+            makeThreadResponse({
+              id: "thr_pinned",
+              environmentId: "env_pinned",
+              createdAt: old,
+              updatedAt: old,
+              latestAttentionAt: old,
+              pinnedAt: Date.now(),
               status: "idle",
             }),
           ],

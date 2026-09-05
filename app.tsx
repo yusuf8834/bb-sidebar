@@ -1,9 +1,6 @@
-// BB Sidebar: a stable, manually ordered replacement for bb's thread list.
-// list, and the reference example for `app.slots.experimental_threadList`.
-//
-// The idea it is built around: the list NEVER re-orders itself. Threads sort
-// by creation time, newest first, and hold that place. Status is carried by
-// each card, not by position, so the sidebar only moves when you act.
+// BB Sidebar: a shelved, manually ordered replacement for bb's thread list.
+// Manual order stays fixed until the user moves a row. Optional views can sort
+// by activity, creation date, or project without changing the saved order.
 import { definePluginApp } from "@get-bb/plugin-sdk/app";
 import { ThreadInbox } from "./src/ThreadInbox";
 import { ParentChip } from "./src/ParentChip";
@@ -19,7 +16,8 @@ export default definePluginApp((app) => {
   app.slots.experimental_threadList({
     id: "inbox",
     title: "BB Sidebar",
-    description: "One flat list of cards, newest first, that never re-orders.",
+    description:
+      "Shelves, project filtering, manual ordering, and optional sorted views.",
     component: ThreadInbox,
   });
 

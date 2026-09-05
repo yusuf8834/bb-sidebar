@@ -37,6 +37,11 @@ The Inactive shelf is enabled by default and moves unpinned threads after six
 hours without activity. Both the switch and hour threshold are available in
 BB Sidebar's plugin settings.
 
+Automatic cleanup settles quiet threads after three days by default. It also
+settles closed pull requests, and the settings page controls whether merged
+pull requests settle automatically. Manual un-settle keeps a thread active
+until new work clears that override.
+
 Right-click a thread and choose **Regenerate title** to summarize its last
 three accepted user messages, or fewer if available. Only message text is
 included, capped at 8,000 characters per message. Assistant replies, queued

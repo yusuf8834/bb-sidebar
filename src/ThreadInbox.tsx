@@ -305,7 +305,8 @@ function rootVisibleThreadId(
 }
 
 /**
- * The sidebar's scrolling list: one flat, statically ordered stack of cards.
+ * The sidebar's scrolling list. Manual order is durable, while optional views
+ * can sort the same rows without changing their saved positions.
  *
  * The host owns the New-thread button and the search field above it, so this
  * ships neither. It filters by the `searchQuery` prop and keeps only the one

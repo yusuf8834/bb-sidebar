@@ -38,8 +38,8 @@ export interface ThreadReorderControls {
 
 /**
  * One thread as a three-line card: project and status, title, then branch and
- * activity. The card is the whole point of this sidebar — status lives in the
- * row instead of in its position, which is what lets the list stay still.
+ * activity. Status lives in the row instead of its position, so manual order
+ * can stay fixed while work changes state.
  *
  * The row is a positioned container with a full-bleed anchor UNDER the
  * controls, the way bb's own thread row does it: a `<button>` inside an `<a>`

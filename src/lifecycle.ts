@@ -136,6 +136,19 @@ export interface ConfiguredSnoozePreset {
   durationMs: number;
 }
 
+export function configuredSnoozePresetError(configured: string): string | null {
+  const entries = configured
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (entries.length === 0) return "Enter at least one snooze shortcut.";
+  if (entries.length > 8) return "Use no more than eight snooze shortcuts.";
+  if (parseSnoozePresetEntries(configured).length !== entries.length) {
+    return "Use comma-separated durations such as 30m, 2h, or Lunch=3h.";
+  }
+  return null;
+}
+
 const DURATION_UNIT_MS = {
   m: MINUTE_MS,
   h: HOUR_MS,
@@ -157,50 +170,53 @@ const DURATION_UNIT_LABEL = {
  * year. A wholly invalid setting falls back to the defaults, so a typo cannot
  * remove Snooze from every context menu.
  */
+function parseSnoozePresetEntries(source: string): ConfiguredSnoozePreset[] {
+  return source
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .slice(0, 8)
+    .flatMap((part, index) => {
+      const separator = part.indexOf("=");
+      const customLabel = separator >= 0 ? part.slice(0, separator).trim() : "";
+      const durationText = (separator >= 0 ? part.slice(separator + 1) : part)
+        .trim()
+        .toLowerCase();
+      const match = /^(\d+(?:\.\d+)?)\s*([mhdw])$/.exec(durationText);
+      if (!match) return [];
+
+      const amount = Number(match[1]);
+      const unit = match[2] as keyof typeof DURATION_UNIT_MS;
+      const durationMs = amount * DURATION_UNIT_MS[unit];
+      if (
+        !Number.isFinite(durationMs) ||
+        durationMs < MINUTE_MS ||
+        durationMs > 365 * DAY_MS
+      ) {
+        return [];
+      }
+
+      const displayedAmount = Number.isInteger(amount)
+        ? String(amount)
+        : String(Number(amount.toFixed(2)));
+      const generatedLabel = `${displayedAmount} ${DURATION_UNIT_LABEL[unit]}${amount === 1 ? "" : "s"}`;
+      return [
+        {
+          id: `preset-${index}`,
+          label: customLabel.slice(0, 40) || generatedLabel,
+          durationMs,
+        },
+      ];
+    });
+}
+
 export function parseConfiguredSnoozePresets(
   configured: string,
 ): ConfiguredSnoozePreset[] {
-  const parse = (source: string): ConfiguredSnoozePreset[] =>
-    source
-      .split(",")
-      .map((part) => part.trim())
-      .filter(Boolean)
-      .slice(0, 8)
-      .flatMap((part, index) => {
-        const separator = part.indexOf("=");
-        const customLabel = separator >= 0 ? part.slice(0, separator).trim() : "";
-        const durationText = (separator >= 0 ? part.slice(separator + 1) : part)
-          .trim()
-          .toLowerCase();
-        const match = /^(\d+(?:\.\d+)?)\s*([mhdw])$/.exec(durationText);
-        if (!match) return [];
-
-        const amount = Number(match[1]);
-        const unit = match[2] as keyof typeof DURATION_UNIT_MS;
-        const durationMs = amount * DURATION_UNIT_MS[unit];
-        if (
-          !Number.isFinite(durationMs) ||
-          durationMs < MINUTE_MS ||
-          durationMs > 365 * DAY_MS
-        ) {
-          return [];
-        }
-
-        const displayedAmount = Number.isInteger(amount)
-          ? String(amount)
-          : String(Number(amount.toFixed(2)));
-        const generatedLabel = `${displayedAmount} ${DURATION_UNIT_LABEL[unit]}${amount === 1 ? "" : "s"}`;
-        return [
-          {
-            id: `preset-${index}`,
-            label: customLabel.slice(0, 40) || generatedLabel,
-            durationMs,
-          },
-        ];
-      });
-
-  const parsed = parse(configured);
-  return parsed.length > 0 ? parsed : parse(DEFAULT_SNOOZE_PRESET_CONFIG);
+  const parsed = parseSnoozePresetEntries(configured);
+  return parsed.length > 0
+    ? parsed
+    : parseSnoozePresetEntries(DEFAULT_SNOOZE_PRESET_CONFIG);
 }
 
 /**
