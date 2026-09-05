@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import {
   experimental_useSidebarThreadActions as useSidebarThreadActions,
@@ -10,6 +10,7 @@ import type { bbSidebarRpcContract } from "./server";
 import { Icon } from "./components/Icon";
 import { cn } from "./lib/utils";
 import type { ConfiguredSnoozePreset } from "./lifecycle";
+import { beginTitleGeneration, finishTitleGeneration, useTitleGenerating } from "./title-generation-state";
 
 /**
  * This sidebar's own right-click menu.
@@ -45,12 +46,9 @@ export function RowContextMenu({
 }) {
   const actions = useSidebarThreadActions();
   const rpc = useRpc<typeof bbSidebarRpcContract>();
-  const [regenerating, setRegenerating] = useState(false);
-  const pending = useRef(false);
+  const regenerating = useTitleGenerating(thread.id);
   const regenerate = async () => {
-    if (pending.current) return;
-    pending.current = true;
-    setRegenerating(true);
+    if (!beginTitleGeneration(thread.id)) return;
     try {
       await rpc.call("regenerateTitle", { threadId: thread.id });
       toast.success("Thread title regenerated");
@@ -59,8 +57,7 @@ export function RowContextMenu({
         description: error instanceof Error ? error.message : undefined,
       });
     } finally {
-      pending.current = false;
-      setRegenerating(false);
+      finishTitleGeneration(thread.id);
     }
   };
 

@@ -2907,10 +2907,13 @@ describe("row context menu", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: "Regenerate title" }));
     await waitFor(() => expect(regenerateTitle).toHaveBeenCalledTimes(1));
     expect(regenerateTitle.mock.calls[0]?.[0]).toEqual({ threadId: "thr_1" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.getByRole("status", { name: "Generating title" })).toBeTruthy();
     fireEvent.contextMenu(screen.getByText("Original title"));
     expect(screen.getByRole("menuitem", { name: "Regenerating title…" }).getAttribute("aria-disabled")).toBe("true");
     result.resolve({ title: "New title" });
     await waitFor(() => expect(toastMocks.success).toHaveBeenCalledWith("Thread title regenerated"));
+    expect(screen.queryByRole("status", { name: "Generating title" })).toBeNull();
     expect(regenerateTitle).toHaveBeenCalledTimes(1);
   });
 
@@ -2928,6 +2931,7 @@ describe("row context menu", () => {
       description: "Title service unavailable",
     }));
     expect(screen.getByText("Original title")).toBeTruthy();
+    expect(screen.queryByRole("status", { name: "Generating title" })).toBeNull();
   });
 
   it("renames from the menu and saves with Enter", async () => {
