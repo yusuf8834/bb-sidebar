@@ -15,7 +15,7 @@ export interface AutoSettleThread {
   createdAt: number;
   latestAttentionAt: number;
   pinnedAt: number | null;
-  status: "active" | "error" | "idle" | "starting" | "stopping";
+  status: "active" | "error" | "idle" | "pending" | "starting" | "stopping";
   updatedAt: number;
 }
 
@@ -72,6 +72,7 @@ export function decideAutoSettle({
   const cannotSettle =
     thread.pinnedAt !== null ||
     thread.status === "active" ||
+    thread.status === "pending" ||
     thread.status === "starting" ||
     thread.status === "stopping" ||
     lifecycle?.snoozedUntil != null;
