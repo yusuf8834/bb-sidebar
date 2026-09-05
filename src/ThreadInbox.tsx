@@ -395,7 +395,7 @@ export function ThreadInbox({
     const pruned = pruneChildExpansion([...expandedChildParentIds]);
     safeSetItem(
       CHILD_EXPANSION_STORAGE_KEY,
-      JSON.stringify(pruned.sort()),
+      JSON.stringify(pruned),
     );
   }, [expandedChildParentIds]);
   useEffect(() => {

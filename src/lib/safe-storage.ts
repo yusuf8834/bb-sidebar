@@ -33,29 +33,31 @@ export function safeSetItem(key: string, value: string): boolean {
   } catch (error) {
     if (!isQuotaExceededError(error)) return false;
 
-    // Free the least-critical plugin keys and retry once.
+    // Retry after each eviction so higher-priority preferences survive as
+    // soon as removing a lower-priority cache frees enough space.
     for (const candidate of PLUGIN_STORAGE_KEYS) {
       if (candidate === key) continue;
       try {
         window.localStorage.removeItem(candidate);
       } catch {
-        void 0;
+        continue;
+      }
+      try {
+        window.localStorage.setItem(key, value);
+        return true;
+      } catch (retryError) {
+        if (!isQuotaExceededError(retryError)) return false;
       }
     }
 
+    // The value still does not fit. Clear its old cache entry to leave room
+    // for bb core, without ever removing keys owned by core or other plugins.
     try {
-      window.localStorage.setItem(key, value);
-      return true;
+      window.localStorage.removeItem(key);
     } catch {
-      // Last resort: the value itself may still be too large. Clear the
-      // target key so the origin quota is not left full for BB core.
-      try {
-        window.localStorage.removeItem(key);
-      } catch {
-        void 0;
-      }
-      return false;
+      // Storage can become unavailable while recovering from quota pressure.
     }
+    return false;
   }
 }
 
