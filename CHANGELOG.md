@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.5] - 2026-09-05
+
+### Added
+
+- Added **Regenerate title** to thread context menus. Titles use only the last three accepted user-message texts, or fewer when available.
+- Added a subtle spinner beside the title during generation, shared across cards, shelves, child rows, and search results, with reduced-motion support.
+
+### Improved
+
+- Used bb's configured inference model and fallback through a temporary hidden helper, with cleanup after generation and protection for manual title changes.
+- Kept pending threads available instead of automatically settling them.
+- Aligned the development CLI with Plugin SDK 0.4.47. Requires bb 0.42.0 or later and Plugin SDK 0.4.47 or later.
+
 ## [0.2.4] - 2026-08-30
 
 ### Added
