@@ -352,7 +352,7 @@ describe("sidebar settings", () => {
     });
 
     expect(await screen.findByText("Projects")).toBeDefined();
-    fireEvent.click(screen.getByRole("button", { name: "Remove..." }));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove..." }));
     expect(screen.queryByRole("alertdialog")).toBeNull();
     const confirmation = screen.getByRole("group", {
       name: "Confirm removal of Sidebar",
@@ -2587,6 +2587,7 @@ describe("row context menu", () => {
       "Settle",
       "Snooze",
       "Rename",
+      "Regenerate title",
       "Mark unread",
       "Copy",
       "Archive",
@@ -2894,6 +2895,44 @@ describe("row context menu", () => {
       });
     });
   }
+
+  it("regenerates from the menu and disables repeated clicks while waiting", async () => {
+    const result = deferred<{ title: string }>();
+    const regenerateTitle = vi.fn((_input: unknown) => result.promise);
+    renderSlot(inbox, listProps, {
+      sidebarThreads: { status: "ready", threads: [thread({ title: "Original title" })], projects: [] },
+      rpc: { listLifecycle: () => ({ rows: [] }), regenerateTitle },
+    });
+    fireEvent.contextMenu(await screen.findByText("Original title"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Regenerate title" }));
+    await waitFor(() => expect(regenerateTitle).toHaveBeenCalledTimes(1));
+    expect(regenerateTitle.mock.calls[0]?.[0]).toEqual({ threadId: "thr_1" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.getByRole("status", { name: "Generating title" })).toBeTruthy();
+    fireEvent.contextMenu(screen.getByText("Original title"));
+    expect(screen.getByRole("menuitem", { name: "Regenerating title…" }).getAttribute("aria-disabled")).toBe("true");
+    result.resolve({ title: "New title" });
+    await waitFor(() => expect(toastMocks.success).toHaveBeenCalledWith("Thread title regenerated"));
+    expect(screen.queryByRole("status", { name: "Generating title" })).toBeNull();
+    expect(regenerateTitle).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows regeneration errors and keeps the existing title", async () => {
+    renderSlot(inbox, listProps, {
+      sidebarThreads: { status: "ready", threads: [thread({ title: "Original title" })], projects: [] },
+      rpc: {
+        listLifecycle: () => ({ rows: [] }),
+        regenerateTitle: () => { throw new Error("Title service unavailable"); },
+      },
+    });
+    fireEvent.contextMenu(await screen.findByText("Original title"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Regenerate title" }));
+    await waitFor(() => expect(toastMocks.error).toHaveBeenCalledWith("Could not regenerate title", {
+      description: "Title service unavailable",
+    }));
+    expect(screen.getByText("Original title")).toBeTruthy();
+    expect(screen.queryByRole("status", { name: "Generating title" })).toBeNull();
+  });
 
   it("renames from the menu and saves with Enter", async () => {
     const rendered = render([

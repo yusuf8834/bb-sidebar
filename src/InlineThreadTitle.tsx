@@ -5,6 +5,7 @@ import {
 } from "@get-bb/plugin-sdk/app";
 import { cn } from "./lib/utils";
 import { threadDisplayTitle } from "./inbox";
+import { ThreadTitle } from "./ThreadTitle";
 
 /** Inline title editing shared by full cards and parked rows. */
 export function InlineThreadTitle({
@@ -29,7 +30,7 @@ export function InlineThreadTitle({
     finished.current = false;
   }, [editing, title]);
 
-  if (!editing) return <span className={className}>{title}</span>;
+  if (!editing) return <ThreadTitle threadId={thread.id} title={title} className={className} />;
 
   const finish = (save: boolean) => {
     if (finished.current) return;

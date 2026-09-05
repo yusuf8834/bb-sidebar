@@ -2,17 +2,21 @@ import type { ReactNode } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import {
   experimental_useSidebarThreadActions as useSidebarThreadActions,
+  useRpc,
   type PluginSidebarThread,
 } from "@get-bb/plugin-sdk/app";
+import { toast } from "sonner";
+import type { bbSidebarRpcContract } from "./server";
 import { Icon } from "./components/Icon";
 import { cn } from "./lib/utils";
 import type { ConfiguredSnoozePreset } from "./lifecycle";
+import { beginTitleGeneration, finishTitleGeneration, useTitleGenerating } from "./title-generation-state";
 
 /**
  * This sidebar's own right-click menu.
  *
  * The plugin API ships no menu component on purpose, so a replaced sidebar
- * owns this surface. Every item below is one call on
+ * owns this surface. Native actions use
  * `experimental_useSidebarThreadActions`, and the destructive one is
  * `requestDelete`, which opens BB's confirmation rather than deleting a
  * subtree silently.
@@ -41,6 +45,21 @@ export function RowContextMenu({
   onRename?: () => void;
 }) {
   const actions = useSidebarThreadActions();
+  const rpc = useRpc<typeof bbSidebarRpcContract>();
+  const regenerating = useTitleGenerating(thread.id);
+  const regenerate = async () => {
+    if (!beginTitleGeneration(thread.id)) return;
+    try {
+      await rpc.call("regenerateTitle", { threadId: thread.id });
+      toast.success("Thread title regenerated");
+    } catch (error) {
+      toast.error("Could not regenerate title", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      finishTitleGeneration(thread.id);
+    }
+  };
 
   return (
     <ContextMenu.Root>
@@ -71,6 +90,9 @@ export function RowContextMenu({
               Rename
             </Item>
           ) : null}
+          <Item disabled={regenerating} onSelect={() => void regenerate()}>
+            {regenerating ? "Regenerating title…" : "Regenerate title"}
+          </Item>
           <Item
             onSelect={() => void actions.setRead(thread.id, thread.isUnread)}
           >

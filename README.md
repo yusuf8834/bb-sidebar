@@ -18,6 +18,7 @@ A stable thread list for [bb](https://github.com/get-bb/bb). Threads stay where 
 - Expandable child-thread indicators with running and attention states
 - Live status, branch, pull request, and provider details
 - Native bb navigation, split, rename, archive, and delete flows
+- Regenerate a thread title from its last three accepted user messages
 
 ## Install
 
@@ -35,6 +36,17 @@ icon-free layout.
 The Inactive shelf is enabled by default and moves unpinned threads after six
 hours without activity. Both the switch and hour threshold are available in
 BB Sidebar's plugin settings.
+
+Right-click a thread and choose **Regenerate title** to summarize its last
+three accepted user messages, or fewer if available. Only message text is
+included, capped at 8,000 characters per message. Assistant replies, queued
+drafts, attachments, and older messages are excluded.
+
+Generation uses a temporary hidden helper in a personal workspace, with the
+model configured by `BB_INFERENCE` and `BB_INFERENCE_FALLBACK` for transient
+failures. These settings must name installed agent providers, such as `codex`.
+The current SDK cannot call bb's helper-inference service directly. The helper
+is removed afterward; failed generation leaves the existing title in place.
 
 ## Development
 

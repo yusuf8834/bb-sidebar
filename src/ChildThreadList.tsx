@@ -9,6 +9,7 @@ import { StatusGlyph } from "./StatusGlyph";
 import { threadDisplayTitle } from "./inbox";
 import { canParkThread } from "./lifecycle";
 import { RowContextMenu } from "./RowContextMenu";
+import { ThreadTitle } from "./ThreadTitle";
 
 const MAX_CHILD_DOTS = 3;
 
@@ -310,7 +311,7 @@ function ChildThreadRow({
               variant === "header" ? "flex flex-col" : "truncate",
             )}
           >
-            <span className="truncate">{title}</span>
+            <ThreadTitle threadId={thread.id} title={title} className="truncate" />
             {variant === "header" ? (
               <span className="truncate text-2xs text-muted-foreground">
                 {thread.originKind ?? "thread"}

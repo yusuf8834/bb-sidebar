@@ -30,6 +30,15 @@ const quietThread = {
 const settings = { afterDays: 3, onMerge: true };
 
 describe("automatic settle policy", () => {
+  it("keeps a pending thread available", () => {
+    expect(decideAutoSettle({
+      lifecycle: null,
+      now: NOW,
+      pullRequest: { outcome: "absent" },
+      settings,
+      thread: { ...quietThread, status: "pending" },
+    })).toBe("keep");
+  });
   it("accepts only configured inactivity thresholds from 1 through 90", () => {
     expect(parseAutoSettleAfterDays(true, "3")).toBe(3);
     expect(parseAutoSettleAfterDays(false, "3")).toBeNull();

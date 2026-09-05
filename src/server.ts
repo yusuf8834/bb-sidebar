@@ -13,6 +13,7 @@ import {
   type SettledOverride,
 } from "./auto-settle";
 import { runBulkAction } from "./bulk-actions";
+import { createTitleRegenerator } from "./regenerate-title";
 import {
   PROJECT_ICON_CANDIDATES,
   PROJECT_ICONS_CHANNEL,
@@ -153,6 +154,10 @@ const bulkMutationOutputSchema = z
   .strict();
 
 export const bbSidebarRpcContract = defineRpcContract({
+  regenerateTitle: {
+    input: threadIdSchema.strict(),
+    output: z.object({ title: z.string().min(1).max(100) }).strict(),
+  },
   getSidebarSettings: {
     input: z.object({}).strict(),
     output: sidebarSettingsSchema,
@@ -359,6 +364,7 @@ function iconMimeType(path: string, reported: string): string {
 }
 
 export default async function plugin(bb: BbPluginApi) {
+  const regenerateTitle = createTitleRegenerator(bb);
   const db = bb.storage.database();
   bb.storage.migrate(db, migrations);
 
@@ -974,6 +980,7 @@ export default async function plugin(bb: BbPluginApi) {
   });
 
   bb.rpc.register(bbSidebarRpcContract, {
+    regenerateTitle: ({ threadId }) => regenerateTitle(threadId),
     async getSidebarSettings() {
       return readSidebarSettings();
     },
