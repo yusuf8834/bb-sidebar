@@ -2,6 +2,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { safeSetItem } from "./safe-storage";
 
+// Least critical first: a lost working-since stamp only restarts a duration
+// label, so it goes before the lifecycle cache.
+const working = "bb-sidebar:working-since:v1";
 const lifecycle = "bb-sidebar:lifecycle-cache:v1";
 const children = "bb-sidebar:child-expansion:v1";
 const shelves = "bb-sidebar:shelf-expansion:v1";
@@ -40,7 +43,7 @@ describe("safe storage quota recovery", () => {
     const remove = limitStorage(110);
 
     expect(safeSetItem(children, "x".repeat(20))).toBe(true);
-    expect(remove.mock.calls).toEqual([[lifecycle]]);
+    expect(remove.mock.calls).toEqual([[working], [lifecycle]]);
     expect(localStorage.getItem(sort)).toBe("project");
     expect(localStorage.getItem(shelves)).toBe("{}");
   });
@@ -53,7 +56,7 @@ describe("safe storage quota recovery", () => {
     const remove = limitStorage(50);
 
     expect(safeSetItem(settings, "x".repeat(30))).toBe(true);
-    expect(remove.mock.calls).toEqual([[lifecycle], [children]]);
+    expect(remove.mock.calls).toEqual([[working], [lifecycle], [children]]);
     expect(localStorage.getItem(sort)).toBe("project");
     expect(localStorage.getItem(shelves)).toBe("{}");
   });
@@ -89,7 +92,7 @@ describe("safe storage quota recovery", () => {
       });
 
     expect(safeSetItem(children, "[]")).toBe(false);
-    expect(remove.mock.calls).toEqual([[lifecycle]]);
+    expect(remove.mock.calls).toEqual([[working]]);
     expect(localStorage.getItem(sort)).toBe("project");
   });
 });

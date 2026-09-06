@@ -3275,6 +3275,45 @@ describe("card metadata", () => {
     expect(screen.queryByText("3h")).toBeNull();
   });
 
+  // The host says only that a thread is working, so the sidebar keeps its own
+  // stamp per thread and shows how long the current stretch has run.
+  it("shows how long a thread has been working", async () => {
+    window.localStorage.setItem(
+      "bb-sidebar:working-since:v1",
+      JSON.stringify({ thr_run: Date.now() - 5 * 60_000 - 60_000 }),
+    );
+    render([thread({ id: "thr_run", indicator: "runtime" })]);
+    expect(await screen.findByText("Working · 5m")).toBeDefined();
+  });
+
+  it("stamps a thread that starts working and persists the stamp", async () => {
+    render([thread({ id: "thr_run", indicator: "runtime" })]);
+    expect(await screen.findByText("Working")).toBeDefined();
+    await waitFor(() => {
+      const stored = JSON.parse(
+        window.localStorage.getItem("bb-sidebar:working-since:v1") ?? "{}",
+      ) as Record<string, number>;
+      expect(typeof stored.thr_run).toBe("number");
+    });
+  });
+
+  // A request for input is a verdict, not a stretch of work, and reads oddly
+  // with a duration behind it.
+  it("leaves the duration off a status that is waiting on the user", async () => {
+    window.localStorage.setItem(
+      "bb-sidebar:working-since:v1",
+      JSON.stringify({ thr_ask: Date.now() - 10 * 60_000 }),
+    );
+    render([
+      thread({
+        id: "thr_ask",
+        indicator: "waiting-for-input",
+        hasPendingInteraction: true,
+      }),
+    ]);
+    expect(await screen.findByText("Needs you")).toBeDefined();
+  });
+
   // An indicator this plugin does not know must fall through to the age label
   // rather than leave the slot blank.
   it("keeps the age label for an unrecognized indicator", async () => {

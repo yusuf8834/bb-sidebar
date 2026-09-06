@@ -4,15 +4,17 @@ import type {
 } from "@get-bb/plugin-sdk/app";
 import { cn } from "./lib/utils";
 import { relativeTimeLabel } from "./relative-time";
+import { useWorkingSinceContext } from "./useWorkingSince";
+import { statusWithDuration } from "./working-since";
 
 /**
  * The row's trailing slot: one fixed width, right-aligned, on every row.
  *
  * Fixed rather than intrinsic because both ages and live-status labels vary in
- * width. The slot holds "Needs you" without dragging the project column back
- * and forth as a thread changes state.
+ * width. The slot holds "Planning · 12m" without dragging the project column
+ * back and forth as a thread changes state.
  */
-export const STATUS_SLOT_CLASS = "flex w-16 shrink-0 items-center justify-end";
+export const STATUS_SLOT_CLASS = "flex w-20 shrink-0 items-center justify-end";
 
 /**
  * The box every trailing glyph sits in, whatever its artwork measures.
@@ -28,6 +30,9 @@ export const TRAILING_GLYPH_BOX_CLASS =
 /**
  * Status OR age, never both: the glyph already implies the row is current, and
  * the age only earns its place once the thread has nothing to say.
+ *
+ * A live status carries how long the work has run ("Working · 5m"), so the
+ * slot answers "is it stuck?" as well as "what is it doing?".
  */
 export function StatusOrTime({
   thread,
@@ -37,17 +42,22 @@ export function StatusOrTime({
   /** Quantized clock, shared by every row in one render. */
   now: number;
 }) {
+  const workingSince = useWorkingSinceContext();
   const status = shortStatus(thread.indicator);
   if (status !== null) {
+    const label = status.showsDuration
+      ? statusWithDuration(status.label, workingSince.get(thread.id), now)
+      : status.label;
     return (
       <span
-        aria-label={thread.indicatorLabel ?? status.label}
+        aria-label={thread.indicatorLabel ?? label}
         className={cn(
           "max-w-full truncate text-2xs font-medium",
+          status.showsDuration && "tabular-nums",
           status.className,
         )}
       >
-        {status.label}
+        {label}
       </span>
     );
   }
@@ -61,30 +71,33 @@ export function StatusOrTime({
 function shortStatus(indicator: PluginSidebarThreadIndicator): {
   label: string;
   className: string;
+  /** Live work gets a running duration; a verdict or a request does not. */
+  showsDuration: boolean;
 } | null {
+  const className = statusToneClass(indicator);
   switch (indicator) {
     case "unread-error":
-      return { label: "Failed", className: statusToneClass(indicator) };
+      return { label: "Failed", className, showsDuration: false };
     case "waiting-for-input":
-      return { label: "Needs you", className: statusToneClass(indicator) };
+      return { label: "Needs you", className, showsDuration: false };
     case "unread-success":
-      return { label: "Unread", className: statusToneClass(indicator) };
+      return { label: "Unread", className, showsDuration: false };
     case "runtime":
-      return { label: "Working", className: statusToneClass(indicator) };
+      return { label: "Working", className, showsDuration: true };
     case "workflow":
-      return { label: "Workflow", className: statusToneClass(indicator) };
+      return { label: "Workflow", className, showsDuration: true };
     case "background-agent":
-      return { label: "Agent", className: statusToneClass(indicator) };
+      return { label: "Agent", className, showsDuration: true };
     case "background-command":
-      return { label: "Command", className: statusToneClass(indicator) };
+      return { label: "Command", className, showsDuration: true };
     case "plan-mode":
-      return { label: "Planning", className: statusToneClass(indicator) };
+      return { label: "Planning", className, showsDuration: true };
     case "goal":
-      return { label: "Goal", className: statusToneClass(indicator) };
+      return { label: "Goal", className, showsDuration: true };
     case "draft":
-      return { label: "Draft", className: statusToneClass(indicator) };
+      return { label: "Draft", className, showsDuration: false };
     case "working-draft":
-      return { label: "Drafting", className: statusToneClass(indicator) };
+      return { label: "Drafting", className, showsDuration: true };
     case "none":
       return null;
     default:

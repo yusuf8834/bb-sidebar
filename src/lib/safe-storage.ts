@@ -5,6 +5,7 @@ export const MAX_CHILD_EXPANSION = 100;
 
 // Keys managed by this plugin — ordered least-critical first for eviction.
 const PLUGIN_STORAGE_KEYS = [
+  "bb-sidebar:working-since:v1",
   "bb-sidebar:lifecycle-cache:v1",
   "bb-sidebar:child-expansion:v1",
   "bb-sidebar:shelf-expansion:v1",

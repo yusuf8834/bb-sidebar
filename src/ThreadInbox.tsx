@@ -37,6 +37,7 @@ import { useLifecycle, type LifecycleApi } from "./useLifecycle";
 import { usePinnedReorder } from "./usePinnedReorder";
 import { useInboxReorder } from "./useInboxReorder";
 import { TRAILING_GLYPH_BOX_CLASS } from "./StatusSlot";
+import { WorkingSinceContext, useWorkingSince } from "./useWorkingSince";
 import {
   ALL_PROJECTS,
   filterByProject,
@@ -318,6 +319,7 @@ export function ThreadInbox({
   searchQuery,
 }: PluginThreadListProps) {
   const { status, threads, projects } = useSidebarThreads();
+  const workingSince = useWorkingSince(threads);
   const { providers } = useProviders();
   const actions = useSidebarThreadActions();
   const rpc = useRpc<typeof bbSidebarRpcContract>();
@@ -1019,269 +1021,271 @@ export function ThreadInbox({
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      {/* The one control the host has no equivalent for. Everything else in
-          the chrome above — New thread, search — is bb's and stays bb's. */}
-      <div className="flex shrink-0 items-center gap-1 px-2 pb-1">
-        {selectedThreads.length > 0 ? (
-          <BulkSelectionBar
-            count={selectedThreads.length}
-            busy={bulkBusy}
-            snoozePresets={snoozePresets}
-            onSettle={() => void runBulkParkAction("settle")}
-            onSnooze={(snoozedUntil) =>
-              void runBulkParkAction("snooze", snoozedUntil)
-            }
-            onMarkRead={() =>
-              void runSelectedAction("mark read", "marked read", (targets) =>
-                runBulkAction(
-                  targets.map((thread) => thread.id),
-                  (threadId) => actions.setRead(threadId, true),
-                ),
-              )
-            }
-            onMarkUnread={() =>
-              void runSelectedAction(
-                "mark unread",
-                "marked unread",
-                (targets) =>
+    <WorkingSinceContext.Provider value={workingSince}>
+      <div className="flex min-h-0 flex-1 flex-col">
+        {/* The one control the host has no equivalent for. Everything else in
+            the chrome above — New thread, search — is bb's and stays bb's. */}
+        <div className="flex shrink-0 items-center gap-1 px-2 pb-1">
+          {selectedThreads.length > 0 ? (
+            <BulkSelectionBar
+              count={selectedThreads.length}
+              busy={bulkBusy}
+              snoozePresets={snoozePresets}
+              onSettle={() => void runBulkParkAction("settle")}
+              onSnooze={(snoozedUntil) =>
+                void runBulkParkAction("snooze", snoozedUntil)
+              }
+              onMarkRead={() =>
+                void runSelectedAction("mark read", "marked read", (targets) =>
                   runBulkAction(
                     targets.map((thread) => thread.id),
-                    (threadId) => actions.setRead(threadId, false),
+                    (threadId) => actions.setRead(threadId, true),
                   ),
-              )
-            }
-            onClear={() => setSelection(EMPTY_THREAD_SELECTION)}
-          />
-        ) : (
-          <Select value={scope} onValueChange={setScope}>
-            {/* Ghost trigger: no border, no filled track — it reads as a label
-                until you hover it. */}
-            <SelectTrigger
-              className="h-7 min-w-0 flex-1 border-0 px-1.5 py-1 text-xs font-medium text-muted-foreground shadow-none hover:bg-sidebar-accent focus:ring-0"
-              aria-label={`Project scope: ${scopeLabel}`}
-            >
-              <SelectValue>
-                <span className="flex min-w-0 items-center gap-1.5">
-                  {scope !== ALL_PROJECTS ? (
-                    <ProjectFavicon
-                      src={projectIconUrl(
-                        scope,
-                        projectIconRevision,
-                      )}
-                      className="size-3"
-                    />
-                  ) : null}
-                  <span className="truncate">{scopeLabel}</span>
-                </span>
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_PROJECTS} className="text-xs">
-                All projects
-              </SelectItem>
-              {projects.map((project) => (
-                <SelectItem
-                  key={project.id}
-                  value={project.id}
-                  className="text-xs"
-                >
+                )
+              }
+              onMarkUnread={() =>
+                void runSelectedAction(
+                  "mark unread",
+                  "marked unread",
+                  (targets) =>
+                    runBulkAction(
+                      targets.map((thread) => thread.id),
+                      (threadId) => actions.setRead(threadId, false),
+                    ),
+                )
+              }
+              onClear={() => setSelection(EMPTY_THREAD_SELECTION)}
+            />
+          ) : (
+            <Select value={scope} onValueChange={setScope}>
+              {/* Ghost trigger: no border, no filled track — it reads as a label
+                  until you hover it. */}
+              <SelectTrigger
+                className="h-7 min-w-0 flex-1 border-0 px-1.5 py-1 text-xs font-medium text-muted-foreground shadow-none hover:bg-sidebar-accent focus:ring-0"
+                aria-label={`Project scope: ${scopeLabel}`}
+              >
+                <SelectValue>
                   <span className="flex min-w-0 items-center gap-1.5">
-                    <ProjectFavicon
-                      src={projectIconUrl(
-                        project.id,
-                        projectIconRevision,
-                      )}
-                      className="size-3"
-                    />
-                    <span className="truncate">{project.name}</span>
+                    {scope !== ALL_PROJECTS ? (
+                      <ProjectFavicon
+                        src={projectIconUrl(
+                          scope,
+                          projectIconRevision,
+                        )}
+                        className="size-3"
+                      />
+                    ) : null}
+                    <span className="truncate">{scopeLabel}</span>
                   </span>
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_PROJECTS} className="text-xs">
+                  All projects
                 </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-2">
-        {status === "loading" ? null : status === "error" ? (
-          <p
-            role="status"
-            className="px-2 py-6 text-center text-xs text-muted-foreground"
-          >
-            Could not load threads.
-          </p>
-        ) : isSearching && searchResults.length === 0 ? (
-          <p
-            role="status"
-            className="px-2 py-6 text-center text-xs text-muted-foreground"
-          >
-            No threads found
-          </p>
-        ) : isSearching ? (
-          <SearchResults
-            threads={searchResults}
-            projectNameById={projectNameById}
-            projectIconRevision={projectIconRevision}
-            activeThreadId={activeThreadId}
-            now={now}
-            wokeThreadIds={wokeThreadIds}
-            onAcknowledgeWake={(threadId) =>
-              void lifecycle.acknowledgeWake(threadId)
-            }
-            selectedThreadIds={selection.selectedIds}
-            onSelectionClick={handleSelectionClick}
-            onNavigate={onNavigate}
-          />
-        ) : (
-          <div ref={attachShelvesAutoAnimateRef} className="flex flex-col">
-            {pinned.length > 0 ? (
-              <CollapsibleShelf
-                label="Pinned"
-                count={pinned.length}
-                expanded={expandedShelves.pinned}
-                onToggle={() =>
-                  setExpandedShelves((current) => ({
-                    ...current,
-                    pinned: !current.pinned,
-                  }))
-                }
-              >
-                <Shelf label={null}>
-                  {visiblePinned.map((thread) =>
-                    renderActiveThread(thread, "pinned"),
-                  )}
-                </Shelf>
-              </CollapsibleShelf>
-            ) : null}
-            {inbox.length > 0 ? (
-              <CollapsibleShelf
-                label="Active"
-                count={inbox.length}
-                expanded={expandedShelves.active}
-                onToggle={() =>
-                  setExpandedShelves((current) => ({
-                    ...current,
-                    active: !current.active,
-                  }))
-                }
-                action={
-                  <Select
-                    value={activeSortMode}
-                    onValueChange={(value) => {
-                      if (isActiveSortMode(value)) setActiveSortMode(value);
-                    }}
+                {projects.map((project) => (
+                  <SelectItem
+                    key={project.id}
+                    value={project.id}
+                    className="text-xs"
                   >
-                    <SelectTrigger
-                      aria-label={`Sort active threads: ${ACTIVE_SORT_LABELS[activeSortMode]}`}
-                      title={`Sort active threads: ${ACTIVE_SORT_LABELS[activeSortMode]}`}
-                      className={cn(
-                        "absolute bottom-1 right-[1.875rem] z-10 size-4 h-4 w-4 border-0 p-0 text-muted-foreground/40 shadow-none hover:bg-sidebar-accent hover:text-muted-foreground focus:ring-0 focus-visible:ring-1 focus-visible:ring-ring [&>svg:last-child]:hidden",
-                        activeSortMode !== "manual" &&
-                          "bg-sidebar-accent/60 text-muted-foreground/80",
-                      )}
-                    >
-                      <Icon name="ArrowUpDown" className="size-3" />
-                    </SelectTrigger>
-                    <SelectContent align="end" className="min-w-40">
-                      {ACTIVE_SORT_MODES.map((mode) => (
-                        <SelectItem key={mode} value={mode} className="text-xs">
-                          {ACTIVE_SORT_LABELS[mode]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                }
-              >
-                {activeSortMode === "project" ? (
-                  <ProjectGroups
-                    groups={inboxProjectGroups}
-                    projectNameById={projectNameById}
-                    renderThread={renderActiveThread}
-                  />
-                ) : visibleInbox.length > 0 ? (
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <ProjectFavicon
+                        src={projectIconUrl(
+                          project.id,
+                          projectIconRevision,
+                        )}
+                        className="size-3"
+                      />
+                      <span className="truncate">{project.name}</span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-2">
+          {status === "loading" ? null : status === "error" ? (
+            <p
+              role="status"
+              className="px-2 py-6 text-center text-xs text-muted-foreground"
+            >
+              Could not load threads.
+            </p>
+          ) : isSearching && searchResults.length === 0 ? (
+            <p
+              role="status"
+              className="px-2 py-6 text-center text-xs text-muted-foreground"
+            >
+              No threads found
+            </p>
+          ) : isSearching ? (
+            <SearchResults
+              threads={searchResults}
+              projectNameById={projectNameById}
+              projectIconRevision={projectIconRevision}
+              activeThreadId={activeThreadId}
+              now={now}
+              wokeThreadIds={wokeThreadIds}
+              onAcknowledgeWake={(threadId) =>
+                void lifecycle.acknowledgeWake(threadId)
+              }
+              selectedThreadIds={selection.selectedIds}
+              onSelectionClick={handleSelectionClick}
+              onNavigate={onNavigate}
+            />
+          ) : (
+            <div ref={attachShelvesAutoAnimateRef} className="flex flex-col">
+              {pinned.length > 0 ? (
+                <CollapsibleShelf
+                  label="Pinned"
+                  count={pinned.length}
+                  expanded={expandedShelves.pinned}
+                  onToggle={() =>
+                    setExpandedShelves((current) => ({
+                      ...current,
+                      pinned: !current.pinned,
+                    }))
+                  }
+                >
                   <Shelf label={null}>
-                    {sortedVisibleInbox.map((thread) =>
-                      renderActiveThread(thread, "inbox"),
+                    {visiblePinned.map((thread) =>
+                      renderActiveThread(thread, "pinned"),
                     )}
                   </Shelf>
-                ) : null}
-              </CollapsibleShelf>
-            ) : null}
-            {inactive.length > 0 ? (
-              <CollapsibleShelf
-                label="Inactive"
-                count={inactive.length}
-                expanded={expandedShelves.inactive}
+                </CollapsibleShelf>
+              ) : null}
+              {inbox.length > 0 ? (
+                <CollapsibleShelf
+                  label="Active"
+                  count={inbox.length}
+                  expanded={expandedShelves.active}
+                  onToggle={() =>
+                    setExpandedShelves((current) => ({
+                      ...current,
+                      active: !current.active,
+                    }))
+                  }
+                  action={
+                    <Select
+                      value={activeSortMode}
+                      onValueChange={(value) => {
+                        if (isActiveSortMode(value)) setActiveSortMode(value);
+                      }}
+                    >
+                      <SelectTrigger
+                        aria-label={`Sort active threads: ${ACTIVE_SORT_LABELS[activeSortMode]}`}
+                        title={`Sort active threads: ${ACTIVE_SORT_LABELS[activeSortMode]}`}
+                        className={cn(
+                          "absolute bottom-1 right-[1.875rem] z-10 size-4 h-4 w-4 border-0 p-0 text-muted-foreground/40 shadow-none hover:bg-sidebar-accent hover:text-muted-foreground focus:ring-0 focus-visible:ring-1 focus-visible:ring-ring [&>svg:last-child]:hidden",
+                          activeSortMode !== "manual" &&
+                            "bg-sidebar-accent/60 text-muted-foreground/80",
+                        )}
+                      >
+                        <Icon name="ArrowUpDown" className="size-3" />
+                      </SelectTrigger>
+                      <SelectContent align="end" className="min-w-40">
+                        {ACTIVE_SORT_MODES.map((mode) => (
+                          <SelectItem key={mode} value={mode} className="text-xs">
+                            {ACTIVE_SORT_LABELS[mode]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  }
+                >
+                  {activeSortMode === "project" ? (
+                    <ProjectGroups
+                      groups={inboxProjectGroups}
+                      projectNameById={projectNameById}
+                      renderThread={renderActiveThread}
+                    />
+                  ) : visibleInbox.length > 0 ? (
+                    <Shelf label={null}>
+                      {sortedVisibleInbox.map((thread) =>
+                        renderActiveThread(thread, "inbox"),
+                      )}
+                    </Shelf>
+                  ) : null}
+                </CollapsibleShelf>
+              ) : null}
+              {inactive.length > 0 ? (
+                <CollapsibleShelf
+                  label="Inactive"
+                  count={inactive.length}
+                  expanded={expandedShelves.inactive}
+                  onToggle={() =>
+                    setExpandedShelves((current) => ({
+                      ...current,
+                      inactive: !current.inactive,
+                    }))
+                  }
+                >
+                  <Shelf label={null}>
+                    {visibleInactive.map((thread) =>
+                      renderActiveThread(thread, "inbox", false),
+                    )}
+                  </Shelf>
+                </CollapsibleShelf>
+              ) : null}
+              {pinned.length === 0 &&
+              inbox.length === 0 &&
+              inactive.length === 0 ? (
+                <ActiveEmptyState />
+              ) : null}
+              <ParkedShelf
+                label="Snoozed"
+                threads={snoozed}
+                projectNameById={projectNameById}
+                expanded={expandedShelves.snoozed}
                 onToggle={() =>
                   setExpandedShelves((current) => ({
                     ...current,
-                    inactive: !current.inactive,
+                    snoozed: !current.snoozed,
                   }))
                 }
-              >
-                <Shelf label={null}>
-                  {visibleInactive.map((thread) =>
-                    renderActiveThread(thread, "inbox", false),
-                  )}
-                </Shelf>
-              </CollapsibleShelf>
-            ) : null}
-            {pinned.length === 0 &&
-            inbox.length === 0 &&
-            inactive.length === 0 ? (
-              <ActiveEmptyState />
-            ) : null}
-            <ParkedShelf
-              label="Snoozed"
-              threads={snoozed}
-              projectNameById={projectNameById}
-              expanded={expandedShelves.snoozed}
-              onToggle={() =>
-                setExpandedShelves((current) => ({
-                  ...current,
-                  snoozed: !current.snoozed,
-                }))
-              }
-              shelf="snoozed"
-              visibleThreads={visibleSnoozed}
-              activeThreadId={activeThreadId}
-              lifecycle={lifecycle}
-              snoozePresets={snoozePresets}
-              onNavigate={onNavigate}
-              selectedThreadIds={selection.selectedIds}
-              onSelectionClick={handleSelectionClick}
-              projectIconRevision={projectIconRevision}
-            />
-            <ParkedShelf
-              label="Settled"
-              threads={settled}
-              projectNameById={projectNameById}
-              expanded={expandedShelves.settled}
-              onToggle={() =>
-                setExpandedShelves((current) => ({
-                  ...current,
-                  settled: !current.settled,
-                }))
-              }
-              shelf="settled"
-              visibleThreads={visibleSettled}
-              activeThreadId={activeThreadId}
-              lifecycle={lifecycle}
-              snoozePresets={snoozePresets}
-              onNavigate={onNavigate}
-              selectedThreadIds={selection.selectedIds}
-              onSelectionClick={handleSelectionClick}
-              projectIconRevision={projectIconRevision}
-              settledLimit={settledLimit}
-              onLoadMore={() =>
-                setSettledLimit((limit) => limit + SETTLED_PAGE_SIZE)
-              }
-            />
-          </div>
-        )}
+                shelf="snoozed"
+                visibleThreads={visibleSnoozed}
+                activeThreadId={activeThreadId}
+                lifecycle={lifecycle}
+                snoozePresets={snoozePresets}
+                onNavigate={onNavigate}
+                selectedThreadIds={selection.selectedIds}
+                onSelectionClick={handleSelectionClick}
+                projectIconRevision={projectIconRevision}
+              />
+              <ParkedShelf
+                label="Settled"
+                threads={settled}
+                projectNameById={projectNameById}
+                expanded={expandedShelves.settled}
+                onToggle={() =>
+                  setExpandedShelves((current) => ({
+                    ...current,
+                    settled: !current.settled,
+                  }))
+                }
+                shelf="settled"
+                visibleThreads={visibleSettled}
+                activeThreadId={activeThreadId}
+                lifecycle={lifecycle}
+                snoozePresets={snoozePresets}
+                onNavigate={onNavigate}
+                selectedThreadIds={selection.selectedIds}
+                onSelectionClick={handleSelectionClick}
+                projectIconRevision={projectIconRevision}
+                settledLimit={settledLimit}
+                onLoadMore={() =>
+                  setSettledLimit((limit) => limit + SETTLED_PAGE_SIZE)
+                }
+              />
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </WorkingSinceContext.Provider>
   );
 }
 

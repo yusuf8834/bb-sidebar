@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Showed how long a thread has been working next to its live status, such as "Working · 5m" or "Planning · 2h". The count starts when the sidebar first sees the thread busy, survives reloads, and resets after the thread stops or asks for input.
+
 ### Fixed
 
 - Avoided pull request lookups for pinned, running, pending, snoozed, and manually overridden threads during automatic cleanup.
