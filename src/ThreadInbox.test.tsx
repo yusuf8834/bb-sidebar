@@ -3040,7 +3040,7 @@ describe("row context menu", () => {
     );
   });
 
-  it("copies the branch and thread ID", async () => {
+  it("copies the branch, thread ID, and thread link", async () => {
     const writeText = vi.fn(() => Promise.resolve());
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
@@ -3077,6 +3077,37 @@ describe("row context menu", () => {
     copyMenu = await openCopyMenu();
     fireEvent.click(within(copyMenu).getByText("Copy thread ID"));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("thr_copy"));
+
+    copyMenu = await openCopyMenu();
+    fireEvent.click(within(copyMenu).getByText("Copy thread link"));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(
+      `${window.location.origin}/projects/proj_1/threads/thr_copy`,
+    ));
+  });
+
+  it("copies personal thread links and reports clipboard failures", async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    render([thread({ id: "thr_personal", title: "Personal thread" })], [
+      { id: "proj_1", name: "Personal", isPersonal: true },
+    ]);
+    const copyLink = async () => {
+      fireEvent.contextMenu(await screen.findByText("Personal thread"));
+      fireEvent.click(screen.getByRole("menuitem", { name: "Copy" }));
+      fireEvent.click(await screen.findByText("Copy thread link"));
+    };
+    await copyLink();
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(
+      `${window.location.origin}/threads/thr_personal`,
+    ));
+    writeText.mockRejectedValueOnce(new Error("Clipboard denied"));
+    await copyLink();
+    await waitFor(() => expect(toastMocks.error).toHaveBeenCalledWith(
+      "Failed to copy thread link",
+    ));
   });
 
   it("routes deletion through the host's confirmation", async () => {

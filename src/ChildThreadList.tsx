@@ -9,7 +9,7 @@ import { StatusGlyph } from "./StatusGlyph";
 import { threadDisplayTitle } from "./inbox";
 import { canParkThread } from "./lifecycle";
 import { RowContextMenu } from "./RowContextMenu";
-import { ThreadTitle } from "./ThreadTitle";
+import { InlineThreadTitle } from "./InlineThreadTitle";
 
 const MAX_CHILD_DOTS = 3;
 
@@ -276,9 +276,15 @@ function ChildThreadRow({
   const title = threadDisplayTitle(thread);
   const needsYou = thread.hasPendingInteraction;
   const running = !needsYou && isChildRunning(thread);
+  const [isRenaming, setIsRenaming] = useState(false);
+  const RowAction = isRenaming ? "div" : "button";
 
   return (
-    <RowContextMenu thread={thread} canArchive={canParkThread(thread)}>
+    <RowContextMenu
+      thread={thread}
+      canArchive={canParkThread(thread)}
+      onRename={() => setIsRenaming(true)}
+    >
       <div
         className={cn(
           "flex w-full items-center rounded-md text-left",
@@ -290,10 +296,11 @@ function ChildThreadRow({
             "bg-[#fdf6ea] hover:bg-[#fdf6ea] dark:bg-amber-950/30 dark:hover:bg-amber-950/40",
         )}
       >
-        <button
-          type="button"
-          aria-label={childThreadOpenLabel(thread, relation, title)}
-          onClick={() => onOpenThread(thread.id)}
+        <RowAction
+          type={isRenaming ? undefined : "button"}
+          aria-label={isRenaming ? undefined : childThreadOpenLabel(thread, relation, title)}
+          onClick={isRenaming ? undefined : () => onOpenThread(thread.id)}
+          onKeyDown={isRenaming ? (event) => event.stopPropagation() : undefined}
           className={cn(
             "flex min-w-0 flex-1 items-center text-left outline-none focus-visible:ring-1 focus-visible:ring-ring",
             variant === "header"
@@ -311,7 +318,12 @@ function ChildThreadRow({
               variant === "header" ? "flex flex-col" : "truncate",
             )}
           >
-            <ThreadTitle threadId={thread.id} title={title} className="truncate" />
+            <InlineThreadTitle
+              thread={thread}
+              editing={isRenaming}
+              onEditingChange={setIsRenaming}
+              className="truncate"
+            />
             {variant === "header" ? (
               <span className="truncate text-2xs text-muted-foreground">
                 {thread.originKind ?? "thread"}
@@ -335,7 +347,7 @@ function ChildThreadRow({
               </span>
             </span>
           ) : null}
-        </button>
+        </RowAction>
         {disclosure ? (
           <GrandchildDisclosureButton title={title} {...disclosure} />
         ) : null}

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, fireEvent, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 
@@ -48,6 +48,47 @@ function thread(
 afterEach(cleanup);
 
 describe("SubagentsChip", () => {
+  it.each(["child", "grandchild"])("renames a %s without opening it and keeps the popup on cancel", async (targetId) => {
+    const rendered = renderSlot(
+      childrenChip,
+      { threadId: "parent", projectId: "proj_1", isCompactViewport: false },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "parent", title: "Parent" }),
+            thread({ id: "child", title: "Child", parentThreadId: "parent" }),
+            thread({ id: "grandchild", title: "Grandchild", parentThreadId: "child" }),
+          ],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+      },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "1 child thread" }));
+    if (targetId === "grandchild") {
+      fireEvent.click(screen.getByRole("button", { name: "Show 1 grandchild thread for Child" }));
+    }
+    const title = targetId === "child" ? "Child" : "Grandchild";
+    const startRename = async () => {
+      fireEvent.contextMenu(screen.getByText(title, { exact: true }));
+      fireEvent.click(within(await screen.findByRole("menu", { name: "Thread actions" })).getByText("Rename"));
+      return screen.findByRole("textbox", { name: `Rename ${title}` });
+    };
+    let input = await startRename();
+    expect(input.closest("button")).toBeNull();
+    fireEvent.change(input, { target: { value: "Canceled" } });
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(screen.getByRole("region", { name: "Child threads" })).toBeTruthy();
+    expect(rendered.sidebarActionCalls).toEqual([]);
+
+    input = await startRename();
+    fireEvent.change(input, { target: { value: "Renamed child" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(rendered.sidebarActionCalls).toEqual([
+      { method: "rename", threadId: targetId, title: "Renamed child" },
+    ]));
+  });
+
   it("mounts the shared child list in the header menu", () => {
     const rendered = renderSlot(
       childrenChip,

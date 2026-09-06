@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import {
   experimental_useSidebarThreadActions as useSidebarThreadActions,
+  experimental_useSidebarThreads as useSidebarThreads,
   useRpc,
   type PluginSidebarThread,
 } from "@get-bb/plugin-sdk/app";
@@ -117,10 +118,26 @@ export function RowContextMenu({
 }
 
 function CopySubmenu({ thread }: { thread: PluginSidebarThread }) {
+  const { projects } = useSidebarThreads();
   const branchName = thread.environment?.branchName;
   const copy = (text: string) => {
     if (typeof navigator === "undefined" || !navigator.clipboard) return;
     void navigator.clipboard.writeText(text);
+  };
+  const copyThreadLink = async () => {
+    const isPersonal = projects.some(
+      (project) => project.id === thread.projectId && project.isPersonal,
+    );
+    const threadPath = `/threads/${encodeURIComponent(thread.id)}`;
+    const path = isPersonal
+      ? threadPath
+      : `/projects/${encodeURIComponent(thread.projectId)}${threadPath}`;
+    try {
+      await navigator.clipboard.writeText(new URL(path, window.location.origin).href);
+      toast.success("Thread link copied");
+    } catch {
+      toast.error("Failed to copy thread link");
+    }
   };
 
   return (
@@ -140,6 +157,7 @@ function CopySubmenu({ thread }: { thread: PluginSidebarThread }) {
           sideOffset={4}
           className="z-50 min-w-40 rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md"
         >
+          <Item onSelect={() => void copyThreadLink()}>Copy thread link</Item>
           {branchName ? (
             <Item onSelect={() => copy(branchName)}>
               Copy branch
