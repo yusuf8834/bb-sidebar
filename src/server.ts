@@ -271,6 +271,22 @@ export const bbSidebarRpcContract = defineRpcContract({
       })
       .strict(),
   },
+  renameProject: {
+    input: z.object({ projectId: projectIdSchema, name: z.string().trim().min(1).max(500) }).strict(),
+    output: z.object({ ok: z.literal(true) }).strict(),
+  },
+  projectPathHosts: {
+    input: z.object({ projectId: projectIdSchema }).strict(),
+    output: z.object({ hosts: z.array(z.object({ id: z.string(), name: z.string() }).strict()) }).strict(),
+  },
+  addProjectPath: {
+    input: z.object({
+      projectId: projectIdSchema,
+      hostId: z.string().trim().min(1),
+      path: z.string().trim().min(1).max(4096),
+    }).strict(),
+    output: z.object({ ok: z.literal(true) }).strict(),
+  },
   removeProject: {
     input: z
       .object({
@@ -1143,6 +1159,34 @@ export default async function plugin(bb: BbPluginApi) {
           .filter((project) => project.kind === "standard")
           .map((project) => ({ id: project.id, name: project.name })),
       };
+    },
+    async renameProject({ projectId, name }) {
+      const project = await bb.sdk.projects.get({ projectId });
+      if (project.kind !== "standard") throw new Error("Personal projects cannot be renamed");
+      await bb.sdk.projects.update({ projectId, name });
+      bb.realtime.publish(PROJECT_ICONS_CHANNEL, { projectId });
+      return { ok: true as const };
+    },
+    async projectPathHosts({ projectId }) {
+      const project = await bb.sdk.projects.get({ projectId });
+      if (project.kind !== "standard") return { hosts: [] };
+      const hosts = await bb.sdk.hosts.list();
+      return {
+        hosts: hosts.filter((host) => host.status === "connected" &&
+          !project.sources.some((source) => source.hostId === host.id))
+          .map(({ id, name }) => ({ id, name })),
+      };
+    },
+    async addProjectPath({ projectId, hostId, path }) {
+      const project = await bb.sdk.projects.get({ projectId });
+      if (project.kind !== "standard") throw new Error("Personal projects cannot have local paths added");
+      if (project.sources.some((source) => source.hostId === hostId)) {
+        throw new Error("This project already has a path on that machine");
+      }
+      await bb.sdk.projects.sources.add({ projectId, hostId, path, type: "local_path" });
+      defaultProjectHostIds.delete(projectId);
+      bb.realtime.publish(PROJECT_ICONS_CHANNEL, { projectId });
+      return { ok: true as const };
     },
     async removeProject({ projectId, confirmation }) {
       const project = await bb.sdk.projects.get({ projectId });

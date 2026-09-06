@@ -18,6 +18,7 @@ A stable thread list for [bb](https://github.com/get-bb/bb). Threads stay where 
 - Expandable child-thread indicators with running and attention states
 - Live status, branch, pull request, and provider details
 - Native bb navigation, split, rename, archive, and delete flows
+- Project submenu on thread cards for settings, rename, local paths, and removal
 - Regenerate a thread title from its last three accepted user messages
 
 ## Install

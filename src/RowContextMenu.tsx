@@ -10,6 +10,8 @@ import { toast } from "sonner";
 import type { bbSidebarRpcContract } from "./server";
 import { Icon } from "./components/Icon";
 import { cn } from "./lib/utils";
+import { usePortalScopeProps } from "./lib/portal-scope";
+import { ProjectActions } from "./ProjectContextMenu";
 import type { ConfiguredSnoozePreset } from "./lifecycle";
 import { beginTitleGeneration, finishTitleGeneration, useTitleGenerating } from "./title-generation-state";
 
@@ -46,6 +48,9 @@ export function RowContextMenu({
   onRename?: () => void;
 }) {
   const actions = useSidebarThreadActions();
+  const { projects } = useSidebarThreads();
+  const project = projects.find((project) => project.id === thread.projectId);
+  const portalScope = usePortalScopeProps();
   const rpc = useRpc<typeof bbSidebarRpcContract>();
   const regenerating = useTitleGenerating(thread.id);
   const regenerate = async () => {
@@ -63,16 +68,35 @@ export function RowContextMenu({
   };
 
   return (
+    <ProjectActions project={project}>
+    {({ items: projectItems, onOpenChange, onCloseAutoFocus }) => (
     <ContextMenu.Root>
       <ContextMenu.Trigger asChild>{children}</ContextMenu.Trigger>
       <ContextMenu.Portal>
         <ContextMenu.Content
+          {...portalScope}
           aria-label="Thread actions"
+          onCloseAutoFocus={onCloseAutoFocus}
           className="z-50 min-w-44 rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md"
         >
           <Item onSelect={() => actions.open(thread.id, { split: true })}>
             Open in split
           </Item>
+          {projectItems ? (
+            <ContextMenu.Sub onOpenChange={onOpenChange}>
+              <ContextMenu.SubTrigger className="flex cursor-pointer items-center rounded-md px-2 py-1.5 text-sm outline-none data-[state=open]:bg-accent data-[highlighted]:bg-accent">
+                Project
+                <Icon name="ChevronRight" className="ml-auto size-4 opacity-60" />
+              </ContextMenu.SubTrigger>
+              <ContextMenu.Portal>
+                <ContextMenu.SubContent {...portalScope} aria-label="Project actions" sideOffset={4}
+                  className="z-50 min-w-44 rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md">
+                  <ContextMenu.Label className="max-w-64 truncate px-2 py-1 text-xs text-muted-foreground">{project?.name}</ContextMenu.Label>
+                  {projectItems}
+                </ContextMenu.SubContent>
+              </ContextMenu.Portal>
+            </ContextMenu.Sub>
+          ) : null}
           <Separator />
           <Item
             onSelect={() => void actions.setPinned(thread.id, !thread.isPinned)}
@@ -114,6 +138,8 @@ export function RowContextMenu({
         </ContextMenu.Content>
       </ContextMenu.Portal>
     </ContextMenu.Root>
+    )}
+    </ProjectActions>
   );
 }
 
