@@ -1,15 +1,20 @@
 # Changelog
 
-## Unreleased
+## [0.2.7] - 2026-09-06
 
 ### Added
 
 - Showed how long a thread has been working next to its live status, such as "Working · 5m" or "Planning · 2h". The count starts when the sidebar first sees the thread busy, survives reloads, and resets after the thread stops or asks for input.
+- Added a Project submenu to thread cards with project settings, rename, local path setup, and removal with typed confirmation.
+- Added Copy thread link for project and personal threads.
+- Added inline rename to child and grandchild thread menus.
+- Added discovery of conventional root-level project icons.
 
 ### Fixed
 
 - Avoided pull request lookups for pinned, running, pending, snoozed, and manually overridden threads during automatic cleanup.
 - Added inline validation for automatic cleanup thresholds and snooze shortcuts, including a preview of the saved snooze menu.
+- Fixed styling scope for project menus and dialogs, including padding, typography, and focus rings.
 
 ### Improved
 
@@ -146,6 +151,7 @@ Thanks to [@elianiva](https://github.com/elianiva) for identifying the storage i
 
 - Initial public release.
 
+[0.2.7]: https://github.com/yusuf8834/bb-sidebar/compare/v0.2.6...v0.2.7
 [0.2.6]: https://github.com/yusuf8834/bb-sidebar/compare/v0.2.5...v0.2.6
 [0.2.5]: https://github.com/yusuf8834/bb-sidebar/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/yusuf8834/bb-sidebar/compare/v0.2.3...v0.2.4
