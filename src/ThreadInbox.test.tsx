@@ -1019,7 +1019,7 @@ describe("ThreadInbox", () => {
     const badge = screen.getByRole("button", {
       name: "3 child threads, 1 need you",
     });
-    expect(badge.className).toContain("bg-[#fbf0dd]");
+    expect(badge.className).toContain("bg-amber-100");
     fireEvent.click(badge);
 
     expect(badge.getAttribute("aria-expanded")).toBe("true");
@@ -1035,7 +1035,7 @@ describe("ThreadInbox", () => {
       within(childList).getByRole("button", {
         name: "Open child thread: Blocked child, Needs you",
       }).parentElement?.className,
-    ).toContain("bg-[#fdf6ea]");
+    ).toContain("bg-amber-50");
 
     fireEvent.click(
       within(childList).getByRole("button", {

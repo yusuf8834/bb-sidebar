@@ -128,8 +128,8 @@ export function ChildThreadBadge({
           "pointer-events-auto flex h-5 shrink-0 items-center gap-1 rounded-full px-1.5 text-xs font-medium",
           "outline-none focus-visible:ring-1 focus-visible:ring-ring",
           needsYou > 0
-            ? "bg-[#fbf0dd] text-[#c9791b] dark:bg-amber-950/60 dark:text-amber-300"
-            : "bg-[#ececee] text-[#3a3a3c] dark:bg-muted dark:text-foreground",
+            ? "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
+            : "bg-muted text-foreground",
         )}
       >
         <ChildThreadDots threads={threads} compact />
@@ -188,7 +188,7 @@ export function ChildThreadList({
         "flex flex-col",
         variant === "header"
           ? "gap-px p-1.5 pt-0.5"
-          : "ml-[21px] mt-1 border-l-[1.5px] border-[#d6d6d8] pl-3 dark:border-border",
+          : "ml-[21px] mt-1 border-l-[1.5px] border-border pl-3",
       )}
     >
       {visibleThreads.map((child) => {
@@ -228,7 +228,7 @@ export function ChildThreadList({
                   "flex flex-col",
                   variant === "header"
                     ? "ml-5 border-l border-border pl-1"
-                    : "ml-3 border-l-[1.5px] border-[#d6d6d8] pl-2 dark:border-border",
+                    : "ml-3 border-l-[1.5px] border-border pl-2",
                 )}
               >
                 {grandchildren.map((grandchild) => (
@@ -293,7 +293,7 @@ function ChildThreadRow({
             : "h-7 hover:bg-sidebar-accent/60",
           variant === "sidebar" &&
             needsYou &&
-            "bg-[#fdf6ea] hover:bg-[#fdf6ea] dark:bg-amber-950/30 dark:hover:bg-amber-950/40",
+            "bg-amber-50 hover:bg-amber-50 dark:bg-amber-950/30 dark:hover:bg-amber-950/40",
         )}
       >
         <RowAction
@@ -342,7 +342,7 @@ function ChildThreadRow({
             <span className="flex shrink-0 items-center gap-1 pr-2">
               {needsYou ? <ChildStatusFlag kind="needs-you" /> : null}
               {running ? <ChildStatusFlag kind="running" /> : null}
-              <span className="shrink-0 font-mono text-2xs tabular-nums text-[#a0a0a4]">
+              <span className="shrink-0 font-mono text-2xs tabular-nums text-muted-foreground/60">
                 {relativeTimeLabel(thread.updatedAt, now ?? Date.now())}
               </span>
             </span>
@@ -408,10 +408,10 @@ function ChildStatusFlag({ kind }: { kind: "needs-you" | "running" }) {
   return (
     <span
       className={cn(
-        "shrink-0 rounded px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-[0.08em]",
+        "shrink-0 rounded px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-[0.08em]",
         kind === "needs-you"
-          ? "bg-[#fbf0dd] text-[#c9791b] dark:bg-amber-950/60 dark:text-amber-300"
-          : "bg-[#e7eefa] text-[#3f6fc4] dark:bg-sky-950/60 dark:text-sky-300",
+          ? "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
+          : "bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300",
       )}
     >
       {kind === "needs-you" ? "Needs you" : "Running"}
