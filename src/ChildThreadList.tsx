@@ -49,6 +49,27 @@ export function childNeedsYouCount(
   ).length;
 }
 
+/**
+ * The children a collapsed list still shows: the active child, or the child
+ * whose grandchild is active. Mirrors how a collapsed shelf keeps its active
+ * thread visible, so collapsing a parent never hides the open chat.
+ */
+export function activeChildThreads(
+  threads: readonly PluginSidebarThread[],
+  childrenByParent: ReadonlyMap<string, readonly PluginSidebarThread[]>,
+  activeThreadId: string | null | undefined,
+): PluginSidebarThread[] {
+  if (!activeThreadId) return [];
+  return threads.filter(
+    (child) =>
+      !child.isArchived &&
+      (child.id === activeThreadId ||
+        childrenByParent
+          .get(child.id)
+          ?.some((grandchild) => grandchild.id === activeThreadId) === true),
+  );
+}
+
 export function isChildRunning(thread: PluginSidebarThread): boolean {
   switch (thread.indicator) {
     case "runtime":
@@ -151,6 +172,7 @@ export function ChildThreadList({
   now,
   id,
   activeThreadId,
+  expanded = true,
   onOpenThread,
 }: {
   threads: readonly PluginSidebarThread[];
@@ -159,10 +181,14 @@ export function ChildThreadList({
   now?: number;
   id?: string;
   activeThreadId?: string | null;
+  /** When false, only the active child (or the child of the active grandchild) shows. */
+  expanded?: boolean;
   onOpenThread: (threadId: string) => void;
 }) {
   const disclosureId = useId();
-  const visibleThreads = threads.filter((thread) => !thread.isArchived);
+  const visibleThreads = expanded
+    ? threads.filter((thread) => !thread.isArchived)
+    : activeChildThreads(threads, childrenByParent, activeThreadId);
   const [expandedGrandchildParentIds, setExpandedGrandchildParentIds] =
     useState<ReadonlySet<string>>(() => new Set());
 
@@ -196,9 +222,14 @@ export function ChildThreadList({
         const grandchildren = (childrenByParent.get(child.id) ?? []).filter(
           (thread) => !thread.isArchived,
         );
-        const grandchildrenExpanded =
-          expandedGrandchildParentIds.has(child.id) ||
-          grandchildren.some((grandchild) => grandchild.id === activeThreadId);
+        const grandchildrenExpanded = expandedGrandchildParentIds.has(child.id);
+        // A collapsed disclosure still shows the active grandchild, so the
+        // open chat stays reachable without forcing the list open.
+        const visibleGrandchildren = grandchildrenExpanded
+          ? grandchildren
+          : grandchildren.filter(
+              (grandchild) => grandchild.id === activeThreadId,
+            );
         const grandchildrenId = `${disclosureId}-${child.id}`;
         return (
           <li key={child.id} className="list-none">
@@ -219,7 +250,7 @@ export function ChildThreadList({
                   : undefined
               }
             />
-            {grandchildren.length > 0 && grandchildrenExpanded ? (
+            {visibleGrandchildren.length > 0 ? (
               <ul
                 id={grandchildrenId}
                 aria-label={`Grandchildren of ${title}`}
@@ -231,7 +262,7 @@ export function ChildThreadList({
                     : "ml-3 border-l-[1.5px] border-border pl-2",
                 )}
               >
-                {grandchildren.map((grandchild) => (
+                {visibleGrandchildren.map((grandchild) => (
                   <li key={grandchild.id} className="list-none">
                     <ChildThreadRow
                       thread={grandchild}

@@ -1122,6 +1122,84 @@ describe("ThreadInbox", () => {
     expect(screen.getByText("Child")).toBeDefined();
   });
 
+  it("collapses a parent while its child is active, keeping only that child visible", () => {
+    renderSlot(
+      inbox,
+      { ...listProps, activeThreadId: "child-a" },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "parent", title: "Parent" }),
+            thread({ id: "child-a", title: "Child A", parentThreadId: "parent" }),
+            thread({ id: "child-b", title: "Child B", parentThreadId: "parent" }),
+          ],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+        rpc: { listLifecycle: () => ({ rows: [] }) },
+      },
+    );
+
+    const badge = screen.getByRole("button", { name: "2 child threads" });
+    expect(badge.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.getByText("Child A")).toBeDefined();
+    expect(screen.queryByText("Child B")).toBeNull();
+
+    fireEvent.click(badge);
+    expect(badge.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("Child A")).toBeDefined();
+    expect(screen.getByText("Child B")).toBeDefined();
+
+    fireEvent.click(badge);
+    expect(badge.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.getByText("Child A")).toBeDefined();
+    expect(screen.queryByText("Child B")).toBeNull();
+  });
+
+  it("collapses a grandchild disclosure while a grandchild is active", () => {
+    renderSlot(
+      inbox,
+      { ...listProps, activeThreadId: "grandchild-a" },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "parent", title: "Parent" }),
+            thread({ id: "child", title: "Child", parentThreadId: "parent" }),
+            thread({
+              id: "grandchild-a",
+              title: "Grandchild A",
+              parentThreadId: "child",
+            }),
+            thread({
+              id: "grandchild-b",
+              title: "Grandchild B",
+              parentThreadId: "child",
+            }),
+          ],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+        rpc: { listLifecycle: () => ({ rows: [] }) },
+      },
+    );
+
+    const disclosure = screen.getByRole("button", {
+      name: "Show 2 grandchild threads for Child",
+    });
+    expect(disclosure.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.getByText("Grandchild A")).toBeDefined();
+    expect(screen.queryByText("Grandchild B")).toBeNull();
+
+    fireEvent.click(disclosure);
+    expect(disclosure.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("Grandchild B")).toBeDefined();
+
+    fireEvent.click(disclosure);
+    expect(disclosure.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.getByText("Grandchild A")).toBeDefined();
+    expect(screen.queryByText("Grandchild B")).toBeNull();
+  });
+
   it("keeps an active child's parked parent visible on a collapsed shelf", async () => {
     renderSlot(
       inbox,

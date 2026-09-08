@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- Let a parent card collapse while one of its children is the active thread. A collapsed list now keeps only the active child visible, the same way a collapsed shelf keeps its active thread, and the grandchild disclosure behaves the same way.
+
 ## [0.2.7] - 2026-09-06
 
 ### Added

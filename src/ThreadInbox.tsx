@@ -270,21 +270,6 @@ function visibleShelfThreads(
   );
 }
 
-function childListContainsThread(
-  children: readonly PluginSidebarThread[],
-  childrenByParent: ReadonlyMap<string, readonly PluginSidebarThread[]>,
-  threadId: string | null,
-): boolean {
-  if (threadId === null) return false;
-  return children.some(
-    (child) =>
-      child.id === threadId ||
-      childrenByParent
-        .get(child.id)
-        ?.some((grandchild) => grandchild.id === threadId) === true,
-  );
-}
-
 function rootVisibleThreadId(
   threads: readonly PluginSidebarThread[],
   threadId: string | null,
@@ -1000,14 +985,7 @@ export function ThreadInbox({
       childThreads={childrenByParentId.get(thread.id) ?? []}
       childrenByParent={childrenByParentId}
       activeThreadId={activeThreadId}
-      childrenExpanded={
-        expandedChildParentIds.has(thread.id) ||
-        childListContainsThread(
-          childrenByParentId.get(thread.id) ?? [],
-          childrenByParentId,
-          activeThreadId,
-        )
-      }
+      childrenExpanded={expandedChildParentIds.has(thread.id)}
       onToggleChildren={() => toggleChildExpansion(thread.id)}
       reorder={
         !reorderable ||

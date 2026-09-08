@@ -14,6 +14,7 @@ import {
 } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
 import {
+  activeChildThreads,
   ChildThreadBadge,
   ChildThreadList,
 } from "./ChildThreadList";
@@ -347,12 +348,16 @@ export function ThreadCard({
             </Tooltip>
           </div>
         </div>
-        {childThreads.length > 0 && childrenExpanded ? (
+        {childThreads.length > 0 &&
+        (childrenExpanded ||
+          activeChildThreads(childThreads, childrenByParent, activeThreadId)
+            .length > 0) ? (
           <ChildThreadList
             id={childListId}
             threads={childThreads}
             childrenByParent={childrenByParent}
             activeThreadId={activeThreadId}
+            expanded={childrenExpanded}
             variant="sidebar"
             now={now}
             onOpenThread={(childId) => {
