@@ -10,6 +10,14 @@ import { threadDisplayTitle } from "./inbox";
 import { canParkThread } from "./lifecycle";
 import { RowContextMenu } from "./RowContextMenu";
 import { InlineThreadTitle } from "./InlineThreadTitle";
+import {
+  childStatusIndicator,
+  childStatusPhrase,
+  childStatusSummary,
+  childSubtree,
+  isWorkingIndicator,
+  type ChildStatusKind,
+} from "./child-status";
 
 const MAX_CHILD_DOTS = 3;
 
@@ -71,18 +79,7 @@ export function activeChildThreads(
 }
 
 export function isChildRunning(thread: PluginSidebarThread): boolean {
-  switch (thread.indicator) {
-    case "runtime":
-    case "workflow":
-    case "background-agent":
-    case "background-command":
-    case "plan-mode":
-    case "goal":
-    case "working-draft":
-      return true;
-    default:
-      return false;
-  }
+  return isWorkingIndicator(thread.indicator);
 }
 
 export function ChildThreadDots({
@@ -115,23 +112,48 @@ export function ChildThreadDots({
   );
 }
 
+/**
+ * The badge tint for the subtree's most urgent state. Needs-you keeps the
+ * amber the rest of the sidebar uses for a raised hand in a child row; the
+ * others borrow the status glyph tones so the card and the child rows agree.
+ */
+function childStatusBadgeClass(kind: ChildStatusKind | null): string {
+  switch (kind) {
+    case "failed":
+      return "bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300";
+    case "needs-you":
+      return "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300";
+    case "done":
+      return "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300";
+    case "working":
+      return "bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300";
+    default:
+      return "bg-muted text-foreground";
+  }
+}
+
 export function ChildThreadBadge({
   threads,
+  childrenByParent,
   expanded,
   controls,
   onToggle,
 }: {
   threads: readonly PluginSidebarThread[];
+  /** When given, grandchildren count toward the status rollup (not the count). */
+  childrenByParent?: ReadonlyMap<string, readonly PluginSidebarThread[]>;
   expanded: boolean;
   controls: string;
   onToggle: () => void;
 }) {
   const visibleThreads = threads.filter((thread) => !thread.isArchived);
-  const needsYou = childNeedsYouCount(visibleThreads);
   const count = visibleThreads.length;
-  const tooltip = `${count} child thread${count === 1 ? "" : "s"}${
-    needsYou > 0 ? `, ${needsYou} need you` : ""
-  }`;
+  const summary = childStatusSummary(
+    childrenByParent
+      ? childSubtree(visibleThreads, childrenByParent)
+      : visibleThreads,
+  );
+  const tooltip = `${count} child thread${count === 1 ? "" : "s"}${childStatusPhrase(summary)}`;
 
   return (
     <Tooltip label={tooltip} side="bottom">
@@ -140,6 +162,7 @@ export function ChildThreadBadge({
         aria-label={tooltip}
         aria-expanded={expanded}
         aria-controls={controls}
+        data-child-status={summary.dominant ?? undefined}
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -148,13 +171,18 @@ export function ChildThreadBadge({
         className={cn(
           "pointer-events-auto flex h-5 shrink-0 items-center gap-1 rounded-full px-1.5 text-xs font-medium",
           "outline-none focus-visible:ring-1 focus-visible:ring-ring",
-          needsYou > 0
-            ? "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
-            : "bg-muted text-foreground",
+          childStatusBadgeClass(summary.dominant),
         )}
       >
         <ChildThreadDots threads={threads} compact />
         <span className="tabular-nums">{count}</span>
+        {summary.dominant ? (
+          <StatusGlyph
+            indicator={childStatusIndicator(summary.dominant)}
+            label={null}
+            className="size-3 text-current"
+          />
+        ) : null}
         <Icon
           name={expanded ? "ChevronUp" : "ChevronDown"}
           className="size-3"
@@ -238,6 +266,7 @@ export function ChildThreadList({
               relation="child"
               variant={variant}
               now={now}
+              isActive={child.id === activeThreadId}
               onOpenThread={onOpenThread}
               disclosure={
                 grandchildren.length > 0
@@ -269,6 +298,7 @@ export function ChildThreadList({
                       relation="grandchild"
                       variant={variant}
                       now={now}
+                      isActive={grandchild.id === activeThreadId}
                       onOpenThread={onOpenThread}
                     />
                   </li>
@@ -294,6 +324,7 @@ function ChildThreadRow({
   relation,
   variant,
   now,
+  isActive = false,
   onOpenThread,
   disclosure,
 }: {
@@ -301,6 +332,7 @@ function ChildThreadRow({
   relation: "child" | "grandchild";
   variant: "header" | "sidebar";
   now?: number;
+  isActive?: boolean;
   onOpenThread: (threadId: string) => void;
   disclosure?: GrandchildDisclosure;
 }) {
@@ -317,6 +349,8 @@ function ChildThreadRow({
       onRename={() => setIsRenaming(true)}
     >
       <div
+        data-child-thread-row=""
+        data-active={isActive ? "true" : undefined}
         className={cn(
           "flex w-full items-center rounded-md text-left",
           variant === "header"
@@ -324,12 +358,20 @@ function ChildThreadRow({
             : "h-7 hover:bg-sidebar-accent/60",
           variant === "sidebar" &&
             needsYou &&
+            !isActive &&
             "bg-amber-50 hover:bg-amber-50 dark:bg-amber-950/30 dark:hover:bg-amber-950/40",
+          // The open chat gets the same tint as an active parent card, so the
+          // eye finds it in a long tree the way it finds a card in the list.
+          isActive &&
+            (variant === "header"
+              ? "bg-accent"
+              : "bg-sidebar-accent hover:bg-sidebar-accent"),
         )}
       >
         <RowAction
           type={isRenaming ? undefined : "button"}
           aria-label={isRenaming ? undefined : childThreadOpenLabel(thread, relation, title)}
+          aria-current={isActive && !isRenaming ? "page" : undefined}
           onClick={isRenaming ? undefined : () => onOpenThread(thread.id)}
           onKeyDown={isRenaming ? (event) => event.stopPropagation() : undefined}
           className={cn(
@@ -347,6 +389,7 @@ function ChildThreadRow({
             className={cn(
               "min-w-0 flex-1 text-xs",
               variant === "header" ? "flex flex-col" : "truncate",
+              isActive && "font-medium text-foreground",
             )}
           >
             <InlineThreadTitle

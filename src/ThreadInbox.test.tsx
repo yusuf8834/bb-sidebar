@@ -989,6 +989,96 @@ describe("ThreadInbox", () => {
     expect(screen.queryByText("One")).toBeNull();
   });
 
+  it("rolls the most urgent child state up into the parent badge", () => {
+    render([
+      thread({ id: "parent", title: "Parent" }),
+      thread({
+        id: "working",
+        title: "Working child",
+        parentThreadId: "parent",
+        indicator: "runtime",
+      }),
+      thread({
+        id: "done",
+        title: "Done child",
+        parentThreadId: "parent",
+        indicator: "unread-success",
+      }),
+      thread({
+        id: "quiet",
+        title: "Quiet child",
+        parentThreadId: "parent",
+      }),
+      thread({
+        id: "failed-grandchild",
+        title: "Failed grandchild",
+        parentThreadId: "quiet",
+        indicator: "unread-error",
+      }),
+    ]);
+
+    const badge = screen.getByRole("button", {
+      name: "3 child threads, 1 failed, 1 done, 1 working",
+    });
+    expect(badge.getAttribute("data-child-status")).toBe("failed");
+    expect(badge.className).toContain("bg-red-100");
+    expect(badge.querySelector('[data-icon="CircleX"]')).not.toBeNull();
+  });
+
+  it("marks a badge with only working children as working", () => {
+    render([
+      thread({ id: "parent", title: "Parent" }),
+      thread({
+        id: "working",
+        title: "Working child",
+        parentThreadId: "parent",
+        indicator: "runtime",
+      }),
+    ]);
+
+    const badge = screen.getByRole("button", {
+      name: "1 child thread, 1 working",
+    });
+    expect(badge.getAttribute("data-child-status")).toBe("working");
+    expect(badge.className).toContain("bg-sky-100");
+    expect(badge.querySelector('[data-icon="Loading"]')).not.toBeNull();
+  });
+
+  it("highlights the active grandchild row", () => {
+    renderSlot(
+      inbox,
+      { ...listProps, activeThreadId: "grandchild" },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "parent", title: "Parent" }),
+            thread({ id: "child", title: "Child", parentThreadId: "parent" }),
+            thread({
+              id: "grandchild",
+              title: "Grandchild",
+              parentThreadId: "child",
+            }),
+          ],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+        rpc: { listLifecycle: () => ({ rows: [] }) },
+      },
+    );
+
+    const childRow = screen.getByRole("button", {
+      name: "Open child thread: Child",
+    });
+    expect(childRow.getAttribute("aria-current")).toBeNull();
+    const grandchildRow = screen.getByRole("button", {
+      name: "Open grandchild thread: Grandchild",
+    });
+    expect(grandchildRow.getAttribute("aria-current")).toBe("page");
+    expect(
+      grandchildRow.closest("[data-child-thread-row]")?.className,
+    ).toContain("bg-sidebar-accent");
+  });
+
   it("expands child rows with attention, running state, ages, and navigation", async () => {
     const minute = Math.floor(Date.now() / 60_000) * 60_000;
     const rendered = render([
@@ -1017,9 +1107,11 @@ describe("ThreadInbox", () => {
     ]);
 
     const badge = screen.getByRole("button", {
-      name: "3 child threads, 1 need you",
+      name: "3 child threads, 1 need you, 1 working",
     });
     expect(badge.className).toContain("bg-amber-100");
+    expect(badge.getAttribute("data-child-status")).toBe("needs-you");
+    expect(badge.querySelector('[data-icon="CircleQuestion"]')).not.toBeNull();
     fireEvent.click(badge);
 
     expect(badge.getAttribute("aria-expanded")).toBe("true");
@@ -1144,6 +1236,13 @@ describe("ThreadInbox", () => {
     expect(badge.getAttribute("aria-expanded")).toBe("false");
     expect(screen.getByText("Child A")).toBeDefined();
     expect(screen.queryByText("Child B")).toBeNull();
+    const activeRow = screen.getByRole("button", {
+      name: "Open child thread: Child A",
+    });
+    expect(activeRow.getAttribute("aria-current")).toBe("page");
+    expect(activeRow.closest("[data-child-thread-row]")?.className).toContain(
+      "bg-sidebar-accent",
+    );
 
     fireEvent.click(badge);
     expect(badge.getAttribute("aria-expanded")).toBe("true");

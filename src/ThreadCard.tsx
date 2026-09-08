@@ -287,6 +287,7 @@ export function ThreadCard({
             {childThreads.length > 0 ? (
               <ChildThreadBadge
                 threads={childThreads}
+                childrenByParent={childrenByParent}
                 expanded={childrenExpanded}
                 controls={childListId}
                 onToggle={onToggleChildren}

@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- Rolled child thread state up into the parent card's child badge. The badge now carries a glyph and tint for the most urgent child or grandchild: failed, needs you, done, or working, and its tooltip lists the counts.
+- Highlighted the active child or grandchild row in the sidebar tree, the same way the active parent card is highlighted.
+
 ### Fixed
 
 - Let a parent card collapse while one of its children is the active thread. A collapsed list now keeps only the active child visible, the same way a collapsed shelf keeps its active thread, and the grandchild disclosure behaves the same way.
