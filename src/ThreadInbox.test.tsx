@@ -2283,6 +2283,71 @@ describe("ThreadInbox", () => {
     expect(screen.queryByText("First match")).toBeNull();
   });
 
+  it("filters the project scope card from its search row", async () => {
+    renderSlot(
+      inbox,
+      listProps,
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "a", title: "Sidebar thread", projectId: "proj_1" }),
+            thread({ id: "b", title: "Board thread", projectId: "proj_2" }),
+          ],
+          projects: [
+            { id: "proj_1", name: "bb-sidebar", isPersonal: false },
+            { id: "proj_2", name: "kanban", isPersonal: false },
+          ],
+        },
+        rpc: { listLifecycle: () => ({ rows: [] }) },
+      },
+    );
+
+    fireEvent.keyDown(screen.getByLabelText(/Project scope/), { key: "Enter" });
+    // The card opens with the caret already in the search row.
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByLabelText("Filter projects"),
+      ),
+    );
+    const projectList = screen.getByRole("listbox", { name: "Projects" });
+    expect(within(projectList).getAllByRole("option")).toHaveLength(3);
+
+    fireEvent.change(screen.getByLabelText("Filter projects"), {
+      target: { value: "KAN" },
+    });
+    expect(
+      within(projectList)
+        .getAllByRole("option")
+        .map((option) => option.textContent),
+    ).toEqual(["kanban"]);
+
+    // Enter takes the highlighted row, which filtering moved to the top.
+    fireEvent.keyDown(screen.getByLabelText("Filter projects"), {
+      key: "Enter",
+    });
+    await waitFor(() =>
+      expect(screen.getByLabelText(/Project scope: kanban/)).toBeDefined(),
+    );
+    expect(screen.getByText("Board thread")).toBeDefined();
+    expect(screen.queryByText("Sidebar thread")).toBeNull();
+  });
+
+  it("says so when no project matches the scope search", () => {
+    render([thread({ title: "Sidebar thread" })]);
+
+    fireEvent.keyDown(screen.getByLabelText(/Project scope/), { key: "Enter" });
+    fireEvent.change(screen.getByLabelText("Filter projects"), {
+      target: { value: "nope" },
+    });
+    expect(
+      within(screen.getByRole("listbox", { name: "Projects" })).queryAllByRole(
+        "option",
+      ),
+    ).toHaveLength(0);
+    expect(screen.getByText("No projects found")).toBeDefined();
+  });
+
   it("moves through results with arrows and opens the highlighted row", async () => {
     let navigated = 0;
     const rendered = renderSlot(

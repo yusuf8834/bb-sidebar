@@ -68,6 +68,18 @@ export function searchThreadsByTitle(
   );
 }
 
+/** Projects whose name matches the picker query; every project when blank. */
+export function filterProjectsByName<T extends { name: string }>(
+  projects: readonly T[],
+  query: string,
+): T[] {
+  const normalized = query.trim().toLowerCase();
+  if (normalized.length === 0) return [...projects];
+  return projects.filter((project) =>
+    project.name.toLowerCase().includes(normalized),
+  );
+}
+
 export interface ProjectScope {
   /** Project id, or null for "all projects". */
   id: string | null;

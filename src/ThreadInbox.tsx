@@ -25,8 +25,8 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "./components/Select";
+import { ProjectScopeSelect } from "./ProjectScopeSelect";
 import { ThreadCard, type ThreadReorderControls } from "./ThreadCard";
 import { SlimRow } from "./SlimRow";
 import { SearchResults } from "./SearchResults";
@@ -77,7 +77,6 @@ import {
   PROJECT_ICONS_CHANNEL,
   projectIconUrl,
 } from "./project-icons";
-import { ProjectFavicon } from "./ProjectFavicon";
 import type { bbSidebarRpcContract } from "./server";
 import {
   cachedSidebarSettings,
@@ -800,11 +799,6 @@ export function ThreadInbox({
     [inactive, inbox, lifecycle, pinned],
   );
 
-  const scopeLabel =
-    scope === ALL_PROJECTS
-      ? "All projects"
-      : (projectNameById.get(scope) ?? "All projects");
-
   const handleSelectionClick = (
     threadId: string,
     event: ReactMouseEvent<HTMLAnchorElement>,
@@ -1035,52 +1029,12 @@ export function ThreadInbox({
               onClear={() => setSelection(EMPTY_THREAD_SELECTION)}
             />
           ) : (
-            <Select value={scope} onValueChange={setScope}>
-              {/* Ghost trigger: no border, no filled track — it reads as a label
-                  until you hover it. */}
-              <SelectTrigger
-                className="h-7 min-w-0 flex-1 border-0 px-1.5 py-1 text-xs font-medium text-muted-foreground shadow-none hover:bg-sidebar-accent focus:ring-0"
-                aria-label={`Project scope: ${scopeLabel}`}
-              >
-                <SelectValue>
-                  <span className="flex min-w-0 items-center gap-1.5">
-                    {scope !== ALL_PROJECTS ? (
-                      <ProjectFavicon
-                        src={projectIconUrl(
-                          scope,
-                          projectIconRevision,
-                        )}
-                        className="size-3"
-                      />
-                    ) : null}
-                    <span className="truncate">{scopeLabel}</span>
-                  </span>
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL_PROJECTS} className="text-xs">
-                  All projects
-                </SelectItem>
-                {projects.map((project) => (
-                  <SelectItem
-                    key={project.id}
-                    value={project.id}
-                    className="text-xs"
-                  >
-                    <span className="flex min-w-0 items-center gap-1.5">
-                      <ProjectFavicon
-                        src={projectIconUrl(
-                          project.id,
-                          projectIconRevision,
-                        )}
-                        className="size-3"
-                      />
-                      <span className="truncate">{project.name}</span>
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <ProjectScopeSelect
+              scope={scope}
+              projects={projects}
+              projectIconRevision={projectIconRevision}
+              onScopeChange={setScope}
+            />
           )}
         </div>
 

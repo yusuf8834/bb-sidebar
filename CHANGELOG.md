@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Added a search row to the project scope card. Opening the scope picker puts the caret in a filter field above the list, so a long project list is reachable by typing, with arrow keys and Enter to pick a match.
+
 ## [0.2.8] - 2026-09-08
 
 ### Added

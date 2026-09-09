@@ -13,6 +13,7 @@ import {
   parentOf,
   partitionPinned,
   reconcileProjectScope,
+  filterProjectsByName,
   searchThreadsByTitle,
   sortByCreatedAtDescending,
   sortSettledThreads,
@@ -146,6 +147,35 @@ describe("threadDisplayTitle", () => {
     expect(
       threadDisplayTitle(thread({ title: "   ", titleFallback: "Fallback" })),
     ).toBe("Fallback");
+  });
+});
+
+describe("filterProjectsByName", () => {
+  const projects = [
+    { id: "all", name: "All projects" },
+    { id: "p1", name: "bb-sidebar" },
+    { id: "p2", name: "kanban" },
+  ];
+
+  it("keeps every project for a blank query", () => {
+    expect(filterProjectsByName(projects, "   ").map((p) => p.id)).toEqual([
+      "all",
+      "p1",
+      "p2",
+    ]);
+  });
+
+  it("matches case-insensitively anywhere in the name", () => {
+    expect(filterProjectsByName(projects, "BAN").map((p) => p.id)).toEqual([
+      "p2",
+    ]);
+    expect(filterProjectsByName(projects, "pro").map((p) => p.id)).toEqual([
+      "all",
+    ]);
+  });
+
+  it("returns nothing when no name matches", () => {
+    expect(filterProjectsByName(projects, "zzz")).toEqual([]);
   });
 });
 
