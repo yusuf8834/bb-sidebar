@@ -14,6 +14,11 @@ import {
   type SettledOverride,
 } from "./auto-settle";
 import { runBulkAction } from "./bulk-actions";
+import {
+  EMPTY_RECLAIM,
+  planTerminalReclaim,
+  type ReclaimSummary,
+} from "./reclaim";
 import { createTitleRegenerator } from "./regenerate-title";
 import {
   PROJECT_ICON_CANDIDATES,
@@ -96,6 +101,17 @@ interface SidebarSettingsDbRow {
 }
 
 const threadIdSchema = z.object({ threadId: z.string().trim().min(1) });
+
+/**
+ * What parking a thread released. These counts are what the toast reminds the
+ * user about, so they travel back with the acknowledgement rather than on the
+ * realtime channel, which every other client would also receive.
+ */
+const reclaimSchema = z.object({
+  closedTerminals: z.number().int().nonnegative(),
+  keptTerminals: z.number().int().nonnegative(),
+  stoppedRuntime: z.boolean(),
+});
 const orderedThreadIdsSchema = z
   .array(z.string().trim().min(1))
   .max(10_000)
@@ -189,7 +205,10 @@ export const bbSidebarRpcContract = defineRpcContract({
       ),
     }),
   },
-  settle: { input: threadIdSchema, output: z.object({ ok: z.boolean() }) },
+  settle: {
+    input: threadIdSchema,
+    output: z.object({ ok: z.boolean(), reclaim: reclaimSchema }),
+  },
   unsettle: { input: threadIdSchema, output: z.object({ ok: z.boolean() }) },
   snooze: {
     input: z.object({
@@ -197,7 +216,7 @@ export const bbSidebarRpcContract = defineRpcContract({
       // Absolute wake time, so a snooze means the same thing on every device.
       snoozedUntil: z.number().int().positive(),
     }),
-    output: z.object({ ok: z.boolean() }),
+    output: z.object({ ok: z.boolean(), reclaim: reclaimSchema }),
   },
   bulkSettle: {
     input: z.object({ threadIds: bulkThreadIdsSchema }).strict(),
@@ -211,6 +230,10 @@ export const bbSidebarRpcContract = defineRpcContract({
       })
       .strict(),
     output: bulkMutationOutputSchema,
+  },
+  releaseRuntimes: {
+    input: z.object({ threadIds: bulkThreadIdsSchema }).strict(),
+    output: z.object({ ok: z.boolean() }),
   },
   unsnooze: { input: threadIdSchema, output: z.object({ ok: z.boolean() }) },
   acknowledgeWake: {
@@ -893,6 +916,49 @@ export default async function plugin(bb: BbPluginApi) {
     return results;
   };
 
+  /**
+   * Release what a settled thread was still holding.
+   *
+   * Both settle paths refuse to park live work — the manual one through
+   * `canPark`, the policy one through `cannotAutoSettle` — so stopping the
+   * thread here can never interrupt a turn in flight. Every failure is
+   * swallowed: the lifecycle row is already written by the time this runs, and
+   * a host that cannot be reached is a missed reclaim, not a broken settle.
+   */
+  const reclaimThreadResources = async (
+    threadId: string,
+  ): Promise<ReclaimSummary> => {
+    let stoppedRuntime = false;
+    try {
+      await bb.sdk.threads.stop({ threadId });
+      stoppedRuntime = true;
+    } catch {
+      // A thread with no loaded runtime is the common case, not an error.
+    }
+
+    let closedTerminals = 0;
+    let keptTerminals = 0;
+    try {
+      const { sessions } = await bb.sdk.terminals.list({
+        scope: { kind: "thread", threadId },
+      });
+      const plan = planTerminalReclaim(sessions);
+      keptTerminals = plan.keep;
+      for (const terminalId of plan.close) {
+        try {
+          await bb.sdk.terminals.close({ terminalId, mode: "if-clean" });
+          closedTerminals += 1;
+        } catch {
+          // Someone typed into it between the list and the close.
+        }
+      }
+    } catch {
+      // Leave the counts at zero rather than reporting a number we did not see.
+    }
+
+    return { closedTerminals, keptTerminals, stoppedRuntime };
+  };
+
   const applyPolicyChanges = db.transaction(
     (
       changes: ReadonlyArray<{
@@ -992,6 +1058,17 @@ export default async function plugin(bb: BbPluginApi) {
       applyPolicyChanges(changes, now);
       const changedThreadIds = changes.map((change) => change.threadId);
       bb.realtime.publish(LIFECYCLE_CHANNEL, { threadIds: changedThreadIds });
+      // Outside the transaction, because releasing a runtime is a network call
+      // and holding a write lock open across one would block every other write.
+      await runBulkAction(
+        changes.flatMap((change) =>
+          change.decision === "settle" ? [change.threadId] : [],
+        ),
+        async (threadId) => {
+          await reclaimThreadResources(threadId);
+        },
+        4,
+      );
       return changedThreadIds;
     })();
     const settledEvaluation = evaluation.finally(() => {
@@ -1046,7 +1123,9 @@ export default async function plugin(bb: BbPluginApi) {
         snoozedUntil: null,
         snoozedAt: null,
       });
-      return { ok: true };
+      // The shelf move is durable before anything is released, so a slow or
+      // unreachable host delays the reminder without holding up the settle.
+      return { ok: true, reclaim: await reclaimThreadResources(threadId) };
     },
     async unsettle({ threadId }) {
       const current = readOne(threadId);
@@ -1068,7 +1147,10 @@ export default async function plugin(bb: BbPluginApi) {
         snoozedUntil,
         snoozedAt: now,
       });
-      return { ok: true };
+      // A snooze is a parked thread with a return date, and the shortest
+      // preset is half an hour. Nobody snoozes a conversation they are in the
+      // middle of, so the wake time is not worth keeping a runtime warm for.
+      return { ok: true, reclaim: await reclaimThreadResources(threadId) };
     },
     async bulkSettle({ threadIds }) {
       const unpinned = await runBulkAction(
@@ -1089,6 +1171,15 @@ export default async function plugin(bb: BbPluginApi) {
         })),
       );
       publishLifecycleChanges(unpinned.succeededThreadIds);
+      // A bulk settle has no room to report per-thread counts, so it releases
+      // the same resources quietly and reports only the settles themselves.
+      await runBulkAction(
+        unpinned.succeededThreadIds,
+        async (threadId) => {
+          await reclaimThreadResources(threadId);
+        },
+        4,
+      );
       return unpinned;
     },
     async bulkSnooze({ threadIds, snoozedUntil }) {
@@ -1103,7 +1194,29 @@ export default async function plugin(bb: BbPluginApi) {
         })),
       );
       publishLifecycleChanges(threadIds);
+      await runBulkAction(
+        threadIds,
+        async (threadId) => {
+          await reclaimThreadResources(threadId);
+        },
+        4,
+      );
       return { succeededThreadIds: [...threadIds], failures: [] };
+    },
+    async releaseRuntimes({ threadIds }) {
+      // bb's archive force-closes a thread's terminals but only stops its
+      // runtime when a turn is in flight, so an idle thread archived from this
+      // sidebar keeps its agent session loaded. Stopping an idle thread takes
+      // bb's release path instead. Archived threads still accept a stop, so
+      // this can race the archive, and a failure only misses a reclaim.
+      await runBulkAction(
+        threadIds,
+        async (threadId) => {
+          await bb.sdk.threads.stop({ threadId });
+        },
+        4,
+      );
+      return { ok: true };
     },
     async unsnooze({ threadId }) {
       clear(threadId);

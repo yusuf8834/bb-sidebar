@@ -34,6 +34,31 @@ function standardProject() {
   };
 }
 
+function terminalSession(
+  overrides: {
+    id: string;
+    lastUserInputAt?: number | null;
+    status?: "disconnected" | "exited" | "running" | "starting";
+  },
+) {
+  return {
+    closeReason: null,
+    cols: 80,
+    createdAt: 1,
+    environmentId: null,
+    exitCode: null,
+    hostId: "host_1",
+    initialCwd: "/workspace/sidebar",
+    lastUserInputAt: null,
+    rows: 24,
+    status: "running" as const,
+    threadId: "thr_1",
+    title: "zsh",
+    updatedAt: 1,
+    ...overrides,
+  };
+}
+
 function availablePullRequest(
   state: "closed" | "draft" | "merged" | "open",
   updatedAt = new Date().toISOString(),
@@ -223,6 +248,110 @@ describe("lifecycle RPC", () => {
         }),
       ],
     });
+  });
+
+  it("releases the agent session and only the terminals nobody used", async () => {
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "bb-sidebar",
+      sdk: {
+        threads: {
+          list: async () => [],
+          unpin: async ({ threadId }: { threadId: string }) =>
+            makeThreadResponse({ id: threadId }),
+          stop: async () => ({ ok: true as const }),
+        },
+        terminals: {
+          list: async () => ({
+            sessions: [
+              terminalSession({ id: "term_idle" }),
+              terminalSession({ id: "term_used", lastUserInputAt: 5 }),
+              terminalSession({ id: "term_gone", status: "exited" }),
+            ],
+          }),
+          close: async ({ terminalId }: { terminalId: string }) =>
+            terminalSession({ id: terminalId, status: "exited" }),
+        },
+      },
+    });
+    await plugin(bb);
+    disposers.push(() => harness.lifecycle.dispose());
+
+    await expect(
+      harness.behavior.callRpc("settle", { threadId: "thr_1" }),
+    ).resolves.toEqual({
+      ok: true,
+      reclaim: { closedTerminals: 1, keptTerminals: 1, stoppedRuntime: true },
+    });
+    expect(harness.inspection.sdk.callsTo("threads.stop")).toEqual([
+      [{ threadId: "thr_1" }],
+    ]);
+    expect(harness.inspection.sdk.callsTo("terminals.close")).toEqual([
+      [{ terminalId: "term_idle", mode: "if-clean" }],
+    ]);
+  });
+
+  it("settles even when the runtime and terminals cannot be reached", async () => {
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "bb-sidebar",
+      sdk: {
+        threads: {
+          list: async () => [],
+          unpin: async ({ threadId }: { threadId: string }) =>
+            makeThreadResponse({ id: threadId }),
+          stop: async () => {
+            throw new Error("host offline");
+          },
+        },
+        terminals: {
+          list: async () => {
+            throw new Error("host offline");
+          },
+        },
+      },
+    });
+    await plugin(bb);
+    disposers.push(() => harness.lifecycle.dispose());
+
+    await expect(
+      harness.behavior.callRpc("settle", { threadId: "thr_1" }),
+    ).resolves.toEqual({
+      ok: true,
+      reclaim: { closedTerminals: 0, keptTerminals: 0, stoppedRuntime: false },
+    });
+    const settled = (await harness.behavior.callRpc(
+      "listLifecycle",
+      {},
+    )) as LifecycleListResult;
+    expect(settled.rows).toEqual([
+      expect.objectContaining({ threadId: "thr_1", settledOverride: "settled" }),
+    ]);
+  });
+
+  it("releases every archived runtime even when one stop fails", async () => {
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "bb-sidebar",
+      sdk: {
+        threads: {
+          list: async () => [],
+          stop: async ({ threadId }: { threadId: string }) => {
+            if (threadId === "thr_offline") throw new Error("host offline");
+            return { ok: true as const };
+          },
+        },
+      },
+    });
+    await plugin(bb);
+    disposers.push(() => harness.lifecycle.dispose());
+
+    await expect(
+      harness.behavior.callRpc("releaseRuntimes", {
+        threadIds: ["thr_offline", "thr_1"],
+      }),
+    ).resolves.toEqual({ ok: true });
+    expect(harness.inspection.sdk.callsTo("threads.stop")).toEqual([
+      [{ threadId: "thr_offline" }],
+      [{ threadId: "thr_1" }],
+    ]);
   });
 
   it("keeps settle and snooze mutually exclusive", async () => {

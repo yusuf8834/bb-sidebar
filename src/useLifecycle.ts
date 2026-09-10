@@ -4,6 +4,7 @@ import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 import { toast } from "sonner";
 import type { bbSidebarRpcContract } from "./server";
 import type { BulkActionResult } from "./bulk-actions";
+import { describeReclaim } from "./reclaim";
 import {
   canPark,
   formatSnoozeWakeTime,
@@ -123,6 +124,17 @@ const SUCCESS_MESSAGE: Record<
   unsnooze: "Thread woke up",
 };
 
+/**
+ * How long a parking toast that carries a reclaim reminder stays up.
+ *
+ * Sonner's four-second default is sized for a confirmation nobody needs to
+ * read. "2 terminals left running" is the opposite: it is the one line worth
+ * acting on, and it can sit behind a wake time and a session clause. Toasts
+ * without a reminder keep the default, so a bare confirmation still gets out
+ * of the way.
+ */
+const PARK_REMINDER_TOAST_MS = 10_000;
+
 const ERROR_MESSAGE: Record<LifecycleMutation, string> = {
   settle: "Could not settle thread",
   unsettle: "Could not un-settle thread",
@@ -233,12 +245,17 @@ export function useLifecycle(
       const { method, threadId } = request;
       if (inFlightThreadIds.current.has(threadId)) return false;
       inFlightThreadIds.current.add(threadId);
+      let parkReminder: string | undefined;
       try {
         if (method === "snooze") {
-          await rpc.call("snooze", {
+          const { reclaim } = await rpc.call("snooze", {
             threadId,
             snoozedUntil: request.snoozedUntil,
           });
+          parkReminder = describeReclaim(reclaim);
+        } else if (method === "settle") {
+          const { reclaim } = await rpc.call("settle", { threadId });
+          parkReminder = describeReclaim(reclaim);
         } else {
           await rpc.call(method, { threadId });
         }
@@ -252,12 +269,27 @@ export function useLifecycle(
       }
 
       if (method === "snooze") {
+        // The wake time is the headline; the reminder follows it, because a
+        // snooze releases the same resources a settle does.
+        const wakes = `Wakes ${formatSnoozeWakeTime(request.snoozedUntil)}`;
         toast.success("Thread snoozed", {
-          description: `Wakes ${formatSnoozeWakeTime(request.snoozedUntil)}`,
+          description:
+            parkReminder === undefined ? wakes : `${wakes} · ${parkReminder}`,
+          duration:
+            parkReminder === undefined ? undefined : PARK_REMINDER_TOAST_MS,
           action: {
             label: "Undo",
             onClick: () => void mutate({ method: "unsnooze", threadId }),
           },
+        });
+      } else if (method === "settle") {
+        // The reminder is the point of this toast: parking releases the agent
+        // session but leaves any terminal the user typed in alone, and that is
+        // only obvious if it is said out loud.
+        toast.success(SUCCESS_MESSAGE.settle, {
+          description: parkReminder,
+          duration:
+            parkReminder === undefined ? undefined : PARK_REMINDER_TOAST_MS,
         });
       } else if (method !== "acknowledgeWake") {
         toast.success(SUCCESS_MESSAGE[method]);

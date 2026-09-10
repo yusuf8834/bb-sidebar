@@ -12,7 +12,7 @@ import { Icon } from "./components/Icon";
 import { cn } from "./lib/utils";
 import { usePortalScopeProps } from "./lib/portal-scope";
 import { ProjectActions } from "./ProjectContextMenu";
-import type { ConfiguredSnoozePreset } from "./lifecycle";
+import { canParkThread, type ConfiguredSnoozePreset } from "./lifecycle";
 import { beginTitleGeneration, finishTitleGeneration, useTitleGenerating } from "./title-generation-state";
 
 /**
@@ -48,11 +48,29 @@ export function RowContextMenu({
   onRename?: () => void;
 }) {
   const actions = useSidebarThreadActions();
-  const { projects } = useSidebarThreads();
+  const { projects, threads } = useSidebarThreads();
   const project = projects.find((project) => project.id === thread.projectId);
   const portalScope = usePortalScopeProps();
   const rpc = useRpc<typeof bbSidebarRpcContract>();
   const regenerating = useTitleGenerating(thread.id);
+  // Archive takes the children with it, and bb leaves every idle one's agent
+  // session loaded. Release them alongside the archive. Working children are
+  // skipped, so this never interrupts a turn archive itself would not.
+  const archive = () => {
+    actions.archive(thread.id);
+    const threadIds = [
+      thread.id,
+      ...threads
+        .filter(
+          (child) =>
+            child.parentThreadId === thread.id && canParkThread(child),
+        )
+        .map((child) => child.id),
+    ];
+    void rpc.call("releaseRuntimes", { threadIds }).catch(() => {
+      void 0; // A missed release costs memory, not correctness.
+    });
+  };
   const regenerate = async () => {
     if (!beginTitleGeneration(thread.id)) return;
     try {
@@ -128,7 +146,7 @@ export function RowContextMenu({
           <Separator />
           <Item
             disabled={!canArchive}
-            onSelect={() => actions.archive(thread.id)}
+            onSelect={archive}
           >
             Archive
           </Item>

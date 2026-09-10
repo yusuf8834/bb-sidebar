@@ -35,6 +35,13 @@ const app = await loadPluginApp(() => import("../app"));
 const inbox = app.threadLists[0]!;
 const sidebarSettings = app.settingsSections[0]!;
 
+/** A settle that found no runtime loaded and no terminals to report. */
+const SETTLED_NOTHING = {
+  closedTerminals: 0,
+  keptTerminals: 0,
+  stoppedRuntime: false,
+};
+
 const defaultSidebarSettings = {
   snoozePresets: "30m, 2h, 1d, 1w",
   inactiveThreadsEnabled: true,
@@ -1409,6 +1416,38 @@ describe("ThreadInbox", () => {
     });
   });
 
+  it("releases the agent sessions archive leaves loaded", async () => {
+    const rendered = render([
+      thread({ id: "parent", title: "Parent" }),
+      thread({ id: "idle-child", title: "Idle child", parentThreadId: "parent" }),
+      thread({
+        id: "busy-child",
+        title: "Busy child",
+        parentThreadId: "parent",
+        indicator: "runtime",
+      }),
+      thread({ id: "stranger", title: "Stranger" }),
+    ]);
+
+    fireEvent.contextMenu(screen.getByText("Parent"));
+    fireEvent.click(
+      within(await screen.findByRole("menu", { name: "Thread actions" })).getByText(
+        "Archive",
+      ),
+    );
+
+    expect(rendered.sidebarActionCalls).toContainEqual({
+      method: "archive",
+      threadId: "parent",
+    });
+    await waitFor(() =>
+      expect(rendered.rpcCalls).toContainEqual({
+        method: "releaseRuntimes",
+        input: { threadIds: ["parent", "idle-child"] },
+      }),
+    );
+  });
+
   for (const busyChild of [
     thread({ id: "running", title: "Running child", indicator: "runtime" }),
     thread({
@@ -2581,7 +2620,7 @@ describe("parking threads", () => {
         listLifecycle: () => ({ rows: [] }),
         settle: (input) => {
           settled = (input as { threadId: string }).threadId;
-          return { ok: true };
+          return { ok: true, reclaim: SETTLED_NOTHING };
         },
       },
     });
@@ -2963,7 +3002,7 @@ describe("row context menu", () => {
         listLifecycle: () => ({ rows: [] }),
         settle: (input) => {
           settled = (input as { threadId: string }).threadId;
-          return { ok: true };
+          return { ok: true, reclaim: SETTLED_NOTHING };
         },
       },
     });
@@ -2993,7 +3032,7 @@ describe("row context menu", () => {
         },
         rpc: {
           listLifecycle: () => ({ rows: [] }),
-          settle: () => ({ ok: true }),
+          settle: () => ({ ok: true, reclaim: SETTLED_NOTHING }),
         },
       },
     );
@@ -3021,7 +3060,7 @@ describe("row context menu", () => {
         },
         rpc: {
           listLifecycle: () => ({ rows: [] }),
-          settle: () => ({ ok: true }),
+          settle: () => ({ ok: true, reclaim: SETTLED_NOTHING }),
         },
       },
     );
@@ -3035,8 +3074,46 @@ describe("row context menu", () => {
     );
   });
 
+  it("reminds the user what settling released and what it left running", async () => {
+    renderSlot(
+      inbox,
+      { ...listProps, activeThreadId: "only" },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [thread({ id: "only", title: "Only thread" })],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+        rpc: {
+          listLifecycle: () => ({ rows: [] }),
+          settle: () => ({
+            ok: true,
+            reclaim: {
+              closedTerminals: 1,
+              keptTerminals: 2,
+              stoppedRuntime: true,
+            },
+          }),
+        },
+      },
+    );
+
+    fireEvent.click(await screen.findByLabelText("Settle thread"));
+    await waitFor(() =>
+      expect(toastMocks.success).toHaveBeenCalledWith(
+        "Thread settled",
+        expect.objectContaining({
+          description:
+            "Agent session stopped · closed 1 terminal nobody used · 2 terminals left running",
+          duration: 10_000,
+        }),
+      ),
+    );
+  });
+
   it("does not override navigation that happens while parking is in flight", async () => {
-    const pendingSettle = deferred<{ ok: true }>();
+    const pendingSettle =
+      deferred<{ ok: true; reclaim: typeof SETTLED_NOTHING }>();
     const props = { ...listProps, activeThreadId: "slow" };
     const rendered = renderSlot(inbox, props, {
       sidebarThreads: {
@@ -3063,7 +3140,7 @@ describe("row context menu", () => {
     rendered.rerender(
       <InboxComponent {...props} activeThreadId="elsewhere" />,
     );
-    pendingSettle.resolve({ ok: true });
+    pendingSettle.resolve({ ok: true, reclaim: SETTLED_NOTHING });
     await waitFor(() => expect(toastMocks.success).toHaveBeenCalled());
     expect(
       rendered.sidebarActionCalls.filter(
@@ -3072,8 +3149,49 @@ describe("row context menu", () => {
     ).toEqual([]);
   });
 
+  it("appends the reclaim reminder after the snooze wake time", async () => {
+    let wakeAt = 0;
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ id: "loud", title: "Loud snooze" })],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: [] }),
+        snooze: (input) => {
+          wakeAt = (input as { snoozedUntil: number }).snoozedUntil;
+          return {
+            ok: true,
+            reclaim: {
+              closedTerminals: 0,
+              keptTerminals: 1,
+              stoppedRuntime: true,
+            },
+          };
+        },
+      },
+    });
+
+    const snooze = await screen.findByRole("combobox", {
+      name: "Snooze thread",
+    });
+    fireEvent.keyDown(snooze, { key: "Enter" });
+    fireEvent.click(await screen.findByRole("option", { name: "30 minutes" }));
+    await waitFor(() =>
+      expect(toastMocks.success).toHaveBeenCalledWith(
+        "Thread snoozed",
+        expect.objectContaining({
+          description: `Wakes ${formatSnoozeWakeTime(wakeAt)} · Agent session stopped · 1 terminal left running`,
+          duration: 10_000,
+        }),
+      ),
+    );
+  });
+
   it("deduplicates snooze, confirms the wake time, and supports Undo", async () => {
-    const pendingSnooze = deferred<{ ok: true }>();
+    const pendingSnooze =
+      deferred<{ ok: true; reclaim: typeof SETTLED_NOTHING }>();
     let wakeAt = 0;
     const rendered = renderSlot(inbox, listProps, {
       sidebarThreads: {
@@ -3105,7 +3223,7 @@ describe("row context menu", () => {
         .toHaveLength(1),
     );
 
-    pendingSnooze.resolve({ ok: true });
+    pendingSnooze.resolve({ ok: true, reclaim: SETTLED_NOTHING });
     await waitFor(() =>
       expect(toastMocks.success).toHaveBeenCalledWith(
         "Thread snoozed",
