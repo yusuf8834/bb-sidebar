@@ -82,6 +82,29 @@ export function isChildRunning(thread: PluginSidebarThread): boolean {
   return isWorkingIndicator(thread.indicator);
 }
 
+/** Children retained while collapsed, including paths to visible grandchildren. */
+export function collapsedChildThreads(
+  threads: readonly PluginSidebarThread[],
+  childrenByParent: ReadonlyMap<string, readonly PluginSidebarThread[]>,
+  activeThreadId: string | null | undefined,
+  showRunningChildren: boolean,
+): PluginSidebarThread[] {
+  return threads.filter((child) => {
+    if (child.isArchived) return false;
+    const grandchildren = childrenByParent.get(child.id) ?? [];
+    return (
+      child.id === activeThreadId ||
+      grandchildren.some((grandchild) => grandchild.id === activeThreadId) ||
+      (showRunningChildren &&
+        (isChildRunning(child) ||
+          grandchildren.some(
+            (grandchild) =>
+              !grandchild.isArchived && isChildRunning(grandchild),
+          )))
+    );
+  });
+}
+
 export function ChildThreadDots({
   threads,
   compact = false,
@@ -201,6 +224,7 @@ export function ChildThreadList({
   id,
   activeThreadId,
   expanded = true,
+  showRunningChildrenWhenCollapsed = false,
   onOpenThread,
 }: {
   threads: readonly PluginSidebarThread[];
@@ -211,12 +235,18 @@ export function ChildThreadList({
   activeThreadId?: string | null;
   /** When false, only the active child (or the child of the active grandchild) shows. */
   expanded?: boolean;
+  showRunningChildrenWhenCollapsed?: boolean;
   onOpenThread: (threadId: string) => void;
 }) {
   const disclosureId = useId();
   const visibleThreads = expanded
     ? threads.filter((thread) => !thread.isArchived)
-    : activeChildThreads(threads, childrenByParent, activeThreadId);
+    : collapsedChildThreads(
+        threads,
+        childrenByParent,
+        activeThreadId,
+        showRunningChildrenWhenCollapsed,
+      );
   const [expandedGrandchildParentIds, setExpandedGrandchildParentIds] =
     useState<ReadonlySet<string>>(() => new Set());
 
@@ -256,7 +286,10 @@ export function ChildThreadList({
         const visibleGrandchildren = grandchildrenExpanded
           ? grandchildren
           : grandchildren.filter(
-              (grandchild) => grandchild.id === activeThreadId,
+              (grandchild) =>
+                grandchild.id === activeThreadId ||
+                (showRunningChildrenWhenCollapsed &&
+                  isChildRunning(grandchild)),
             );
         const grandchildrenId = `${disclosureId}-${child.id}`;
         return (

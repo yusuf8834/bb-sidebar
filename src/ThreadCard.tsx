@@ -14,9 +14,9 @@ import {
 } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
 import {
-  activeChildThreads,
   ChildThreadBadge,
   ChildThreadList,
+  collapsedChildThreads,
 } from "./ChildThreadList";
 import { Icon } from "./components/Icon";
 import { Tooltip } from "./components/Tooltip";
@@ -65,6 +65,7 @@ export function ThreadCard({
   childrenByParent,
   activeThreadId,
   childrenExpanded,
+  showRunningChildrenWhenCollapsed,
   onToggleChildren,
   reorder,
   now,
@@ -89,6 +90,7 @@ export function ThreadCard({
   childrenByParent: ReadonlyMap<string, readonly PluginSidebarThread[]>;
   activeThreadId: string | null;
   childrenExpanded: boolean;
+  showRunningChildrenWhenCollapsed: boolean;
   onToggleChildren: () => void;
   reorder?: ThreadReorderControls;
   /** Quantized clock, so every card in one render agrees on "now". */
@@ -351,14 +353,21 @@ export function ThreadCard({
         </div>
         {childThreads.length > 0 &&
         (childrenExpanded ||
-          activeChildThreads(childThreads, childrenByParent, activeThreadId)
-            .length > 0) ? (
+          collapsedChildThreads(
+            childThreads,
+            childrenByParent,
+            activeThreadId,
+            showRunningChildrenWhenCollapsed,
+          ).length > 0) ? (
           <ChildThreadList
             id={childListId}
             threads={childThreads}
             childrenByParent={childrenByParent}
             activeThreadId={activeThreadId}
             expanded={childrenExpanded}
+            showRunningChildrenWhenCollapsed={
+              showRunningChildrenWhenCollapsed
+            }
             variant="sidebar"
             now={now}
             onOpenThread={(childId) => {

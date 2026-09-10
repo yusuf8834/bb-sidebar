@@ -4,6 +4,7 @@ export interface SidebarSettingsValues {
   snoozePresets: string;
   inactiveThreadsEnabled: boolean;
   inactiveAfterHours: number;
+  showRunningChildrenWhenCollapsed: boolean;
   autoSettleInactive: boolean;
   autoSettleAfterDays: number;
   autoSettleOnMerge: boolean;
@@ -15,6 +16,7 @@ export const DEFAULT_SIDEBAR_SETTINGS: SidebarSettingsValues = {
   snoozePresets: "30m, 2h, 1d, 1w",
   inactiveThreadsEnabled: true,
   inactiveAfterHours: 6,
+  showRunningChildrenWhenCollapsed: true,
   autoSettleInactive: true,
   autoSettleAfterDays: 3,
   autoSettleOnMerge: true,
@@ -32,6 +34,7 @@ function readStoredSidebarSettings(): SidebarSettingsValues | null {
       typeof value.snoozePresets !== "string" ||
       typeof value.inactiveThreadsEnabled !== "boolean" ||
       typeof value.inactiveAfterHours !== "number" ||
+      typeof value.showRunningChildrenWhenCollapsed !== "boolean" ||
       typeof value.autoSettleInactive !== "boolean" ||
       typeof value.autoSettleAfterDays !== "number" ||
       typeof value.autoSettleOnMerge !== "boolean"

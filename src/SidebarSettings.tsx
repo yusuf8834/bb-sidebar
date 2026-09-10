@@ -306,6 +306,18 @@ export function SidebarSettings() {
             {snoozePresetsError ?? `Menu: ${snoozePreview}`}
           </p>
         </SettingRow>
+        <SettingRow
+          title="Show running children"
+          description="Keep running child threads visible when their child section is collapsed."
+        >
+          <Switch
+            label="Show running children"
+            checked={draft.showRunningChildrenWhenCollapsed}
+            onChange={(checked) =>
+              update("showRunningChildrenWhenCollapsed", checked)
+            }
+          />
+        </SettingRow>
       </SettingsGroup>
 
       <SettingsGroup

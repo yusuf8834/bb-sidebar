@@ -73,6 +73,8 @@ const migrations = [
      size_bytes       INTEGER NOT NULL,
      updated_at       INTEGER NOT NULL
    )`,
+  `ALTER TABLE sidebar_settings
+     ADD COLUMN show_running_children_when_collapsed INTEGER NOT NULL DEFAULT 1`,
 ];
 
 export interface StoredLifecycleRow {
@@ -95,6 +97,7 @@ interface SidebarSettingsDbRow {
   snooze_presets: string;
   inactive_threads_enabled: number;
   inactive_after_hours: number;
+  show_running_children_when_collapsed: number;
   auto_settle_inactive: number;
   auto_settle_after_days: number;
   auto_settle_on_merge: number;
@@ -145,6 +148,7 @@ const sidebarSettingsSchema = z
       }),
     inactiveThreadsEnabled: z.boolean(),
     inactiveAfterHours: z.number().int().min(1).max(720),
+    showRunningChildrenWhenCollapsed: z.boolean(),
     autoSettleInactive: z.boolean(),
     autoSettleAfterDays: z.number().int().min(1).max(90),
     autoSettleOnMerge: z.boolean(),
@@ -420,7 +424,8 @@ export default async function plugin(bb: BbPluginApi) {
     const row = db
       .prepare(
         `SELECT snooze_presets, inactive_threads_enabled,
-                inactive_after_hours, auto_settle_inactive,
+                inactive_after_hours, show_running_children_when_collapsed,
+                auto_settle_inactive,
                 auto_settle_after_days, auto_settle_on_merge
            FROM sidebar_settings
           WHERE id = 1`,
@@ -431,6 +436,8 @@ export default async function plugin(bb: BbPluginApi) {
           snoozePresets: row.snooze_presets,
           inactiveThreadsEnabled: row.inactive_threads_enabled === 1,
           inactiveAfterHours: row.inactive_after_hours,
+          showRunningChildrenWhenCollapsed:
+            row.show_running_children_when_collapsed === 1,
           autoSettleInactive: row.auto_settle_inactive === 1,
           autoSettleAfterDays: row.auto_settle_after_days,
           autoSettleOnMerge: row.auto_settle_on_merge === 1,
@@ -441,13 +448,16 @@ export default async function plugin(bb: BbPluginApi) {
     db.prepare(
       `INSERT INTO sidebar_settings (
          id, snooze_presets, inactive_threads_enabled,
-         inactive_after_hours, auto_settle_inactive,
+         inactive_after_hours, show_running_children_when_collapsed,
+         auto_settle_inactive,
          auto_settle_after_days, auto_settle_on_merge
-       ) VALUES (1, ?, ?, ?, ?, ?, ?)
+       ) VALUES (1, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          snooze_presets = excluded.snooze_presets,
          inactive_threads_enabled = excluded.inactive_threads_enabled,
          inactive_after_hours = excluded.inactive_after_hours,
+         show_running_children_when_collapsed =
+           excluded.show_running_children_when_collapsed,
          auto_settle_inactive = excluded.auto_settle_inactive,
          auto_settle_after_days = excluded.auto_settle_after_days,
          auto_settle_on_merge = excluded.auto_settle_on_merge`,
@@ -455,6 +465,7 @@ export default async function plugin(bb: BbPluginApi) {
       values.snoozePresets,
       values.inactiveThreadsEnabled ? 1 : 0,
       values.inactiveAfterHours,
+      values.showRunningChildrenWhenCollapsed ? 1 : 0,
       values.autoSettleInactive ? 1 : 0,
       values.autoSettleAfterDays,
       values.autoSettleOnMerge ? 1 : 0,
@@ -474,6 +485,7 @@ export default async function plugin(bb: BbPluginApi) {
         "snoozePresets",
         "inactiveThreadsEnabled",
         "inactiveAfterHours",
+        "showRunningChildrenWhenCollapsed",
         "autoSettleInactive",
         "autoSettleAfterDays",
         "autoSettleOnMerge",
@@ -491,6 +503,10 @@ export default async function plugin(bb: BbPluginApi) {
           typeof values.inactiveAfterHours === "string"
             ? Number(values.inactiveAfterHours)
             : DEFAULT_SIDEBAR_SETTINGS.inactiveAfterHours,
+        showRunningChildrenWhenCollapsed:
+          typeof values.showRunningChildrenWhenCollapsed === "boolean"
+            ? values.showRunningChildrenWhenCollapsed
+            : DEFAULT_SIDEBAR_SETTINGS.showRunningChildrenWhenCollapsed,
         autoSettleInactive:
           typeof values.autoSettleInactive === "boolean"
             ? values.autoSettleInactive

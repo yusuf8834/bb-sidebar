@@ -81,6 +81,7 @@ import type { bbSidebarRpcContract } from "./server";
 import {
   cachedSidebarSettings,
   cacheSidebarSettings,
+  DEFAULT_SIDEBAR_SETTINGS,
   SIDEBAR_SETTINGS_CHANNEL,
   type SidebarSettingsValues,
 } from "./sidebar-settings";
@@ -980,6 +981,10 @@ export function ThreadInbox({
       childrenByParent={childrenByParentId}
       activeThreadId={activeThreadId}
       childrenExpanded={expandedChildParentIds.has(thread.id)}
+      showRunningChildrenWhenCollapsed={
+        sidebarSettings?.showRunningChildrenWhenCollapsed ??
+        DEFAULT_SIDEBAR_SETTINGS.showRunningChildrenWhenCollapsed
+      }
       onToggleChildren={() => toggleChildExpansion(thread.id)}
       reorder={
         !reorderable ||

@@ -46,6 +46,7 @@ const defaultSidebarSettings = {
   snoozePresets: "30m, 2h, 1d, 1w",
   inactiveThreadsEnabled: true,
   inactiveAfterHours: 6,
+  showRunningChildrenWhenCollapsed: true,
   autoSettleInactive: true,
   autoSettleAfterDays: 3,
   autoSettleOnMerge: true,
@@ -265,15 +266,24 @@ describe("sidebar settings", () => {
         .getByRole("switch", { name: "Inactive shelf" })
         .querySelector("span")?.className,
     ).toContain("left-0.5");
+    expect(
+      screen
+        .getByRole("switch", { name: "Show running children" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
 
     fireEvent.change(screen.getByLabelText("Snooze shortcuts"), {
       target: { value: "15m, Lunch=3h" },
     });
+    fireEvent.click(
+      screen.getByRole("switch", { name: "Show running children" }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     await waitFor(() =>
       expect(saved).toEqual({
         ...defaultSidebarSettings,
         snoozePresets: "15m, Lunch=3h",
+        showRunningChildrenWhenCollapsed: false,
       }),
     );
   });
@@ -1049,6 +1059,39 @@ describe("ThreadInbox", () => {
     expect(badge.getAttribute("data-child-status")).toBe("working");
     expect(badge.className).toContain("bg-sky-100");
     expect(badge.querySelector('[data-icon="Loading"]')).not.toBeNull();
+    expect(screen.getByRole("list", { name: "Child threads" })).toBeDefined();
+    expect(screen.getByText("Working child")).toBeDefined();
+  });
+
+  it("can hide running children while their section is collapsed", async () => {
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "parent", title: "Parent" }),
+          thread({
+            id: "working",
+            title: "Working child",
+            parentThreadId: "parent",
+            indicator: "runtime",
+          }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: {
+        getSidebarSettings: () => ({
+          ...defaultSidebarSettings,
+          showRunningChildrenWhenCollapsed: false,
+        }),
+        listLifecycle: () => ({ rows: [] }),
+      },
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("list", { name: "Child threads" }),
+      ).toBeNull(),
+    );
   });
 
   it("highlights the active grandchild row", () => {
