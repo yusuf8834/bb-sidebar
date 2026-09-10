@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.10] - 2026-09-10
+
+### Added
+
+- Kept running child and grandchild threads visible while their child sections are collapsed. A new setting controls the behavior and is enabled by default.
+
+### Improved
+
+- Released thread runtimes when work is settled and closed only terminal sessions without user input, while preserving terminals the user interacted with.
+
 ## [0.2.9] - 2026-09-09
 
 ### Added
