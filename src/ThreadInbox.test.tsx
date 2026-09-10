@@ -3777,6 +3777,22 @@ describe("card metadata", () => {
     expect(await screen.findByText("Working · 5m")).toBeDefined();
   });
 
+  it("shows monitoring when BB identifies a monitoring runtime", async () => {
+    window.localStorage.setItem(
+      "bb-sidebar:working-since:v1",
+      JSON.stringify({ thr_monitor: Date.now() - 5 * 60_000 - 60_000 }),
+    );
+    render([
+      thread({
+        id: "thr_monitor",
+        indicator: "runtime",
+        indicatorLabel: "Thread monitoring",
+      }),
+    ]);
+    expect(await screen.findByText("Monitoring · 5m")).toBeDefined();
+    expect(screen.getByLabelText("Thread monitoring")).toBeDefined();
+  });
+
   it("stamps a thread that starts working and persists the stamp", async () => {
     render([thread({ id: "thr_run", indicator: "runtime" })]);
     expect(await screen.findByText("Working")).toBeDefined();

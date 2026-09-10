@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Show monitoring runtimes as "Monitoring" on thread cards when BB reports that state.
+
 ## [0.2.10] - 2026-09-10
 
 ### Added

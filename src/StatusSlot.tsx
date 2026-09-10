@@ -43,7 +43,7 @@ export function StatusOrTime({
   now: number;
 }) {
   const workingSince = useWorkingSinceContext();
-  const status = shortStatus(thread.indicator);
+  const status = shortStatus(thread.indicator, thread.indicatorLabel);
   if (status !== null) {
     const label = status.showsDuration
       ? statusWithDuration(status.label, workingSince.get(thread.id), now)
@@ -68,7 +68,10 @@ export function StatusOrTime({
   );
 }
 
-function shortStatus(indicator: PluginSidebarThreadIndicator): {
+function shortStatus(
+  indicator: PluginSidebarThreadIndicator,
+  indicatorLabel: string | null,
+): {
   label: string;
   className: string;
   /** Live work gets a running duration; a verdict or a request does not. */
@@ -83,7 +86,11 @@ function shortStatus(indicator: PluginSidebarThreadIndicator): {
     case "unread-success":
       return { label: "Unread", className, showsDuration: false };
     case "runtime":
-      return { label: "Working", className, showsDuration: true };
+      return {
+        label: isMonitoringLabel(indicatorLabel) ? "Monitoring" : "Working",
+        className,
+        showsDuration: true,
+      };
     case "workflow":
       return { label: "Workflow", className, showsDuration: true };
     case "background-agent":
@@ -103,6 +110,14 @@ function shortStatus(indicator: PluginSidebarThreadIndicator): {
     default:
       return null;
   }
+}
+
+/**
+ * A monitor is still a runtime, so the indicator keeps the usual spinner and
+ * working duration. BB's accessible label carries the more precise state.
+ */
+function isMonitoringLabel(label: string | null): boolean {
+  return label?.toLocaleLowerCase().includes("monitoring") ?? false;
 }
 
 /** Status palette shared by cards and child-thread chips. */
