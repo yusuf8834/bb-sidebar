@@ -3706,10 +3706,11 @@ describe("card metadata", () => {
     expect(unread?.className).toContain("text-foreground");
   });
 
-  it("lists available thread metadata from the SDK in one tooltip", async () => {
+  it("shows the shared details card on the main thread without an icon tooltip", async () => {
     render([
       thread({
         id: "thr_details",
+        title: "Thread metadata",
         providerId: "claude-code",
         host: { id: "host_1", name: "Build Mac" },
         environment: {
@@ -3728,17 +3729,15 @@ describe("card metadata", () => {
       }),
     ]);
 
-    fireEvent.focus(await screen.findByLabelText("Thread details"));
+    expect(screen.queryByLabelText("Thread details")).toBeNull();
+    fireEvent.pointerMove(await screen.findByRole("link", { name: "Thread metadata" }), { pointerType: "mouse" });
     const details = await screen.findByRole("tooltip");
     expect(details.textContent).toContain("Project: bb");
     expect(details.textContent).toContain("Environment: Feature worktree");
-    expect(details.textContent).toContain("Workspace: Unmanaged worktree");
     expect(details.textContent).toContain("Branch: bb/details");
     expect(details.textContent).toContain("Machine: Build Mac");
     expect(details.textContent).toContain("Provider: Claude Code");
-    expect(details.textContent).toContain(
-      "Activity: 1 workflow, 2 background agents, 1 goal",
-    );
+    expect(details.textContent).toContain("Model:");
   });
 
   // Not exactly 3h: the card's clock is quantized to the minute, so a

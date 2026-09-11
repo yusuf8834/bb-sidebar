@@ -125,6 +125,24 @@ async function loadPlugin(
 }
 
 describe("lifecycle RPC", () => {
+  it("returns only model and reasoning details, including unset options", async () => {
+    const harness = await loadPlugin();
+    harness.inspection.sdk.stub("threads.defaultExecutionOptions", async () => ({
+      model: "gpt-6",
+      reasoningLevel: "high",
+      permissionMode: "auto",
+      serviceTier: "default",
+      source: "client/turn/start",
+    }));
+    await expect(harness.behavior.callRpc("getThreadExecutionDetails", {
+      threadId: "thr_1",
+    })).resolves.toEqual({ model: "gpt-6", reasoningLevel: "high" });
+    harness.inspection.sdk.stub("threads.defaultExecutionOptions", async () => null);
+    await expect(harness.behavior.callRpc("getThreadExecutionDetails", {
+      threadId: "thr_1",
+    })).resolves.toBeNull();
+  });
+
   it("stores the grouped sidebar settings through RPC", async () => {
     const harness = await loadPlugin();
     expect(harness.inspection.registrations.settingsDescriptors).toEqual({});

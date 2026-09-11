@@ -20,6 +20,7 @@ import {
 } from "./ChildThreadList";
 import { Icon } from "./components/Icon";
 import { Tooltip } from "./components/Tooltip";
+import { ThreadDetailsTooltip } from "./ThreadDetailsTooltip";
 import { SnoozeSelect } from "./SnoozeSelect";
 import { cn } from "./lib/utils";
 import { RowContextMenu } from "./RowContextMenu";
@@ -140,43 +141,45 @@ export function ThreadCard({
             !isActive && layout !== null && "bg-sidebar-accent/30",
           )}
         >
-          <a
-            // Both attributes, or bb's nine thread shortcuts stop finding rows.
-            data-sidebar-thread-shortcut-target=""
-            data-sidebar-thread-id={thread.id}
-            href="#"
-            aria-label={`${isSelected ? "Selected, " : ""}${threadDisplayTitle(thread)}`}
-            aria-current={isActive ? "page" : undefined}
-            data-selected={isSelected ? "true" : undefined}
-            draggable={false}
-            aria-keyshortcuts={
-              reorder ? "Alt+ArrowUp Alt+ArrowDown" : undefined
-            }
-            onPointerDown={(event) => {
-              splitProps.onPointerDown?.(event);
-              reorder?.onPointerDown(event);
-            }}
-            onKeyDown={reorder?.onKeyDown}
-            onClick={(event) => {
-              event.preventDefault();
-              if (isRenaming || event.detail > 1) return;
-              if (onSelectionClick(event)) return;
-              if (isWoke) onAcknowledgeWake();
-              actions.open(thread.id, { split: false });
-              onNavigate();
-            }}
-            onDoubleClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              setIsRenaming(true);
-            }}
-            className={cn(
-              "absolute inset-0 rounded-md",
-              reorder && !reorder.disabled
-                ? "cursor-grab active:cursor-grabbing"
-                : "cursor-pointer",
-            )}
-          />
+          <ThreadDetailsTooltip thread={thread} disabled={isRenaming || !!reorder?.isDragging}>
+            <a
+              // Both attributes, or bb's nine thread shortcuts stop finding rows.
+              data-sidebar-thread-shortcut-target=""
+              data-sidebar-thread-id={thread.id}
+              href="#"
+              aria-label={`${isSelected ? "Selected, " : ""}${threadDisplayTitle(thread)}`}
+              aria-current={isActive ? "page" : undefined}
+              data-selected={isSelected ? "true" : undefined}
+              draggable={false}
+              aria-keyshortcuts={
+                reorder ? "Alt+ArrowUp Alt+ArrowDown" : undefined
+              }
+              onPointerDown={(event) => {
+                splitProps.onPointerDown?.(event);
+                reorder?.onPointerDown(event);
+              }}
+              onKeyDown={reorder?.onKeyDown}
+              onClick={(event) => {
+                event.preventDefault();
+                if (isRenaming || event.detail > 1) return;
+                if (onSelectionClick(event)) return;
+                if (isWoke) onAcknowledgeWake();
+                actions.open(thread.id, { split: false });
+                onNavigate();
+              }}
+              onDoubleClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setIsRenaming(true);
+              }}
+              className={cn(
+                "absolute inset-0 rounded-md",
+                reorder && !reorder.disabled
+                  ? "cursor-grab active:cursor-grabbing"
+                  : "cursor-pointer",
+              )}
+            />
+          </ThreadDetailsTooltip>
           <div className="pointer-events-none relative flex h-5 items-center gap-1.5">
             <span className="flex min-w-0 flex-1 items-center gap-1.5 text-2xs font-medium text-muted-foreground">
               {projectName ? (
@@ -333,22 +336,10 @@ export function ThreadCard({
                 </a>
               </Tooltip>
             ) : null}
-            <Tooltip
-              label={threadMetadataLabel(thread, projectName, provider)}
-              side="left"
-              className="whitespace-pre-line"
-            >
-              <span
-                tabIndex={0}
-                aria-label="Thread details"
-                className="pointer-events-auto rounded-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              >
-                <ProviderGlyph
-                  providerId={thread.providerId}
-                  provider={provider}
-                />
-              </span>
-            </Tooltip>
+            <ProviderGlyph
+              providerId={thread.providerId}
+              provider={provider}
+            />
           </div>
         </div>
         {childThreads.length > 0 &&
@@ -411,57 +402,6 @@ function ThreadLocation({ thread }: { thread: PluginSidebarThread }) {
     );
   }
   return <span className="flex-1" />;
-}
-
-function workspaceLabel(thread: PluginSidebarThread): string | null {
-  switch (thread.environment?.workspaceDisplayKind) {
-    case "managed-worktree":
-      return "Managed worktree";
-    case "unmanaged-worktree":
-      return "Unmanaged worktree";
-    case "other":
-      return "Checkout";
-    default:
-      return null;
-  }
-}
-
-function activityLabel(thread: PluginSidebarThread): string {
-  const parts: string[] = [];
-  if (thread.hasPendingInteraction) parts.push("needs user input");
-  const counts = [
-    [thread.activity.workflows, "workflow"],
-    [thread.activity.backgroundAgents, "background agent"],
-    [thread.activity.backgroundCommands, "background command"],
-    [thread.activity.planMode, "plan"],
-    [thread.activity.goals, "goal"],
-  ] as const;
-  for (const [count, label] of counts) {
-    if (count > 0) parts.push(`${count} ${label}${count === 1 ? "" : "s"}`);
-  }
-  return parts.length > 0 ? parts.join(", ") : "Idle";
-}
-
-function threadMetadataLabel(
-  thread: PluginSidebarThread,
-  projectName: string | null,
-  provider: SidebarProvider | null,
-): string {
-  const workspace = workspaceLabel(thread);
-  const lines = [
-    projectName ? `Project: ${projectName}` : null,
-    thread.environment?.name
-      ? `Environment: ${thread.environment.name}`
-      : null,
-    workspace ? `Workspace: ${workspace}` : null,
-    thread.environment?.branchName
-      ? `Branch: ${thread.environment.branchName}`
-      : null,
-    thread.host ? `Machine: ${thread.host.name}` : null,
-    `Provider: ${provider?.displayName ?? thread.providerId}`,
-    `Activity: ${activityLabel(thread)}`,
-  ];
-  return lines.filter((line): line is string => line !== null).join("\n");
 }
 
 function pullRequestStatusLabel(pullRequest: PluginSidebarPullRequest): string {

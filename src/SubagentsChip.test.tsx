@@ -48,6 +48,40 @@ function thread(
 afterEach(cleanup);
 
 describe("SubagentsChip", () => {
+  it.each([false, true])("loads execution details only on hover and handles failure=%s", async (fail) => {
+    let requests = 0;
+    renderSlot(
+      childrenChip,
+      { threadId: "parent", projectId: "proj_1", isCompactViewport: false },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [thread({ id: "child", title: "Child", parentThreadId: "parent" })],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+        rpc: {
+          getThreadExecutionDetails: (input) => {
+            expect(input).toEqual({ threadId: "child" });
+            requests++;
+            if (fail) throw new Error("Offline");
+            return { model: "gpt-6", reasoningLevel: "high" };
+          },
+        },
+      },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "1 child thread" }));
+    expect(requests).toBe(0);
+    const row = screen.getByRole("button", { name: "Open child thread: Child" });
+    fireEvent.pointerMove(row, { pointerType: "mouse" });
+    await waitFor(() => {
+      const tooltip = screen.getByRole("tooltip");
+      expect(tooltip.textContent).toContain("Provider: codex");
+      expect(tooltip.textContent).toContain(fail ? "Model: Unavailable" : "Model: gpt-6");
+      if (!fail) expect(tooltip.textContent).toContain("Reasoning: high");
+    });
+    expect(requests).toBe(1);
+  });
+
   it.each(["child", "grandchild"])("renames a %s without opening it and keeps the popup on cancel", async (targetId) => {
     const rendered = renderSlot(
       childrenChip,
@@ -70,7 +104,7 @@ describe("SubagentsChip", () => {
     }
     const title = targetId === "child" ? "Child" : "Grandchild";
     const startRename = async () => {
-      fireEvent.contextMenu(screen.getByText(title, { exact: true }));
+      fireEvent.contextMenu(screen.getByRole("button", { name: `Open ${targetId} thread: ${title}` }));
       fireEvent.click(within(await screen.findByRole("menu", { name: "Thread actions" })).getByText("Rename"));
       return screen.findByRole("textbox", { name: `Rename ${title}` });
     };

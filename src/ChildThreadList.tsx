@@ -10,6 +10,7 @@ import { threadDisplayTitle } from "./inbox";
 import { canParkThread } from "./lifecycle";
 import { RowContextMenu } from "./RowContextMenu";
 import { InlineThreadTitle } from "./InlineThreadTitle";
+import { ThreadDetailsTooltip } from "./ThreadDetailsTooltip";
 import {
   childStatusIndicator,
   childStatusPhrase,
@@ -401,60 +402,62 @@ function ChildThreadRow({
               : "bg-sidebar-accent hover:bg-sidebar-accent"),
         )}
       >
-        <RowAction
-          type={isRenaming ? undefined : "button"}
-          aria-label={isRenaming ? undefined : childThreadOpenLabel(thread, relation, title)}
-          aria-current={isActive && !isRenaming ? "page" : undefined}
-          onClick={isRenaming ? undefined : () => onOpenThread(thread.id)}
-          onKeyDown={isRenaming ? (event) => event.stopPropagation() : undefined}
-          className={cn(
-            "flex min-w-0 flex-1 items-center text-left outline-none focus-visible:ring-1 focus-visible:ring-ring",
-            variant === "header"
-              ? "gap-2 rounded-md px-2 py-1.5"
-              : "h-full gap-2 rounded-md pl-2",
-          )}
-        >
-          <Disc
-            thread={thread}
-            className={variant === "header" ? undefined : "size-2 border-0"}
-          />
-          <span
+        <ThreadDetailsTooltip thread={thread} disabled={isRenaming}>
+          <RowAction
+            type={isRenaming ? undefined : "button"}
+            aria-label={isRenaming ? undefined : childThreadOpenLabel(thread, relation, title)}
+            aria-current={isActive && !isRenaming ? "page" : undefined}
+            onClick={isRenaming ? undefined : () => onOpenThread(thread.id)}
+            onKeyDown={isRenaming ? (event) => event.stopPropagation() : undefined}
             className={cn(
-              "min-w-0 flex-1 text-xs",
-              variant === "header" ? "flex flex-col" : "truncate",
-              isActive && "font-medium text-foreground",
+              "flex min-w-0 flex-1 items-center text-left outline-none focus-visible:ring-1 focus-visible:ring-ring",
+              variant === "header"
+                ? "gap-2 rounded-md px-2 py-1.5"
+                : "h-full gap-2 rounded-md pl-2",
             )}
           >
-            <InlineThreadTitle
+            <Disc
               thread={thread}
-              editing={isRenaming}
-              onEditingChange={setIsRenaming}
-              className="truncate"
+              className={variant === "header" ? undefined : "size-2 border-0"}
             />
+            <span
+              className={cn(
+                "min-w-0 flex-1 text-xs",
+                variant === "header" ? "flex flex-col" : "truncate",
+                isActive && "font-medium text-foreground",
+              )}
+            >
+              <InlineThreadTitle
+                thread={thread}
+                editing={isRenaming}
+                onEditingChange={setIsRenaming}
+                className="truncate"
+              />
+              {variant === "header" ? (
+                <span className="truncate text-2xs text-muted-foreground">
+                  {thread.originKind ?? "thread"}
+                </span>
+              ) : null}
+            </span>
             {variant === "header" ? (
-              <span className="truncate text-2xs text-muted-foreground">
-                {thread.originKind ?? "thread"}
+              <span className="shrink-0">
+                <StatusGlyph
+                  indicator={thread.indicator}
+                  label={thread.indicatorLabel}
+                />
               </span>
             ) : null}
-          </span>
-          {variant === "header" ? (
-            <span className="shrink-0">
-              <StatusGlyph
-                indicator={thread.indicator}
-                label={thread.indicatorLabel}
-              />
-            </span>
-          ) : null}
-          {variant === "sidebar" ? (
-            <span className="flex shrink-0 items-center gap-1 pr-2">
-              {needsYou ? <ChildStatusFlag kind="needs-you" /> : null}
-              {running ? <ChildStatusFlag kind="running" /> : null}
-              <span className="shrink-0 font-mono text-2xs tabular-nums text-muted-foreground/60">
-                {relativeTimeLabel(thread.updatedAt, now ?? Date.now())}
+            {variant === "sidebar" ? (
+              <span className="flex shrink-0 items-center gap-1 pr-2">
+                {needsYou ? <ChildStatusFlag kind="needs-you" /> : null}
+                {running ? <ChildStatusFlag kind="running" /> : null}
+                <span className="shrink-0 font-mono text-2xs tabular-nums text-muted-foreground/60">
+                  {relativeTimeLabel(thread.updatedAt, now ?? Date.now())}
+                </span>
               </span>
-            </span>
-          ) : null}
-        </RowAction>
+            ) : null}
+          </RowAction>
+        </ThreadDetailsTooltip>
         {disclosure ? (
           <GrandchildDisclosureButton title={title} {...disclosure} />
         ) : null}

@@ -8,17 +8,23 @@ export function Tooltip({
   children,
   side = "top",
   className,
+  open,
+  onOpenChange,
+  showArrow = true,
 }: {
-  label: string;
+  label: React.ReactNode;
   children: React.ReactElement;
   side?: React.ComponentPropsWithoutRef<
     typeof TooltipPrimitive.Content
   >["side"];
   className?: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  showArrow?: boolean;
 }) {
   return (
     <TooltipPrimitive.Provider delayDuration={250} skipDelayDuration={100}>
-      <TooltipPrimitive.Root>
+      <TooltipPrimitive.Root open={open} onOpenChange={onOpenChange}>
         <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
         <TooltipPrimitive.Portal>
           <TooltipPrimitive.Content
@@ -32,7 +38,7 @@ export function Tooltip({
             )}
           >
             {label}
-            <TooltipPrimitive.Arrow className="fill-popover" />
+            {showArrow ? <TooltipPrimitive.Arrow className="fill-popover" /> : null}
           </TooltipPrimitive.Content>
         </TooltipPrimitive.Portal>
       </TooltipPrimitive.Root>

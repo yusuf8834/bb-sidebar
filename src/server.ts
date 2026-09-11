@@ -183,6 +183,13 @@ const bulkMutationOutputSchema = z
   .strict();
 
 export const bbSidebarRpcContract = defineRpcContract({
+  getThreadExecutionDetails: {
+    input: threadIdSchema.strict(),
+    output: z.object({
+      model: z.string(),
+      reasoningLevel: z.string(),
+    }).strict().nullable(),
+  },
   regenerateTitle: {
     input: threadIdSchema.strict(),
     output: z.object({ title: z.string().min(1).max(100) }).strict(),
@@ -1107,6 +1114,12 @@ export default async function plugin(bb: BbPluginApi) {
   });
 
   bb.rpc.register(bbSidebarRpcContract, {
+    async getThreadExecutionDetails({ threadId }) {
+      const options = await bb.sdk.threads.defaultExecutionOptions({ threadId });
+      return options
+        ? { model: options.model, reasoningLevel: options.reasoningLevel }
+        : null;
+    },
     regenerateTitle: ({ threadId }) => regenerateTitle(threadId),
     async getSidebarSettings() {
       return readSidebarSettings();
