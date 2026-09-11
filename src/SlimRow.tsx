@@ -13,6 +13,7 @@ import { snoozeWakeLabel } from "./lifecycle";
 import type { ConfiguredSnoozePreset } from "./lifecycle";
 import { InlineThreadTitle } from "./InlineThreadTitle";
 import { ProjectFavicon } from "./ProjectFavicon";
+import { ThreadDetailsTooltip } from "./ThreadDetailsTooltip";
 
 /**
  * A parked thread: one line instead of a card. Density comes from the user
@@ -74,27 +75,29 @@ export function SlimRow({
               "bg-sidebar-accent ring-1 ring-inset ring-primary/60",
           )}
         >
-          <a
-            data-sidebar-thread-shortcut-target=""
-            data-sidebar-thread-id={thread.id}
-            href="#"
-            aria-label={`${isSelected ? "Selected, " : ""}${rowLabel}`}
-            aria-current={isActive ? "page" : undefined}
-            data-selected={isSelected ? "true" : undefined}
-            onClick={(event) => {
-              event.preventDefault();
-              if (isRenaming || event.detail > 1) return;
-              if (onSelectionClick(event)) return;
-              actions.open(thread.id, { split: false });
-              onNavigate();
-            }}
-            onDoubleClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              setIsRenaming(true);
-            }}
-            className="absolute inset-0 cursor-pointer rounded-md"
-          />
+          <ThreadDetailsTooltip thread={thread} disabled={isRenaming}>
+            <a
+              data-sidebar-thread-shortcut-target=""
+              data-sidebar-thread-id={thread.id}
+              href="#"
+              aria-label={`${isSelected ? "Selected, " : ""}${rowLabel}`}
+              aria-current={isActive ? "page" : undefined}
+              data-selected={isSelected ? "true" : undefined}
+              onClick={(event) => {
+                event.preventDefault();
+                if (isRenaming || event.detail > 1) return;
+                if (onSelectionClick(event)) return;
+                actions.open(thread.id, { split: false });
+                onNavigate();
+              }}
+              onDoubleClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setIsRenaming(true);
+              }}
+              className="absolute inset-0 cursor-pointer rounded-md"
+            />
+          </ThreadDetailsTooltip>
           <span
             className={cn(
               "pointer-events-none relative flex min-w-0 flex-1 items-center gap-1",
