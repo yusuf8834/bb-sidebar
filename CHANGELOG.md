@@ -2,9 +2,17 @@
 
 ## Unreleased
 
+## [0.2.11] - 2026-09-11
+
 ### Added
 
 - Show monitoring runtimes as "Monitoring" on thread cards when BB reports that state.
+- Added compact hover cards to main, child, grandchild, snoozed, and settled threads, showing project, machine, branch, provider, model, and reasoning details.
+- Show project icons in hover cards when available, with a folder icon as fallback.
+
+### Improved
+
+- Moved thread details from the provider icon tooltip to the thread row, with support for keyboard focus.
 
 ## [0.2.10] - 2026-09-10
 
