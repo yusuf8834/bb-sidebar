@@ -2,9 +2,19 @@
 
 ## Unreleased
 
+## [0.2.19] - 2026-09-19
+
+### Added
+
+- Support configurable snooze shortcuts for this evening, tomorrow morning, and next week, using local calendar times.
+
 ### Improved
 
 - Sort parent-thread choices by recent activity in a single list.
+
+### Fixed
+
+- After parking or snoozing the open thread, select the first Pinned thread, then the first Active thread, or open the new-thread page when both sections are empty.
 
 ## [0.2.18] - 2026-09-19
 
