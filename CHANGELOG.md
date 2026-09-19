@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Improved
+
+- Sort parent-thread choices by recent activity in a single list.
+
 ## [0.2.18] - 2026-09-19
 
 ### Improved

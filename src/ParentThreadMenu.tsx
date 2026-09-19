@@ -1,11 +1,4 @@
-import {
-  createContext,
-  Fragment,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useRef, useState } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import {
   experimental_useSidebarThreads as useSidebarThreads,
@@ -19,13 +12,8 @@ import { threadDisplayTitle } from "./inbox";
 import { usePortalScopeProps } from "./lib/portal-scope";
 import { parentCandidates } from "./parent-threads";
 
-// Share the sidebar's shelf classification, including hidden child threads.
-export const ParentThreadPriorityContext =
-  createContext<ReadonlySet<string>>(new Set());
-
 export function ParentThreadMenu({ thread }: { thread: PluginSidebarThread }) {
   const { threads } = useSidebarThreads();
-  const priorityIds = useContext(ParentThreadPriorityContext);
   const rpc = useRpc<typeof bbSidebarRpcContract>();
   const portalScope = usePortalScopeProps();
   const [open, setOpen] = useState(false);
@@ -40,17 +28,14 @@ export function ParentThreadMenu({ thread }: { thread: PluginSidebarThread }) {
     const timer = window.setTimeout(() => searchRef.current?.focus(), 0);
     return () => window.clearTimeout(timer);
   }, [open]);
-  const candidates = parentCandidates(threads, thread).filter((candidate) =>
-    threadDisplayTitle(candidate).toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
-  );
-  const priorityCandidates = candidates
-    .filter((candidate) => priorityIds.has(candidate.id))
-    .sort((left, right) => Number(right.isPinned) - Number(left.isPinned));
-  const otherCandidates = candidates.filter((candidate) => !priorityIds.has(candidate.id));
-  const hasBothGroups = priorityCandidates.length > 0 && otherCandidates.length > 0;
+  const candidates = parentCandidates(threads, thread)
+    .filter((candidate) =>
+      threadDisplayTitle(candidate).toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
+    )
+    .sort((left, right) => right.updatedAt - left.updatedAt || left.id.localeCompare(right.id));
   const choices = [
     { id: "", title: "None", isPinned: false },
-    ...[...priorityCandidates, ...otherCandidates].map((candidate) => ({
+    ...candidates.map((candidate) => ({
       id: candidate.id,
       title: threadDisplayTitle(candidate),
       isPinned: candidate.isPinned,
@@ -122,22 +107,18 @@ export function ParentThreadMenu({ thread }: { thread: PluginSidebarThread }) {
             onValueChange={(value) => void updateParent(value || null)}
             className="max-h-64 overflow-y-auto"
           >
-            {choices.map((candidate, index) => (
-              <Fragment key={candidate.id}>
-                {hasBothGroups && index === priorityCandidates.length + 1 ? (
-                  <ContextMenu.Separator aria-label="Other threads" className="my-1 h-px bg-border" />
-                ) : null}
-                <ContextMenu.RadioItem
-                  value={candidate.id}
-                  disabled={saving}
-                  textValue={candidate.title}
-                  className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent data-[disabled]:opacity-50"
-                >
-                  {candidate.isPinned ? <Icon name="Pin" className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" /> : null}
-                  <span className="flex-1 truncate">{candidate.title}</span>
-                  <ContextMenu.ItemIndicator><Icon name="Check" className="size-4" /></ContextMenu.ItemIndicator>
-                </ContextMenu.RadioItem>
-              </Fragment>
+            {choices.map((candidate) => (
+              <ContextMenu.RadioItem
+                key={candidate.id}
+                value={candidate.id}
+                disabled={saving}
+                textValue={candidate.title}
+                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent data-[disabled]:opacity-50"
+              >
+                {candidate.isPinned ? <Icon name="Pin" className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" /> : null}
+                <span className="flex-1 truncate">{candidate.title}</span>
+                <ContextMenu.ItemIndicator><Icon name="Check" className="size-4" /></ContextMenu.ItemIndicator>
+              </ContextMenu.RadioItem>
             ))}
           </ContextMenu.RadioGroup>
           {candidates.length === 0 ? (

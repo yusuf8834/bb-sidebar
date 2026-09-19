@@ -4866,20 +4866,25 @@ it("keeps parked threads parked when opened and offers Resume with Undo", async 
 
 
 describe("parent thread menu", () => {
-  it("puts pinned and Active-shelf candidates before the remaining threads, including during search", async () => {
+  it("orders parent choices by recent activity regardless of pin, shelf, or sidebar sort", async () => {
     const now = Date.now();
+    localStorage.setItem("bb-sidebar:active-sort:v1", "created");
     renderSlot(inbox, listProps, {
       sidebarThreads: {
         status: "ready",
         threads: [
           thread({ id: "child", title: "Choose my parent", updatedAt: now }),
-          thread({ id: "settled", title: "Settled parent", updatedAt: now }),
-          thread({ id: "active", title: "Active parent", updatedAt: now }),
+          thread({ id: "settled", title: "Settled parent", updatedAt: now - 1_000 }),
+          thread({ id: "active", title: "Active parent", updatedAt: now - 4_000, createdAt: now - 4_000 }),
           thread({ id: "inactive", title: "Older parent" }),
-          thread({ id: "pinned", title: "Pinned parent", isPinned: true }),
-          thread({ id: "snoozed", title: "Snoozed parent", updatedAt: now }),
-          thread({ id: "pinned-2", title: "Pinned second", isPinned: true }),
-          thread({ id: "parked", title: "Parked parent", updatedAt: now }),
+          thread({ id: "pinned", title: "Pinned parent", isPinned: true, updatedAt: now - 9_000 }),
+          thread({ id: "snoozed", title: "Snoozed parent", updatedAt: now - 3_000 }),
+          thread({ id: "pinned-2", title: "Pinned second", isPinned: true, updatedAt: now - 7_000 }),
+          thread({ id: "parked", title: "Parked parent", updatedAt: now - 5_000 }),
+          thread({ id: "hidden", title: "Nested work", parentThreadId: "settled", updatedAt: now - 2_000 }),
+          thread({ id: "nested-active", title: "Nested active work", parentThreadId: "active", updatedAt: now - 6_000 }),
+          thread({ id: "nested-pinned", title: "Nested pinned work", parentThreadId: "settled", isPinned: true, updatedAt: now - 8_000 }),
+          thread({ id: "orphan", title: "Orphan parent", parentThreadId: "missing", updatedAt: now - 10_000 }),
           thread({ id: "descendant", title: "Forbidden pinned child", parentThreadId: "child", isPinned: true }),
           thread({ id: "other", title: "Foreign pinned thread", projectId: "proj_other", isPinned: true }),
         ],
@@ -4901,19 +4906,21 @@ describe("parent thread menu", () => {
     const search = await screen.findByRole("textbox", { name: "Search parent threads" });
     const menu = search.closest<HTMLElement>('[role="menu"]')!;
     expect(within(menu).getAllByRole("menuitemradio").map(item => item.textContent)).toEqual([
-      "None", "Pinned parent", "Pinned second", "Active parent",
-      "Settled parent", "Older parent", "Snoozed parent", "Parked parent",
+      "None", "Settled parent", "Nested work", "Snoozed parent", "Active parent",
+      "Parked parent", "Nested active work", "Pinned second", "Nested pinned work",
+      "Pinned parent", "Orphan parent", "Older parent",
     ]);
-    const divider = within(menu).getByRole("separator", { name: "Other threads" });
-    expect(divider.previousElementSibling?.textContent).toBe("Active parent");
-    expect(divider.nextElementSibling?.textContent).toBe("Settled parent");
+    expect(within(menu).queryByRole("separator")).toBeNull();
     expect(within(menu).getByRole("menuitemradio", { name: "Pinned parent" }).querySelector('[data-icon="Pin"]')).not.toBeNull();
 
     fireEvent.change(search, { target: { value: "pinned" } });
-    expect(within(menu).getAllByRole("menuitemradio").map(item => item.textContent)).toEqual(["None", "Pinned parent", "Pinned second"]);
+    expect(within(menu).getAllByRole("menuitemradio").map(item => item.textContent)).toEqual(["None", "Pinned second", "Nested pinned work", "Pinned parent"]);
     expect(within(menu).queryByRole("separator")).toBeNull();
     fireEvent.change(search, { target: { value: "older" } });
     expect(within(menu).getAllByRole("menuitemradio").map(item => item.textContent)).toEqual(["None", "Older parent"]);
+    expect(within(menu).queryByRole("separator")).toBeNull();
+    fireEvent.change(search, { target: { value: "settled" } });
+    expect(within(menu).getAllByRole("menuitemradio").map(item => item.textContent)).toEqual(["None", "Settled parent"]);
     expect(within(menu).queryByRole("separator")).toBeNull();
   });
 
