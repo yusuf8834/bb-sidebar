@@ -60,6 +60,9 @@ export function ThreadDetailsTooltip({
 
   const provider = providers.find((entry) => entry.id === thread.providerId);
   const project = projects.find((entry) => entry.id === thread.projectId);
+  const isWorktree =
+    thread.environment?.workspaceDisplayKind === "managed-worktree" ||
+    thread.environment?.workspaceDisplayKind === "unmanaged-worktree";
   const status = thread.hasPendingInteraction ? "Needs you" : thread.indicatorLabel ?? "Idle";
   const subthreads = visible ? threads
     .filter((child) => !child.isArchived && child.parentThreadId === thread.id && child.id !== thread.id)
@@ -80,11 +83,12 @@ export function ThreadDetailsTooltip({
           </div>
         ) : null}
         {thread.host ? <DetailRow icon="Computer" label="Machine" value={thread.host.name} /> : null}
-        {thread.environment?.name ? (
-          <DetailRow icon="Terminal" label="Environment" value={thread.environment.name} />
-        ) : null}
         {thread.environment?.branchName ? (
-          <DetailRow icon="GitBranch" label="Branch" value={thread.environment.branchName} />
+          <DetailRow
+            icon={isWorktree ? "FolderGit" : "GitBranch"}
+            label={isWorktree ? "Worktree branch" : "Branch"}
+            value={thread.environment.branchName}
+          />
         ) : null}
         <div className="flex items-start gap-2">
           <span className="relative mt-px flex size-3.5 shrink-0 items-center justify-center">
@@ -171,7 +175,7 @@ function DetailRow({ icon, label, value }: { icon: IconName; label: string; valu
   return (
     <div className="flex items-center gap-2">
       <Icon name={icon} className="size-3.5 shrink-0" aria-hidden />
-      <span className="truncate"><span className="sr-only">{label}: </span>{value}</span>
+      <span className="truncate" title={value}><span className="sr-only">{label}: </span>{value}</span>
     </div>
   );
 }

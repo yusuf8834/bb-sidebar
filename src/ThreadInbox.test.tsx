@@ -4424,6 +4424,32 @@ describe("card metadata", () => {
     expect(screen.queryByLabelText("Worktree branch")).toBeNull();
   });
 
+  it.each([
+    ["managed-worktree", "FolderGit", "Worktree branch"],
+    ["unmanaged-worktree", "FolderGit", "Worktree branch"],
+    ["other", "GitBranch", "Branch"],
+  ] as const)("shows one branch line with matching icons for %s", async (workspaceDisplayKind, icon, branchLabel) => {
+    render([
+      thread({
+        title: "Unnamed worktree thread",
+        environment: {
+          id: "env_worktree",
+          name: null,
+          branchName: "bb/feature",
+          workspaceDisplayKind,
+        },
+      }),
+    ]);
+
+    expect(screen.getByLabelText(branchLabel).getAttribute("data-icon")).toBe(icon);
+    act(() => screen.getByRole("link", { name: "Unnamed worktree thread" }).focus());
+    const details = await screen.findByRole("dialog", { name: "Thread details" });
+    const label = within(details).getByText(`${branchLabel}:`);
+    expect(label.className).toContain("sr-only");
+    expect(label.parentElement?.previousElementSibling?.getAttribute("data-icon")).toBe(icon);
+    expect(within(details).getAllByText("bb/feature")).toHaveLength(1);
+  });
+
   it("reduces read idle emphasis without weakening unread rows", async () => {
     render([
       thread({ id: "read", title: "Read row", createdAt: 20 }),
@@ -4474,8 +4500,8 @@ describe("card metadata", () => {
     fireEvent.pointerMove(await screen.findByRole("link", { name: "Thread metadata" }), { pointerType: "mouse" });
     const details = await screen.findByRole("dialog", { name: "Thread details" });
     expect(details.textContent).toContain("Project: bb");
-    expect(details.textContent).toContain("Environment: Feature worktree");
-    expect(details.textContent).toContain("Branch: bb/details");
+    expect(details.textContent).not.toContain("Feature worktree");
+    expect(details.textContent).toContain("Worktree branch: bb/details");
     expect(details.textContent).toContain("Machine: Build Mac");
     expect(details.textContent).toContain("Provider: Claude Code");
     expect(details.textContent).toContain("Model:");
