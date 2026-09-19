@@ -134,13 +134,18 @@ const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 const WEEK_MS = 7 * DAY_MS;
 
-export const DEFAULT_SNOOZE_PRESET_CONFIG = "30m, 2h, 1d, 1w";
+export const DEFAULT_SNOOZE_PRESET_CONFIG =
+  "1h, Wait refresh (5 hours)=5h, evening@18:00, tomorrow@09:00, next-week@09:00";
 
-export interface ConfiguredSnoozePreset {
+type CalendarSnoozeDay = "evening" | "tomorrow" | "next-week";
+
+export type ConfiguredSnoozePreset = {
   id: string;
   label: string;
-  durationMs: number;
-}
+} & (
+  | { durationMs: number }
+  | { calendar: CalendarSnoozeDay; hour: number; minute: number }
+);
 
 export function configuredSnoozePresetError(configured: string): string | null {
   const entries = configured
@@ -150,7 +155,7 @@ export function configuredSnoozePresetError(configured: string): string | null {
   if (entries.length === 0) return "Enter at least one snooze shortcut.";
   if (entries.length > 8) return "Use no more than eight snooze shortcuts.";
   if (parseSnoozePresetEntries(configured).length !== entries.length) {
-    return "Use comma-separated durations such as 30m, 2h, or Lunch=3h.";
+    return "Use comma-separated durations or calendar times, such as 1h, Wait refresh=5h, evening@18:00, tomorrow@09:00, or next-week@09:00.";
   }
   return null;
 }
@@ -170,7 +175,7 @@ const DURATION_UNIT_LABEL = {
 } as const;
 
 /**
- * Parse a setting such as `15m, 2h, Lunch break=3h, 1d`.
+ * Parse durations and local calendar times, with optional custom labels.
  *
  * At most eight presets are shown. Durations range from one minute to one
  * year. A wholly invalid setting falls back to the defaults, so a typo cannot
@@ -182,13 +187,36 @@ function parseSnoozePresetEntries(source: string): ConfiguredSnoozePreset[] {
     .map((part) => part.trim())
     .filter(Boolean)
     .slice(0, 8)
-    .flatMap((part, index) => {
+    .flatMap<ConfiguredSnoozePreset>((part, index) => {
       const separator = part.indexOf("=");
       const customLabel = separator >= 0 ? part.slice(0, separator).trim() : "";
-      const durationText = (separator >= 0 ? part.slice(separator + 1) : part)
+      const value = (separator >= 0 ? part.slice(separator + 1) : part)
         .trim()
         .toLowerCase();
-      const match = /^(\d+(?:\.\d+)?)\s*([mhdw])$/.exec(durationText);
+      const calendar =
+        /^(evening|tomorrow|next-week)(?:@(\d{1,2}):(\d{2}))?$/.exec(value);
+      if (calendar) {
+        const day = calendar[1] as CalendarSnoozeDay;
+        const defaultHour = day === "evening" ? 18 : 9;
+        const hour = Number(calendar[2] ?? defaultHour);
+        const minute = Number(calendar[3] ?? 0);
+        if (hour > 23 || minute > 59) return [];
+        const labels: Record<CalendarSnoozeDay, string> = {
+          evening: "This evening",
+          tomorrow: "Tomorrow morning",
+          "next-week": "Next week",
+        };
+        return [
+          {
+            id: `preset-${index}`,
+            label: customLabel.slice(0, 40) || labels[day],
+            calendar: day,
+            hour,
+            minute,
+          },
+        ];
+      }
+      const match = /^(\d+(?:\.\d+)?)\s*([mhdw])$/.exec(value);
       if (!match) return [];
 
       const amount = Number(match[1]);
@@ -252,58 +280,25 @@ export function formatSnoozeWakeTime(
   }).format(new Date(snoozedUntil));
 }
 
-export type SnoozePresetId = "hour" | "evening" | "tomorrow" | "next-week";
-
-export interface SnoozePreset {
-  id: SnoozePresetId;
-  label: string;
-  snoozedUntil: number;
-}
-
-const EVENING_HOUR = 18;
-const MORNING_HOUR = 9;
-
 /**
- * Calendar-day arithmetic, not fixed millisecond offsets: adding 24 hours
- * lands on the wrong local day across a daylight-saving change, because a
- * spring-forward day is 23 hours long.
+ * Resolve at selection time so a menu opened before midnight never uses a
+ * stale date. Calendar times follow the selecting device's local timezone.
+ * An evening that has passed is unavailable, rather than silently tomorrow.
  */
-function atHour(base: Date, hour: number, addDays = 0): Date {
-  const next = new Date(base);
-  next.setDate(next.getDate() + addDays);
-  next.setHours(hour, 0, 0, 0);
-  return next;
-}
+export function resolveConfiguredSnoozePreset(
+  preset: ConfiguredSnoozePreset,
+  now = new Date(),
+): number | null {
+  if ("durationMs" in preset) return now.getTime() + preset.durationMs;
 
-/** "This evening" only appears while it is meaningfully before evening. */
-export function resolveSnoozePresets(now: Date): SnoozePreset[] {
-  const presets: SnoozePreset[] = [
-    { id: "hour", label: "In 1 hour", snoozedUntil: now.getTime() + HOUR_MS },
-  ];
-
-  const evening = atHour(now, EVENING_HOUR);
-  if (evening.getTime() - now.getTime() > HOUR_MS) {
-    presets.push({
-      id: "evening",
-      label: "This evening",
-      snoozedUntil: evening.getTime(),
-    });
-  }
-
-  presets.push({
-    id: "tomorrow",
-    label: "Tomorrow",
-    snoozedUntil: atHour(now, MORNING_HOUR, 1).getTime(),
-  });
-
-  const daysUntilMonday = (1 - now.getDay() + 7) % 7 || 7;
-  presets.push({
-    id: "next-week",
-    label: "Next week",
-    snoozedUntil: atHour(now, MORNING_HOUR, daysUntilMonday).getTime(),
-  });
-
-  return presets;
+  const addDays = preset.calendar === "next-week"
+    ? (1 - now.getDay() + 7) % 7 || 7
+    : preset.calendar === "tomorrow" ? 1 : 0;
+  const wake = new Date(now);
+  // Use calendar-day arithmetic to preserve the local hour across DST.
+  wake.setDate(wake.getDate() + addDays);
+  wake.setHours(preset.hour, preset.minute, 0, 0);
+  return wake.getTime() > now.getTime() ? wake.getTime() : null;
 }
 
 /**

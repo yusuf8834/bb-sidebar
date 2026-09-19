@@ -10,7 +10,7 @@ import {
 } from "@testing-library/react";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
-import { formatSnoozeWakeTime } from "./lifecycle";
+import { DEFAULT_SNOOZE_PRESET_CONFIG, formatSnoozeWakeTime } from "./lifecycle";
 import type { SidebarProvider } from "./ProviderGlyph";
 
 const toastMocks = vi.hoisted(() => ({
@@ -429,7 +429,7 @@ describe("sidebar settings", () => {
     ).toBe("true");
 
     fireEvent.change(screen.getByLabelText("Snooze shortcuts"), {
-      target: { value: "15m, Lunch=3h" },
+      target: { value: "1h, Wait refresh=5h, Tonight=evening@20:00, Morning=tomorrow@08:30, Monday=next-week@10:00" },
     });
     fireEvent.click(
       screen.getByRole("switch", { name: "Show running children" }),
@@ -438,7 +438,7 @@ describe("sidebar settings", () => {
     await waitFor(() =>
       expect(saved).toEqual({
         ...defaultSidebarSettings,
-        snoozePresets: "15m, Lunch=3h",
+        snoozePresets: "1h, Wait refresh=5h, Tonight=evening@20:00, Morning=tomorrow@08:30, Monday=next-week@10:00",
         showRunningChildrenWhenCollapsed: false,
       }),
     );
@@ -458,7 +458,7 @@ describe("sidebar settings", () => {
     expect(snoozeInput.getAttribute("aria-invalid")).toBe("true");
     expect(
       screen.getByText(
-        "Use comma-separated durations such as 30m, 2h, or Lunch=3h.",
+        "Use comma-separated durations or calendar times, such as 1h, Wait refresh=5h, evening@18:00, tomorrow@09:00, or next-week@09:00.",
       ),
     ).toBeDefined();
     expect((saveButton as HTMLButtonElement).disabled).toBe(true);
@@ -467,6 +467,12 @@ describe("sidebar settings", () => {
       target: { value: "15m, Lunch=3h" },
     });
     expect(screen.getByText("Menu: 15 minutes, Lunch")).toBeDefined();
+    expect((saveButton as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.change(snoozeInput, { target: { value: "tomorrow@25:00" } });
+    expect((saveButton as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(snoozeInput, { target: { value: "Morning=tomorrow@08:30" } });
+    expect(screen.getByText("Menu: Morning")).toBeDefined();
     expect((saveButton as HTMLButtonElement).disabled).toBe(false);
 
     const inactiveHours = screen.getByLabelText("Hours before inactive");
@@ -3035,11 +3041,11 @@ describe("parking threads", () => {
     expect(snooze.classList.contains("w-5")).toBe(true);
     fireEvent.keyDown(snooze, { key: "Enter" });
     expect(
-      await screen.findByRole("option", { name: "30 minutes" }),
+      await screen.findByRole("option", { name: "1 hour" }),
     ).toBeDefined();
-    expect(screen.getByRole("option", { name: "2 hours" })).toBeDefined();
-    expect(screen.getByRole("option", { name: "1 day" })).toBeDefined();
-    expect(screen.getByRole("option", { name: "1 week" })).toBeDefined();
+    expect(screen.getByRole("option", { name: "Wait refresh (5 hours)" })).toBeDefined();
+    expect(screen.getByRole("option", { name: "This evening" })).toBeDefined();
+    expect(screen.getByRole("option", { name: "Next week" })).toBeDefined();
     const menu = screen.getByRole("listbox");
     const parkOption = within(menu).getByRole("option", { name: "Park thread" });
     expect(within(menu).getAllByRole("option").at(-1)).toBe(parkOption);
@@ -3075,7 +3081,7 @@ describe("parking threads", () => {
     ).toBe(true);
 
     fireEvent.keyDown(snooze, { key: "Enter" });
-    await screen.findByRole("option", { name: "30 minutes" });
+    await screen.findByRole("option", { name: "1 hour" });
 
     expect(controls!.classList.contains("opacity-100")).toBe(true);
     expect(controls!.classList.contains("pointer-events-auto")).toBe(true);
@@ -3832,7 +3838,7 @@ describe("row context menu", () => {
       name: "Snooze thread",
     });
     fireEvent.keyDown(snooze, { key: "Enter" });
-    fireEvent.click(await screen.findByRole("option", { name: "30 minutes" }));
+    fireEvent.click(await screen.findByRole("option", { name: "1 hour" }));
     await waitFor(() =>
       expect(toastMocks.success).toHaveBeenCalledWith(
         "Thread snoozed",
@@ -3869,10 +3875,10 @@ describe("row context menu", () => {
     });
     fireEvent.keyDown(snooze, { key: "Enter" });
     fireEvent.click(
-      await screen.findByRole("option", { name: "30 minutes" }),
+      await screen.findByRole("option", { name: "1 hour" }),
     );
     fireEvent.keyDown(snooze, { key: "Enter" });
-    fireEvent.click(await screen.findByRole("option", { name: "2 hours" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Wait refresh (5 hours)" }));
     await waitFor(() =>
       expect(rendered.rpcCalls.filter((call) => call.method === "snooze"))
         .toHaveLength(1),
@@ -4361,6 +4367,52 @@ describe("row context menu", () => {
     expect(within(menu).getByText("Snooze").getAttribute("aria-haspopup")).toBe(
       "menu",
     );
+  });
+
+  it.each(["clock", "context"])("uses the five calendar presets from the %s menu", async (menuType) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 0, 5, 22));
+    try {
+      const snooze = vi.fn(() => ({ ok: true }));
+      renderSlot(inbox, listProps, {
+        sidebarThreads: {
+          status: "ready",
+          threads: [thread({ id: "thr_calendar", title: "Calendar snooze", updatedAt: Date.now() })],
+          projects: [],
+        },
+        rpc: {
+          getSidebarSettings: () => ({ ...defaultSidebarSettings, snoozePresets: DEFAULT_SNOOZE_PRESET_CONFIG }),
+          listLifecycle: () => ({ rows: [] }),
+          snooze,
+        },
+      });
+      let menu: HTMLElement;
+      if (menuType === "clock") {
+        fireEvent.keyDown(await screen.findByRole("combobox", { name: "Snooze thread" }), { key: "Enter" });
+        menu = await screen.findByRole("listbox");
+      } else {
+        fireEvent.contextMenu(await screen.findByText("Calendar snooze"));
+        fireEvent.click(await screen.findByRole("menuitem", { name: "Snooze" }));
+        menu = (await screen.findByRole("menuitem", { name: "1 hour" })).closest<HTMLElement>('[role="menu"]')!;
+      }
+      const role = menuType === "clock" ? "option" : "menuitem";
+      expect(within(menu).getAllByRole(role).slice(0, 5).map(item => item.textContent)).toEqual([
+        "1 hour", "Wait refresh (5 hours)", "This evening", "Tomorrow morning", "Next week",
+      ]);
+      const evening = within(menu).getByRole(role, { name: "This evening" });
+      expect(evening.getAttribute("aria-disabled")).toBe("true");
+      fireEvent.click(evening);
+      expect(snooze).not.toHaveBeenCalled();
+      // An open menu must resolve against the date when the user selects it.
+      vi.setSystemTime(new Date(2026, 0, 6, 0, 1));
+      fireEvent.click(within(menu).getByRole(role, { name: "Tomorrow morning" }));
+      await waitFor(() => expect(snooze).toHaveBeenCalledWith({
+        threadId: "thr_calendar", snoozedUntil: new Date(2026, 0, 7, 9).getTime(),
+      }));
+    } finally {
+      cleanup();
+      vi.useRealTimers();
+    }
   });
 });
 

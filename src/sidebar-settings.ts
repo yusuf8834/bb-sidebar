@@ -11,9 +11,10 @@ export interface SidebarSettingsValues {
 }
 
 import { safeSetItem } from "./lib/safe-storage";
+import { DEFAULT_SNOOZE_PRESET_CONFIG } from "./lifecycle";
 
 export const DEFAULT_SIDEBAR_SETTINGS: SidebarSettingsValues = {
-  snoozePresets: "30m, 2h, 1d, 1w",
+  snoozePresets: DEFAULT_SNOOZE_PRESET_CONFIG,
   inactiveThreadsEnabled: true,
   inactiveAfterHours: 6,
   showRunningChildrenWhenCollapsed: true,

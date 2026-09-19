@@ -287,19 +287,20 @@ export function SidebarSettings() {
         </SettingRow>
         <SettingRow
           title="Snooze shortcuts"
-          description="Comma-separated durations shown in the snooze menu. Add a label with Lunch=3h."
+          description="Separate shortcuts with commas. Use durations like 1h or Wait refresh=5h, and calendar times like evening@18:00, tomorrow@09:00, or next-week@09:00. Rename any choice with Label=value. Times use your local timezone; next week means Monday."
         >
-          <input
+          <textarea
             aria-label="Snooze shortcuts"
             aria-invalid={snoozePresetsError !== null}
             aria-describedby="snooze-shortcuts-feedback"
             value={draft.snoozePresets}
             onChange={(event) => update("snoozePresets", event.target.value)}
-            className="h-9 w-56 rounded-md border border-border bg-background px-2.5 text-sm text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
+            rows={4}
+            className="w-72 max-w-full resize-y rounded-md border border-border bg-background px-2.5 py-2 text-sm text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
           />
           <p
             id="snooze-shortcuts-feedback"
-            className={`mt-1 max-w-56 text-right text-2xs ${
+            className={`mt-1 max-w-72 text-right text-2xs ${
               snoozePresetsError
                 ? "text-destructive"
                 : "text-muted-foreground"

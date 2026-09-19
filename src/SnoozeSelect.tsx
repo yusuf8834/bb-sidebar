@@ -7,7 +7,11 @@ import {
 } from "./components/Select";
 import { Icon } from "./components/Icon";
 import { Tooltip } from "./components/Tooltip";
-import type { ConfiguredSnoozePreset } from "./lifecycle";
+import {
+  formatSnoozeWakeTime,
+  resolveConfiguredSnoozePreset,
+  type ConfiguredSnoozePreset,
+} from "./lifecycle";
 
 export function SnoozeSelect({
   label,
@@ -37,7 +41,10 @@ export function SnoozeSelect({
           return;
         }
         const preset = snoozePresets.find((item) => item.id === presetId);
-        if (preset) onSnooze(Date.now() + preset.durationMs);
+        if (preset) {
+          const wake = resolveConfiguredSnoozePreset(preset);
+          if (wake !== null) onSnooze(wake);
+        }
       }}
     >
       <Tooltip label={label}>
@@ -49,11 +56,20 @@ export function SnoozeSelect({
         </SelectTrigger>
       </Tooltip>
       <SelectContent align="end">
-        {snoozePresets.map((preset) => (
-          <SelectItem key={preset.id} value={preset.id} className="text-xs">
-            {preset.label}
-          </SelectItem>
-        ))}
+        {snoozePresets.map((preset) => {
+          const wake = resolveConfiguredSnoozePreset(preset);
+          return (
+            <SelectItem
+              key={preset.id}
+              value={preset.id}
+              className="text-xs"
+              disabled={wake === null}
+              title={wake === null ? "Today's time has passed" : formatSnoozeWakeTime(wake)}
+            >
+              {preset.label}
+            </SelectItem>
+          );
+        })}
         {onPark ? (
           <>
             {snoozePresets.length > 0 ? <SelectSeparator className="my-1 h-px bg-border" /> : null}

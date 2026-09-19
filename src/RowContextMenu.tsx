@@ -13,7 +13,12 @@ import { Icon, type IconName } from "./components/Icon";
 import { cn } from "./lib/utils";
 import { usePortalScopeProps } from "./lib/portal-scope";
 import { ProjectActions } from "./ProjectContextMenu";
-import { canParkThread, type ConfiguredSnoozePreset } from "./lifecycle";
+import {
+  canParkThread,
+  formatSnoozeWakeTime,
+  resolveConfiguredSnoozePreset,
+  type ConfiguredSnoozePreset,
+} from "./lifecycle";
 import { beginTitleGeneration, finishTitleGeneration, useTitleGenerating } from "./title-generation-state";
 
 /**
@@ -190,6 +195,7 @@ export function RowContextMenu({
 
 function CopySubmenu({ thread }: { thread: PluginSidebarThread }) {
   const { projects } = useSidebarThreads();
+  const portalScope = usePortalScopeProps();
   const branchName = thread.environment?.branchName;
   const copy = (text: string) => {
     if (typeof navigator === "undefined" || !navigator.clipboard) return;
@@ -224,6 +230,7 @@ function CopySubmenu({ thread }: { thread: PluginSidebarThread }) {
       </ContextMenu.SubTrigger>
       <ContextMenu.Portal>
         <ContextMenu.SubContent
+          {...portalScope}
           aria-label="Copy thread data"
           sideOffset={4}
           className="z-50 min-w-40 rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md"
@@ -248,6 +255,7 @@ function SnoozeSubmenu({
   presets: readonly ConfiguredSnoozePreset[];
   onSnooze: (snoozedUntil: number) => void;
 }) {
+  const portalScope = usePortalScopeProps();
   return (
     <ContextMenu.Sub>
       <ContextMenu.SubTrigger
@@ -262,18 +270,27 @@ function SnoozeSubmenu({
       </ContextMenu.SubTrigger>
       <ContextMenu.Portal>
         <ContextMenu.SubContent
+          {...portalScope}
           aria-label="Snooze times"
           sideOffset={4}
           className="z-50 min-w-40 rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md"
         >
-          {presets.map((preset) => (
-            <Item
-              key={preset.id}
-              onSelect={() => onSnooze(Date.now() + preset.durationMs)}
-            >
-              {preset.label}
-            </Item>
-          ))}
+          {presets.map((preset) => {
+            const wake = resolveConfiguredSnoozePreset(preset);
+            return (
+              <Item
+                key={preset.id}
+                disabled={wake === null}
+                title={wake === null ? "Today's time has passed" : formatSnoozeWakeTime(wake)}
+                onSelect={() => {
+                  const selectedWake = resolveConfiguredSnoozePreset(preset);
+                  if (selectedWake !== null) onSnooze(selectedWake);
+                }}
+              >
+                {preset.label}
+              </Item>
+            );
+          })}
         </ContextMenu.SubContent>
       </ContextMenu.Portal>
     </ContextMenu.Sub>
@@ -285,17 +302,20 @@ function Item({
   icon,
   destructive = false,
   disabled = false,
+  title,
   onSelect,
 }: {
   children: ReactNode;
   icon?: IconName;
   destructive?: boolean;
   disabled?: boolean;
+  title?: string;
   onSelect: () => void;
 }) {
   return (
     <ContextMenu.Item
       disabled={disabled}
+      title={title}
       onSelect={onSelect}
       className={cn(
         "flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none",

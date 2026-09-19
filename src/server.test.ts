@@ -158,7 +158,7 @@ describe("lifecycle RPC", () => {
     await expect(
       harness.behavior.callRpc("getSidebarSettings", {}),
     ).resolves.toEqual({
-      snoozePresets: "30m, 2h, 1d, 1w",
+      snoozePresets: "1h, Wait refresh (5 hours)=5h, evening@18:00, tomorrow@09:00, next-week@09:00",
       inactiveThreadsEnabled: true,
       inactiveAfterHours: 6,
       showRunningChildrenWhenCollapsed: true,
@@ -210,7 +210,17 @@ describe("lifecycle RPC", () => {
     ).rejects.toThrow("rpc input validation failed");
     await expect(
       harness.behavior.callRpc("getSidebarSettings", {}),
-    ).resolves.toMatchObject({ snoozePresets: "30m, 2h, 1d, 1w" });
+    ).resolves.toMatchObject({ snoozePresets: "1h, Wait refresh (5 hours)=5h, evening@18:00, tomorrow@09:00, next-week@09:00" });
+  });
+
+  it("saves editable calendar shortcuts and rejects invalid times", async () => {
+    const harness = await loadPlugin();
+    const settings = await harness.behavior.callRpc("getSidebarSettings", {}) as Record<string, unknown>;
+    const snoozePresets = "1h, Wait refresh=5h, Tonight=evening@20:00, Morning=tomorrow@08:30, Monday=next-week@10:00";
+    await expect(harness.behavior.callRpc("updateSidebarSettings", { ...settings, snoozePresets })).resolves.toMatchObject({ snoozePresets });
+    await expect(harness.behavior.callRpc("getSidebarSettings", {})).resolves.toMatchObject({ snoozePresets });
+    await expect(harness.behavior.callRpc("updateSidebarSettings", { ...settings, snoozePresets: "tomorrow@24:00" })).rejects.toThrow("rpc input validation failed");
+    await expect(harness.behavior.callRpc("getSidebarSettings", {})).resolves.toMatchObject({ snoozePresets });
   });
 
   it("migrates values from the previous flat settings form", async () => {
