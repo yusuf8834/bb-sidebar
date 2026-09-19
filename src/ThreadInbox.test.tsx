@@ -3441,6 +3441,31 @@ describe("parking threads", () => {
   });
 });
 
+type ParkingAction = "settle" | "snooze" | "park";
+const parkingActions: readonly ParkingAction[] = ["settle", "snooze", "park"];
+
+async function parkFromCard(row: HTMLElement, action: ParkingAction) {
+  if (action === "settle") {
+    fireEvent.click(within(row).getByRole("button", { name: "Settle thread" }));
+  } else {
+    fireEvent.keyDown(within(row).getByRole("combobox", { name: "Snooze thread" }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("option", {
+      name: action === "park" ? "Park thread" : "1 hour",
+    }));
+  }
+}
+
+async function parkFromMenu(row: HTMLElement, action: ParkingAction) {
+  fireEvent.contextMenu(row);
+  const menu = await screen.findByRole("menu", { name: "Thread actions" });
+  if (action === "snooze") {
+    fireEvent.click(within(menu).getByText("Snooze"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "1 hour" }));
+  } else {
+    fireEvent.click(within(menu).getByText(action === "park" ? "Park thread" : "Settle"));
+  }
+}
+
 describe("row context menu", () => {
   it("offers the plugin's own thread actions on right-click", async () => {
     render([thread({ id: "thr_menu", title: "Right click me" })]);
@@ -3471,268 +3496,291 @@ describe("row context menu", () => {
     expect(within(menu).getAllByRole("separator")).toHaveLength(4);
   });
 
-  it("settles another thread from the context menu without changing the open thread", async () => {
-    let settled: string | null = null;
-    const rendered = renderSlot(inbox, { ...listProps, activeThreadId: "open" }, {
-      sidebarThreads: {
-        status: "ready",
-        threads: [
-          thread({ id: "thr_settle", title: "Settle from menu" }),
-          thread({ id: "open", title: "Stay here" }),
-        ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
-      },
-      rpc: {
-        listLifecycle: () => ({ rows: [] }),
-        settle: (input) => {
-          settled = (input as { threadId: string }).threadId;
-          return { ok: true, reclaim: SETTLED_NOTHING };
-        },
-      },
-    });
-
-    fireEvent.contextMenu(await screen.findByText("Settle from menu"));
-    fireEvent.click(within(await screen.findByRole("menu")).getByText("Settle"));
-    await waitFor(() => expect(settled).toBe("thr_settle"));
-    await waitFor(() => expect(toastMocks.success).toHaveBeenCalled());
-    expect(rendered.sidebarActionCalls).toEqual([]);
-  });
-
-  it("opens the next Active thread when settling its first row", async () => {
-    let navigated = 0;
-    const rendered = renderSlot(
-      inbox,
-      {
-        ...listProps,
-        activeThreadId: "current",
-        onNavigate: () => (navigated += 1),
-      },
-      {
+  describe.each(parkingActions)("%s navigation", (action) => {
+    it("updates another thread from the context menu without changing the open thread", async () => {
+      let settled: string | null = null;
+      const rendered = renderSlot(inbox, { ...listProps, activeThreadId: "open" }, {
         sidebarThreads: {
           status: "ready",
           threads: [
-            thread({ id: "current", title: "Current", createdAt: 20 }),
-            thread({ id: "next", title: "Next", createdAt: 10 }),
+            thread({ id: "thr_settle", title: "Settle from menu" }),
+            thread({ id: "open", title: "Stay here" }),
           ],
           projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
         },
         rpc: {
           listLifecycle: () => ({ rows: [] }),
-          settle: () => ({ ok: true, reclaim: SETTLED_NOTHING }),
+          [action]: (input) => {
+            settled = (input as { threadId: string }).threadId;
+            return { ok: true, reclaim: SETTLED_NOTHING };
+          },
         },
-      },
-    );
+      });
 
-    fireEvent.contextMenu(await screen.findByText("Current"));
-    fireEvent.click(within(await screen.findByRole("menu")).getByText("Settle"));
-    await waitFor(() =>
-      expect(rendered.sidebarActionCalls).toContainEqual({
-        method: "open",
-        threadId: "next",
-      }),
-    );
-    expect(navigated).toBe(1);
-  });
-
-  it.each([
-    ["manual", "manual", false],
-    ["manual", "manual", true],
-    ["created", "created", true],
-    ["activity", "activity", true],
-    ["project", "project", true],
-  ] as const)("settling in %s order opens %s first with Active collapsed: %s", async (mode, expectedId, collapsed) => {
-    localStorage.setItem("bb-sidebar:active-sort:v1", mode);
-    const order = ["manual", "current", "created", "activity", "project"];
-    localStorage.setItem("bb-sidebar:inbox-order-cache:v1", JSON.stringify(order));
-    const rendered = renderSlot(inbox, { ...listProps, activeThreadId: "current" }, {
-      sidebarThreads: {
-        status: "ready",
-        threads: [
-          thread({ id: "current", title: "Current", createdAt: 50, updatedAt: 50 }),
-          thread({ id: "manual", title: "Manual first", createdAt: 20, updatedAt: 20 }),
-          thread({ id: "created", title: "Newest first", createdAt: 100, updatedAt: 100 }),
-          thread({ id: "activity", title: "Recent first", createdAt: 10, updatedAt: 200 }),
-          thread({ id: "project", title: "Alpha first", projectId: "alpha", createdAt: 5 }),
-        ],
-        projects: [
-          { id: "proj_1", name: "Zulu", isPersonal: false },
-          { id: "alpha", name: "Alpha", isPersonal: false },
-        ],
-      },
-      rpc: {
-        listLifecycle: () => ({ rows: [] }),
-        listInboxOrder: () => ({ inboxThreadIds: order }),
-        settle: () => ({ ok: true, reclaim: SETTLED_NOTHING }),
-      },
+      await parkFromMenu(await screen.findByText("Settle from menu"), action);
+      await waitFor(() => expect(settled).toBe("thr_settle"));
+      await waitFor(() => expect(toastMocks.success).toHaveBeenCalled());
+      expect(rendered.sidebarActionCalls).toEqual([]);
     });
 
-    const active = await screen.findByRole("region", { name: "Active" });
-    if (collapsed) {
-      fireEvent.click(within(active).getByRole("button", { expanded: true }));
-    }
-    const current = within(active).getByText("Current").closest("li")!;
-    fireEvent.click(within(current).getByRole("button", { name: "Settle thread" }));
-    await waitFor(() => expect(rendered.sidebarActionCalls).toContainEqual({
-      method: "open", threadId: expectedId,
-    }));
-  });
+    it("opens the next Active thread when leaving its first row", async () => {
+      let navigated = 0;
+      const rendered = renderSlot(
+        inbox,
+        {
+          ...listProps,
+          activeThreadId: "current",
+          onNavigate: () => (navigated += 1),
+        },
+        {
+          sidebarThreads: {
+            status: "ready",
+            threads: [
+              thread({ id: "current", title: "Current", createdAt: 20 }),
+              thread({ id: "next", title: "Next", createdAt: 10 }),
+            ],
+            projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          },
+          rpc: {
+            listLifecycle: () => ({ rows: [] }),
+            [action]: () => ({ ok: true, reclaim: SETTLED_NOTHING }),
+          },
+        },
+      );
 
-  it.each([
-    ["current", "first-pin"],
-    ["first-pin", "second-pin"],
-  ])("settling %s selects %s before Active, using the full pinned order", async (currentId, expectedId) => {
-    localStorage.setItem("bb-sidebar:active-sort:v1", "created");
-    const rendered = renderSlot(inbox, { ...listProps, activeThreadId: currentId }, {
-      sidebarThreads: {
-        status: "ready",
-        threads: [
-          thread({ id: "first-pin", title: "First pin", isPinned: true, createdAt: 10 }),
-          thread({ id: "second-pin", title: "Second pin", isPinned: true, createdAt: 100 }),
-          thread({ id: "current", title: "Current", createdAt: 20 }),
-          thread({ id: "active", title: "First active", createdAt: 200 }),
-        ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
-      },
-      rpc: {
-        listLifecycle: () => ({ rows: [] }),
-        settle: () => ({ ok: true, reclaim: SETTLED_NOTHING }),
-      },
+      await parkFromMenu(await screen.findByText("Current"), action);
+      await waitFor(() =>
+        expect(rendered.sidebarActionCalls).toContainEqual({
+          method: "open",
+          threadId: "next",
+        }),
+      );
+      expect(navigated).toBe(1);
     });
 
-    const pinned = await screen.findByRole("region", { name: "Pinned" });
-    fireEvent.click(within(pinned).getByRole("button", { expanded: true }));
-    const current = screen.getByText(currentId === "current" ? "Current" : "First pin").closest("li")!;
-    fireEvent.click(within(current).getByRole("button", { name: "Settle thread" }));
-    await waitFor(() => expect(rendered.sidebarActionCalls).toContainEqual({
-      method: "open", threadId: expectedId,
-    }));
-  });
-
-  it("selects the first Active thread when settling the last Pinned thread", async () => {
-    const rendered = renderSlot(inbox, { ...listProps, activeThreadId: "pinned" }, {
-      sidebarThreads: {
-        status: "ready",
-        threads: [
-          thread({ id: "pinned", title: "Last pin", isPinned: true }),
-          thread({ id: "first", title: "First active", createdAt: 20 }),
-          thread({ id: "last", title: "Last active", createdAt: 10 }),
-        ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
-      },
-      rpc: {
-        listLifecycle: () => ({ rows: [] }),
-        settle: () => ({ ok: true, reclaim: SETTLED_NOTHING }),
-      },
-    });
-
-    const pinned = await screen.findByRole("region", { name: "Pinned" });
-    fireEvent.click(within(pinned).getByRole("button", { name: "Settle thread" }));
-    await waitFor(() => expect(rendered.sidebarActionCalls).toContainEqual({
-      method: "open", threadId: "first",
-    }));
-  });
-
-  it.each([false, true])("opens a project-scoped composer when Pinned and Active are empty after settling, with the last thread pinned: %s", async (isPinned) => {
-    const now = Date.now();
-    const rendered = renderSlot(
-      inbox,
-      { ...listProps, activeThreadId: "only" },
-      {
+    it.each([
+      ["manual", "manual", false],
+      ["manual", "manual", true],
+      ["created", "created", true],
+      ["activity", "activity", true],
+      ["project", "project", true],
+    ] as const)("leaving a thread in %s order opens %s first with Active collapsed: %s", async (mode, expectedId, collapsed) => {
+      localStorage.setItem("bb-sidebar:active-sort:v1", mode);
+      const order = ["manual", "current", "created", "activity", "project"];
+      localStorage.setItem("bb-sidebar:inbox-order-cache:v1", JSON.stringify(order));
+      const rendered = renderSlot(inbox, { ...listProps, activeThreadId: "current" }, {
         sidebarThreads: {
           status: "ready",
           threads: [
-            thread({ id: "only", title: "Only thread", updatedAt: now, isPinned }),
-            thread({ id: "inactive", title: "Inactive thread" }),
-            thread({ id: "parked", title: "Parked thread" }),
-            thread({ id: "snoozed", title: "Snoozed thread" }),
-            thread({ id: "settled", title: "Settled thread" }),
+            thread({ id: "current", title: "Current", createdAt: 50, updatedAt: 50 }),
+            thread({ id: "manual", title: "Manual first", createdAt: 20, updatedAt: 20 }),
+            thread({ id: "created", title: "Newest first", createdAt: 100, updatedAt: 100 }),
+            thread({ id: "activity", title: "Recent first", createdAt: 10, updatedAt: 200 }),
+            thread({ id: "project", title: "Alpha first", projectId: "alpha", createdAt: 5 }),
+          ],
+          projects: [
+            { id: "proj_1", name: "Zulu", isPersonal: false },
+            { id: "alpha", name: "Alpha", isPersonal: false },
+          ],
+        },
+        rpc: {
+          listLifecycle: () => ({ rows: [] }),
+          listInboxOrder: () => ({ inboxThreadIds: order }),
+          [action]: () => ({ ok: true, reclaim: SETTLED_NOTHING }),
+        },
+      });
+
+      const active = await screen.findByRole("region", { name: "Active" });
+      if (collapsed) {
+        fireEvent.click(within(active).getByRole("button", { expanded: true }));
+      }
+      const current = within(active).getByText("Current").closest("li")!;
+      await parkFromCard(current, action);
+      await waitFor(() => expect(rendered.sidebarActionCalls).toContainEqual({
+        method: "open", threadId: expectedId,
+      }));
+    });
+
+    it.each([
+      ["current", "first-pin"],
+      ["first-pin", "second-pin"],
+    ])("leaving %s selects %s before Active, using the full pinned order", async (currentId, expectedId) => {
+      localStorage.setItem("bb-sidebar:active-sort:v1", "created");
+      const rendered = renderSlot(inbox, { ...listProps, activeThreadId: currentId }, {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "first-pin", title: "First pin", isPinned: true, createdAt: 10 }),
+            thread({ id: "second-pin", title: "Second pin", isPinned: true, createdAt: 100 }),
+            thread({ id: "current", title: "Current", createdAt: 20 }),
+            thread({ id: "active", title: "First active", createdAt: 200 }),
+          ],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+        rpc: {
+          listLifecycle: () => ({ rows: [] }),
+          [action]: () => ({ ok: true, reclaim: SETTLED_NOTHING }),
+        },
+      });
+
+      const pinned = await screen.findByRole("region", { name: "Pinned" });
+      fireEvent.click(within(pinned).getByRole("button", { expanded: true }));
+      const current = screen.getByText(currentId === "current" ? "Current" : "First pin").closest("li")!;
+      await parkFromCard(current, action);
+      await waitFor(() => expect(rendered.sidebarActionCalls).toContainEqual({
+        method: "open", threadId: expectedId,
+      }));
+    });
+
+    it("selects the first Active thread when leaving the last Pinned thread", async () => {
+      const rendered = renderSlot(inbox, { ...listProps, activeThreadId: "pinned" }, {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "pinned", title: "Last pin", isPinned: true }),
+            thread({ id: "first", title: "First active", createdAt: 20 }),
+            thread({ id: "last", title: "Last active", createdAt: 10 }),
+          ],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+        rpc: {
+          listLifecycle: () => ({ rows: [] }),
+          [action]: () => ({ ok: true, reclaim: SETTLED_NOTHING }),
+        },
+      });
+
+      const pinned = await screen.findByRole("region", { name: "Pinned" });
+      await parkFromCard(within(pinned).getByText("Last pin").closest("li")!, action);
+      await waitFor(() => expect(rendered.sidebarActionCalls).toContainEqual({
+        method: "open", threadId: "first",
+      }));
+    });
+
+    it.each([false, true])("opens a project-scoped composer when Pinned and Active are empty after the action, with the last thread pinned: %s", async (isPinned) => {
+      const now = Date.now();
+      const rendered = renderSlot(
+        inbox,
+        { ...listProps, activeThreadId: "only" },
+        {
+          sidebarThreads: {
+            status: "ready",
+            threads: [
+              thread({ id: "only", title: "Only thread", updatedAt: now, isPinned }),
+              thread({ id: "inactive", title: "Inactive thread" }),
+              thread({ id: "parked", title: "Parked thread" }),
+              thread({ id: "snoozed", title: "Snoozed thread" }),
+              thread({ id: "settled", title: "Settled thread" }),
+            ],
+            projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          },
+          settings: { inactiveThreadsEnabled: true, inactiveAfterHours: "6" },
+          rpc: {
+            listLifecycle: () => ({ rows: [
+              { threadId: "parked", parkedAt: now, settledAt: null, snoozedUntil: null, snoozedAt: null },
+              { threadId: "snoozed", settledAt: null, snoozedUntil: now + 60_000, snoozedAt: now },
+              { threadId: "settled", settledAt: now, snoozedUntil: null, snoozedAt: null },
+            ] }),
+            [action]: () => ({ ok: true, reclaim: SETTLED_NOTHING }),
+          },
+        },
+      );
+
+      await screen.findByRole("region", { name: "Settled" });
+      const current = screen.getByText("Only thread").closest("li")!;
+      await parkFromCard(current, action);
+      await waitFor(() =>
+        expect(rendered.sidebarActionCalls).toContainEqual({
+          method: "openNewThread",
+          options: { projectId: "proj_1", focusPrompt: true },
+        }),
+      );
+    });
+
+    it("uses the remaining Active threads when the first one settles elsewhere during the request", async () => {
+      const pendingSettle = deferred<{ ok: true; reclaim: typeof SETTLED_NOTHING }>();
+      let firstSettled = false;
+      const rendered = renderSlot(inbox, { ...listProps, activeThreadId: "current" }, {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "first", title: "First active", createdAt: 30 }),
+            thread({ id: "second", title: "Second active", createdAt: 20 }),
+            thread({ id: "current", title: "Current", createdAt: 10 }),
+          ],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+        rpc: {
+          listLifecycle: () => ({ rows: firstSettled ? [
+            { threadId: "first", settledAt: Date.now(), snoozedUntil: null, snoozedAt: null },
+          ] : [] }),
+          [action]: () => pendingSettle.promise,
+        },
+      });
+      const current = (await screen.findByText("Current")).closest("li")!;
+      await parkFromCard(current, action);
+      await waitFor(() => expect(rendered.rpcCalls.some(call => call.method === action)).toBe(true));
+
+      firstSettled = true;
+      await rendered.emitRealtime("lifecycle", {});
+      await waitFor(() => expect(
+        within(screen.getByRole("region", { name: "Active" })).queryByText("First active"),
+      ).toBeNull());
+      pendingSettle.resolve({ ok: true, reclaim: SETTLED_NOTHING });
+      await waitFor(() => expect(rendered.sidebarActionCalls).toContainEqual({
+        method: "open", threadId: "second",
+      }));
+    });
+
+  });
+
+  describe.each([
+    ["Parked", "settle"],
+    ["Parked", "snooze"],
+    ["Snoozed", "settle"],
+    ["Snoozed", "park"],
+    ["Settled", "snooze"],
+    ["Settled", "park"],
+  ] as const)("%s compact card: %s", (shelf, action) => {
+    it.each(["pinned", "active", "empty"])("follows the same navigation with %s candidates", async (destination) => {
+      const now = Date.now();
+      const rendered = renderSlot(inbox, { ...listProps, activeThreadId: "current" }, {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "current", title: "Current" }),
+            ...(destination === "pinned" ? [
+              thread({ id: "first-pin", title: "First pin", isPinned: true }),
+              thread({ id: "second-pin", title: "Second pin", isPinned: true }),
+            ] : []),
+            ...(destination !== "empty" ? [
+              thread({ id: "first-active", title: "First active", updatedAt: now, createdAt: 200 }),
+              thread({ id: "last-active", title: "Last active", updatedAt: now, createdAt: 100 }),
+            ] : []),
+            thread({ id: "inactive", title: "Inactive" }),
           ],
           projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
         },
         settings: { inactiveThreadsEnabled: true, inactiveAfterHours: "6" },
         rpc: {
-          listLifecycle: () => ({ rows: [
-            { threadId: "parked", parkedAt: now, settledAt: null, snoozedUntil: null, snoozedAt: null },
-            { threadId: "snoozed", settledAt: null, snoozedUntil: now + 60_000, snoozedAt: now },
-            { threadId: "settled", settledAt: now, snoozedUntil: null, snoozedAt: null },
-          ] }),
-          settle: () => ({ ok: true, reclaim: SETTLED_NOTHING }),
+          listLifecycle: () => ({ rows: [{
+            threadId: "current",
+            parkedAt: shelf === "Parked" ? now : null,
+            settledAt: shelf === "Settled" ? now : null,
+            snoozedUntil: shelf === "Snoozed" ? now + 60_000 : null,
+            snoozedAt: shelf === "Snoozed" ? now : null,
+          }] }),
+          [action]: () => ({ ok: true, reclaim: SETTLED_NOTHING }),
         },
-      },
-    );
+      });
 
-    await screen.findByRole("region", { name: "Settled" });
-    const current = screen.getByText("Only thread").closest("li")!;
-    fireEvent.click(within(current).getByRole("button", { name: "Settle thread" }));
-    await waitFor(() =>
-      expect(rendered.sidebarActionCalls).toContainEqual({
-        method: "openNewThread",
-        options: { projectId: "proj_1", focusPrompt: true },
-      }),
-    );
-  });
-
-  it.each([false, true])("settling the open Parked thread navigates correctly with Active threads present: %s", async (hasActive) => {
-    const rendered = renderSlot(inbox, { ...listProps, activeThreadId: "parked" }, {
-      sidebarThreads: {
-        status: "ready",
-        threads: [
-          thread({ id: "parked", title: "Waiting on review" }),
-          ...(hasActive ? [thread({ id: "first", title: "First active" })] : []),
-        ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
-      },
-      rpc: {
-        listLifecycle: () => ({ rows: [
-          { threadId: "parked", parkedAt: Date.now(), settledAt: null, snoozedUntil: null, snoozedAt: null },
-        ] }),
-        settle: () => ({ ok: true, reclaim: SETTLED_NOTHING }),
-      },
+      const region = await screen.findByRole("region", { name: shelf });
+      await parkFromMenu(within(region).getByText("Current"), action);
+      await waitFor(() => expect(rendered.sidebarActionCalls).toEqual([
+        destination === "empty"
+          ? { method: "openNewThread", options: { projectId: "proj_1", focusPrompt: true } }
+          : { method: "open", threadId: destination === "pinned" ? "first-pin" : "first-active" },
+      ]));
     });
-
-    const parked = await screen.findByRole("region", { name: "Parked" });
-    fireEvent.contextMenu(within(parked).getByText("Waiting on review"));
-    fireEvent.click(within(await screen.findByRole("menu")).getByText("Settle"));
-    await waitFor(() => expect(rendered.sidebarActionCalls).toContainEqual(
-      hasActive
-        ? { method: "open", threadId: "first" }
-        : { method: "openNewThread", options: { projectId: "proj_1", focusPrompt: true } },
-    ));
-  });
-
-  it("uses the remaining Active threads when the first one settles elsewhere during the request", async () => {
-    const pendingSettle = deferred<{ ok: true; reclaim: typeof SETTLED_NOTHING }>();
-    let firstSettled = false;
-    const rendered = renderSlot(inbox, { ...listProps, activeThreadId: "current" }, {
-      sidebarThreads: {
-        status: "ready",
-        threads: [
-          thread({ id: "first", title: "First active", createdAt: 30 }),
-          thread({ id: "second", title: "Second active", createdAt: 20 }),
-          thread({ id: "current", title: "Current", createdAt: 10 }),
-        ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
-      },
-      rpc: {
-        listLifecycle: () => ({ rows: firstSettled ? [
-          { threadId: "first", settledAt: Date.now(), snoozedUntil: null, snoozedAt: null },
-        ] : [] }),
-        settle: () => pendingSettle.promise,
-      },
-    });
-    const current = (await screen.findByText("Current")).closest("li")!;
-    fireEvent.click(within(current).getByRole("button", { name: "Settle thread" }));
-    await waitFor(() => expect(rendered.rpcCalls.some(call => call.method === "settle")).toBe(true));
-
-    firstSettled = true;
-    await rendered.emitRealtime("lifecycle", {});
-    await waitFor(() => expect(
-      within(screen.getByRole("region", { name: "Active" })).queryByText("First active"),
-    ).toBeNull());
-    pendingSettle.resolve({ ok: true, reclaim: SETTLED_NOTHING });
-    await waitFor(() => expect(rendered.sidebarActionCalls).toContainEqual({
-      method: "open", threadId: "second",
-    }));
   });
 
   it("reminds the user what settling released and what it left running", async () => {
@@ -3772,7 +3820,7 @@ describe("row context menu", () => {
     );
   });
 
-  it("does not override navigation that happens while parking is in flight", async () => {
+  it.each(parkingActions)("does not override navigation while %s is in flight", async (action) => {
     const pendingSettle =
       deferred<{ ok: true; reclaim: typeof SETTLED_NOTHING }>();
     const props = { ...listProps, activeThreadId: "slow" };
@@ -3787,14 +3835,13 @@ describe("row context menu", () => {
       },
       rpc: {
         listLifecycle: () => ({ rows: [] }),
-        settle: () => pendingSettle.promise,
+        [action]: () => pendingSettle.promise,
       },
     });
 
-    fireEvent.contextMenu(await screen.findByText("Slow settle"));
-    fireEvent.click(within(await screen.findByRole("menu")).getByText("Settle"));
+    await parkFromMenu(await screen.findByText("Slow settle"), action);
     await waitFor(() =>
-      expect(rendered.rpcCalls.filter((call) => call.method === "settle"))
+      expect(rendered.rpcCalls.filter((call) => call.method === action))
         .toHaveLength(1),
     );
     const InboxComponent = inbox.component;
@@ -4029,7 +4076,7 @@ describe("row context menu", () => {
     );
   });
 
-  it("reports mutation failures and leaves the active route alone", async () => {
+  it.each(parkingActions)("reports %s failures and leaves the active route alone", async (action) => {
     const rendered = renderSlot(
       inbox,
       { ...listProps, activeThreadId: "broken" },
@@ -4041,17 +4088,17 @@ describe("row context menu", () => {
         },
         rpc: {
           listLifecycle: () => ({ rows: [] }),
-          settle: () => {
+          [action]: () => {
             throw new Error("database offline");
           },
         },
       },
     );
 
-    fireEvent.click(await screen.findByLabelText("Settle thread"));
+    await parkFromCard((await screen.findByText("Broken settle")).closest("li")!, action);
     await waitFor(() =>
       expect(toastMocks.error).toHaveBeenCalledWith(
-        "Could not settle thread",
+        `Could not ${action} thread`,
         { description: "database offline" },
       ),
     );

@@ -64,7 +64,7 @@ export function SlimRow({
       thread={thread}
       onPark={shelf !== "parked" ? onPark : undefined}
       onResume={shelf === "parked" ? onRestore : undefined}
-      onSettle={shelf === "parked" ? onSettle : undefined}
+      onSettle={shelf !== "settled" ? onSettle : undefined}
       canSnooze={shelf !== "snoozed"}
       snoozePresets={snoozePresets}
       onSnooze={onSnooze}

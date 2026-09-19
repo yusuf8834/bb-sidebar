@@ -44,7 +44,6 @@ import {
   ALL_PROJECTS,
   filterByProject,
   hideChildrenOfVisibleParents,
-  nextThreadAfterParking,
   partitionPinned,
   reconcileProjectScope,
   searchThreadsByTitle,
@@ -654,8 +653,8 @@ export function ThreadInbox({
       ),
     [projectNameById, visibleInbox],
   );
-  // Settle follows Pinned, then Active, including rows hidden by collapse.
-  const settleCandidates = useMemo(
+  // Leaving a thread follows Pinned, then Active, including collapsed rows.
+  const nextThreadCandidates = useMemo(
     () => [
       ...pinned,
       ...(activeSortMode === "project"
@@ -666,8 +665,8 @@ export function ThreadInbox({
     ],
     [activeSortMode, inbox, pinned, projectNameById],
   );
-  const settleCandidatesRef = useRef(settleCandidates);
-  settleCandidatesRef.current = settleCandidates;
+  const nextThreadCandidatesRef = useRef(nextThreadCandidates);
+  nextThreadCandidatesRef.current = nextThreadCandidates;
 
   // A drag installs its listeners once, at pointer-down, but the shelf keeps
   // moving underneath it: the host pushes order changes mid-gesture. The order
@@ -1056,13 +1055,15 @@ export function ThreadInbox({
   const parkActiveThread = async (
     thread: PluginSidebarThread,
     mutation: () => Promise<boolean>,
-    nextThreadFor: () => PluginSidebarThread | null = () =>
-      nextThreadAfterParking([...pinned, ...inbox, ...inactive], thread.id),
   ) => {
     const parked = await mutation();
     if (!parked || activeThreadIdRef.current !== thread.id) return;
 
-    const nextThread = nextThreadFor();
+    // Read the latest list after the request, since another client may
+    // have moved or reordered the first candidate while it was pending.
+    const nextThread = nextThreadCandidatesRef.current.find(
+      (candidate) => candidate.id !== thread.id,
+    );
     if (nextThread) {
       actions.open(nextThread.id);
     } else {
@@ -1074,18 +1075,12 @@ export function ThreadInbox({
     onNavigate();
   };
 
-  const settleThread = (thread: PluginSidebarThread) => {
-    void parkActiveThread(
-      thread,
-      () => lifecycle.settle(thread.id),
-      // Read the latest list after the request, since another client may
-      // have settled or reordered the first candidate while it was pending.
-      () =>
-        settleCandidatesRef.current.find(
-          (candidate) => candidate.id !== thread.id,
-        ) ?? null,
-    );
-  };
+  const parkThread = (thread: PluginSidebarThread) =>
+    void parkActiveThread(thread, () => lifecycle.park(thread.id));
+  const settleThread = (thread: PluginSidebarThread) =>
+    void parkActiveThread(thread, () => lifecycle.settle(thread.id));
+  const snoozeThread = (thread: PluginSidebarThread, until: number) =>
+    void parkActiveThread(thread, () => lifecycle.snooze(thread.id, until));
 
   const renderActiveThread = (
     thread: PluginSidebarThread,
@@ -1103,13 +1098,9 @@ export function ThreadInbox({
       canPark={lifecycle.canPark(thread)}
       snoozePresets={snoozePresets}
       onNavigate={onNavigate}
-      onPark={() =>
-        void parkActiveThread(thread, () => lifecycle.park(thread.id))
-      }
+      onPark={() => parkThread(thread)}
       onSettle={() => settleThread(thread)}
-      onSnooze={(until) =>
-        void parkActiveThread(thread, () => lifecycle.snooze(thread.id, until))
-      }
+      onSnooze={(until) => snoozeThread(thread, until)}
       onAcknowledgeWake={() => void lifecycle.acknowledgeWake(thread.id)}
       childThreads={childrenByParentId.get(thread.id) ?? []}
       childrenByParent={childrenByParentId}
@@ -1283,7 +1274,9 @@ export function ThreadInbox({
               ) : null}
               <CompactShelf
                 label="Snoozed"
+                onPark={parkThread}
                 onSettle={settleThread}
+                onSnooze={snoozeThread}
                 icon="Clock"
                 threads={snoozed}
                 projectNameById={projectNameById}
@@ -1304,7 +1297,9 @@ export function ThreadInbox({
               />
               <CompactShelf
                 label="Parked"
+                onPark={parkThread}
                 onSettle={settleThread}
+                onSnooze={snoozeThread}
                 icon="Car"
                 threads={parked}
                 projectNameById={projectNameById}
@@ -1325,7 +1320,9 @@ export function ThreadInbox({
               />
               <CompactShelf
                 label="Settled"
+                onPark={parkThread}
                 onSettle={settleThread}
+                onSnooze={snoozeThread}
                 icon="Meditation"
                 threads={settled}
                 projectNameById={projectNameById}
@@ -1424,7 +1421,9 @@ function CompactShelf({
   projectIconRevision,
   settledLimit,
   onLoadMore,
+  onPark,
   onSettle,
+  onSnooze,
 }: {
   label: string;
   icon: IconName;
@@ -1441,7 +1440,9 @@ function CompactShelf({
   projectIconRevision: number;
   settledLimit?: number;
   onLoadMore?: () => void;
+  onPark: (thread: PluginSidebarThread) => void;
   onSettle: (thread: PluginSidebarThread) => void;
+  onSnooze: (thread: PluginSidebarThread, until: number) => void;
 }) {
   const attachListAutoAnimateRef = useListAutoAnimate<HTMLUListElement>();
   if (threads.length === 0) return null;
@@ -1470,12 +1471,12 @@ function CompactShelf({
             isActive={thread.id === activeThreadId}
             shelf={shelf}
             parkedAt={lifecycle.parkedAtFor(thread)}
-            onPark={() => void lifecycle.park(thread.id)}
+            onPark={() => onPark(thread)}
             onSettle={() => onSettle(thread)}
             wakeAt={lifecycle.wakeAtFor(thread)}
             now={now}
             snoozePresets={snoozePresets}
-            onSnooze={(until) => void lifecycle.snooze(thread.id, until)}
+            onSnooze={(until) => onSnooze(thread, until)}
             onNavigate={onNavigate}
             onRestore={() =>
               shelf === "parked"
