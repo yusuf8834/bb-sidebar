@@ -112,7 +112,7 @@ export function ThreadCard({
         ? "read-idle"
         : "active";
 
-  const showParkActions = !isWoke && canPark && snoozePresets.length > 0;
+  const showParkActions = !isWoke && canPark && (snoozePresets.length > 0 || !!onPark);
   const unpinButton = thread.isPinned ? (
     <Tooltip label="Unpin thread">
       <button
@@ -273,6 +273,7 @@ export function ThreadCard({
                       triggerClassName="h-5 w-5 border-0 px-0.5 py-0 shadow-none hover:bg-transparent focus:ring-0 [&>svg:last-child]:size-3"
                       onOpenChange={setIsSnoozeOpen}
                       onSnooze={onSnooze}
+                      onPark={onPark}
                     />
                     <ParkButton
                       label="Settle thread"

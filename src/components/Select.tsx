@@ -6,6 +6,7 @@ import { usePortalScopeProps } from "../lib/portal-scope";
 
 const Select = SelectPrimitive.Root;
 const SelectValue = SelectPrimitive.Value;
+const SelectSeparator = SelectPrimitive.Separator;
 
 const SelectTrigger = React.forwardRef<
   React.ComponentRef<typeof SelectPrimitive.Trigger>,
@@ -117,4 +118,4 @@ const SelectItem = React.forwardRef<
 ));
 SelectItem.displayName = SelectPrimitive.Item.displayName;
 
-export { Select, SelectContent, SelectItem, SelectTrigger, SelectValue };
+export { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue };

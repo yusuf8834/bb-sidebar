@@ -2,6 +2,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
 } from "./components/Select";
 import { Icon } from "./components/Icon";
@@ -15,6 +16,7 @@ export function SnoozeSelect({
   triggerClassName,
   onOpenChange,
   onSnooze,
+  onPark,
 }: {
   label: string;
   snoozePresets: readonly ConfiguredSnoozePreset[];
@@ -22,12 +24,18 @@ export function SnoozeSelect({
   triggerClassName: string;
   onOpenChange?: (open: boolean) => void;
   onSnooze: (snoozedUntil: number) => void;
+  onPark?: () => void;
 }) {
   return (
     <Select
-      disabled={disabled || snoozePresets.length === 0}
+      value=""
+      disabled={disabled || (snoozePresets.length === 0 && !onPark)}
       onOpenChange={onOpenChange}
       onValueChange={(presetId) => {
+        if (presetId === "park") {
+          onPark?.();
+          return;
+        }
         const preset = snoozePresets.find((item) => item.id === presetId);
         if (preset) onSnooze(Date.now() + preset.durationMs);
       }}
@@ -46,6 +54,12 @@ export function SnoozeSelect({
             {preset.label}
           </SelectItem>
         ))}
+        {onPark ? (
+          <>
+            {snoozePresets.length > 0 ? <SelectSeparator className="my-1 h-px bg-border" /> : null}
+            <SelectItem value="park" className="text-xs">Park thread</SelectItem>
+          </>
+        ) : null}
       </SelectContent>
     </Select>
   );

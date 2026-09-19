@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Improved
+
+- Add Park thread at the bottom of the snooze icon's menu.
+
 ### Fixed
 
 - Pinning a thread clears Settled, Snoozed, and Parked states. Settling, snoozing, or parking a thread removes its pin.

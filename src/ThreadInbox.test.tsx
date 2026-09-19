@@ -3012,8 +3012,17 @@ describe("parking threads", () => {
     expect(screen.queryByLabelText("Settle thread")).toBeNull();
   });
 
-  it("offers settle and snooze on a parkable thread", async () => {
-    render([thread({ id: "thr_park", title: "Quiet" })]);
+  it("offers Park thread below the snooze times and allows parking again after Undo", async () => {
+    const park = vi.fn(() => ({ ok: true, reclaim: SETTLED_NOTHING }));
+    const resume = vi.fn(() => ({ ok: true }));
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ id: "thr_park", title: "Quiet" })],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: { listLifecycle: () => ({ rows: [] }), park, resume },
+    });
     // Rendered (not merely accepted as props): a card whose park controls
     // never mount leaves the whole feature unreachable.
     expect(await screen.findByLabelText("Settle thread")).toBeDefined();
@@ -3031,6 +3040,21 @@ describe("parking threads", () => {
     expect(screen.getByRole("option", { name: "2 hours" })).toBeDefined();
     expect(screen.getByRole("option", { name: "1 day" })).toBeDefined();
     expect(screen.getByRole("option", { name: "1 week" })).toBeDefined();
+    const menu = screen.getByRole("listbox");
+    const parkOption = within(menu).getByRole("option", { name: "Park thread" });
+    expect(within(menu).getAllByRole("option").at(-1)).toBe(parkOption);
+    fireEvent.click(parkOption);
+    await waitFor(() => expect(park).toHaveBeenCalledTimes(1));
+    expect(rendered.rpcCalls).toContainEqual({ method: "park", input: { threadId: "thr_park" } });
+    expect(rendered.rpcCalls.some(call => call.method === "snooze" || call.method === "settle")).toBe(false);
+
+    await waitFor(() => expect(toastMocks.success).toHaveBeenCalled());
+    const undo = toastMocks.success.mock.calls.find(([message]) => message === "Thread parked")![1].action;
+    act(() => undo.onClick());
+    await waitFor(() => expect(resume).toHaveBeenCalledTimes(1));
+    fireEvent.keyDown(snooze, { key: "Enter" });
+    fireEvent.click(await screen.findByRole("option", { name: "Park thread" }));
+    await waitFor(() => expect(park).toHaveBeenCalledTimes(2));
   });
 
   it("keeps hover-only snooze controls visible while the menu is open", async () => {
