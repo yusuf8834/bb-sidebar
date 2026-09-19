@@ -5,6 +5,7 @@
 ### Improved
 
 - Add Park thread at the bottom of the snooze icon's menu.
+- Reuse the section status icons for thread context-menu actions and Park thread in the snooze menu.
 
 ### Fixed
 

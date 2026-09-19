@@ -9,7 +9,7 @@ import {
 import { toast } from "sonner";
 import type { bbSidebarRpcContract } from "./server";
 import { ParentThreadMenu } from "./ParentThreadMenu";
-import { Icon } from "./components/Icon";
+import { Icon, type IconName } from "./components/Icon";
 import { cn } from "./lib/utils";
 import { usePortalScopeProps } from "./lib/portal-scope";
 import { ProjectActions } from "./ProjectContextMenu";
@@ -143,17 +143,17 @@ export function RowContextMenu({
             </ContextMenu.Sub>
           ) : null}
           <Separator />
-          <Item onSelect={() => void togglePin()}>
+          <Item icon={thread.isPinned ? "PinOff" : "Pin"} onSelect={() => void togglePin()}>
             {thread.isPinned ? "Unpin" : "Pin"}
           </Item>
-          {onPark ? <Item onSelect={onPark}>Park thread</Item> : null}
-          {onResume ? <Item onSelect={onResume}>Resume</Item> : null}
-          {onSettle ? <Item onSelect={onSettle}>Settle</Item> : null}
-          {onUnsettle ? <Item onSelect={onUnsettle}>Un-settle</Item> : null}
+          {onPark ? <Item icon="Car" onSelect={onPark}>Park thread</Item> : null}
+          {onResume ? <Item icon="Pulse" onSelect={onResume}>Resume</Item> : null}
+          {onSettle ? <Item icon="Meditation" onSelect={onSettle}>Settle</Item> : null}
+          {onUnsettle ? <Item icon="Pulse" onSelect={onUnsettle}>Un-settle</Item> : null}
           {canSnooze && onSnooze && snoozePresets.length > 0 ? (
             <SnoozeSubmenu presets={snoozePresets} onSnooze={onSnooze} />
           ) : null}
-          {onWake ? <Item onSelect={onWake}>Wake now</Item> : null}
+          {onWake ? <Item icon="Pulse" onSelect={onWake}>Wake now</Item> : null}
           <Separator />
           {onRename ? (
             <Item onSelect={() => { renameAfterClose.current = true; }}>
@@ -252,10 +252,11 @@ function SnoozeSubmenu({
     <ContextMenu.Sub>
       <ContextMenu.SubTrigger
         className={cn(
-          "flex cursor-pointer items-center rounded-md px-2 py-1.5 text-sm outline-none",
+          "flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none",
           "data-[state=open]:bg-accent data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground",
         )}
       >
+        <Icon name="Clock" className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
         Snooze
         <Icon name="ChevronRight" className="ml-auto size-4 opacity-60" />
       </ContextMenu.SubTrigger>
@@ -281,11 +282,13 @@ function SnoozeSubmenu({
 
 function Item({
   children,
+  icon,
   destructive = false,
   disabled = false,
   onSelect,
 }: {
   children: ReactNode;
+  icon?: IconName;
   destructive?: boolean;
   disabled?: boolean;
   onSelect: () => void;
@@ -295,12 +298,13 @@ function Item({
       disabled={disabled}
       onSelect={onSelect}
       className={cn(
-        "cursor-pointer rounded-md px-2 py-1.5 text-sm outline-none",
+        "flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none",
         "data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground",
         "data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50",
         destructive && "text-destructive-text",
       )}
     >
+      {icon ? <Icon name={icon} className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" /> : null}
       {children}
     </ContextMenu.Item>
   );

@@ -57,7 +57,12 @@ export function SnoozeSelect({
         {onPark ? (
           <>
             {snoozePresets.length > 0 ? <SelectSeparator className="my-1 h-px bg-border" /> : null}
-            <SelectItem value="park" className="text-xs">Park thread</SelectItem>
+            <SelectItem value="park" className="text-xs">
+              <span className="flex items-center gap-2">
+                <Icon name="Car" className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                Park thread
+              </span>
+            </SelectItem>
           </>
         ) : null}
       </SelectContent>
