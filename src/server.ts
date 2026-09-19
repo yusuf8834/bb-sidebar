@@ -229,6 +229,7 @@ export const bbSidebarRpcContract = defineRpcContract({
       ),
     }),
   },
+  pin: { input: threadIdSchema, output: z.object({ ok: z.boolean() }) },
   settle: {
     input: threadIdSchema,
     output: z.object({ ok: z.boolean(), reclaim: reclaimSchema }),
@@ -1148,7 +1149,21 @@ export default async function plugin(bb: BbPluginApi) {
     async listLifecycle() {
       return { rows: readAll() };
     },
+    async pin({ threadId }) {
+      // Preserve the previous shelf if the native pin fails.
+      await bb.sdk.threads.pin({ threadId });
+      write({
+        threadId,
+        parkedAt: null,
+        settledAt: null,
+        settledOverride: "active",
+        snoozedUntil: null,
+        snoozedAt: null,
+      });
+      return { ok: true };
+    },
     async park({ threadId }) {
+      await bb.sdk.threads.unpin({ threadId });
       write({
         threadId,
         parkedAt: Date.now(),
@@ -1200,6 +1215,7 @@ export default async function plugin(bb: BbPluginApi) {
       return { ok: true };
     },
     async snooze({ threadId, snoozedUntil }) {
+      await bb.sdk.threads.unpin({ threadId });
       const now = Date.now();
       write({
         threadId,

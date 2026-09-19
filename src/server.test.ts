@@ -109,6 +109,8 @@ async function loadPlugin(
     sdk: {
       threads: {
         list: async () => [],
+        pin: async ({ threadId }) =>
+          makeThreadResponse({ id: threadId, pinnedAt: Date.now() }),
         unpin,
         reorderPinned: async ({ threadId }) => [
           makeThreadResponse({
@@ -280,6 +282,72 @@ describe("lifecycle RPC", () => {
       ],
     });
   });
+
+  it.each(["settle", "snooze", "park"])(
+    "makes pin and %s mutually exclusive in both directions",
+    async (method) => {
+      const harness = await loadPlugin();
+      let pinned = false;
+      harness.inspection.sdk.stub("threads.pin", async ({ threadId }) => {
+        pinned = true;
+        return makeThreadResponse({ id: threadId, pinnedAt: Date.now() });
+      });
+      harness.inspection.sdk.stub("threads.unpin", async ({ threadId }) => {
+        pinned = false;
+        return makeThreadResponse({ id: threadId, pinnedAt: null });
+      });
+
+      await harness.behavior.callRpc("pin", { threadId: "thr_1" });
+      expect(pinned).toBe(true);
+      await harness.behavior.callRpc(method, {
+        threadId: "thr_1",
+        ...(method === "snooze" ? { snoozedUntil: Date.now() + 60_000 } : {}),
+      });
+      expect(pinned).toBe(false);
+      const shelfField = method === "park" ? "parkedAt"
+        : method === "snooze" ? "snoozedUntil" : "settledAt";
+      await expect(harness.behavior.callRpc("listLifecycle", {})).resolves.toMatchObject({
+        rows: [{ [shelfField]: expect.any(Number) }],
+      });
+
+      await expect(harness.behavior.callRpc("pin", { threadId: "thr_1" }))
+        .resolves.toEqual({ ok: true });
+      expect(pinned).toBe(true);
+      await expect(harness.behavior.callRpc("listLifecycle", {})).resolves.toEqual({
+        rows: [{
+          threadId: "thr_1",
+          parkedAt: null,
+          settledAt: null,
+          settledOverride: "active",
+          snoozedUntil: null,
+          snoozedAt: null,
+        }],
+      });
+      expect(harness.inspection.realtimeSignals.at(-1)).toEqual({
+        channel: "lifecycle",
+        payload: { threadId: "thr_1" },
+      });
+    },
+  );
+
+  it.each(["settle", "snooze", "park"])(
+    "preserves %s when native pinning fails",
+    async (method) => {
+      const harness = await loadPlugin();
+      await harness.behavior.callRpc(method, {
+        threadId: "thr_1",
+        ...(method === "snooze" ? { snoozedUntil: Date.now() + 60_000 } : {}),
+      });
+      const before = await harness.behavior.callRpc("listLifecycle", {});
+      harness.inspection.sdk.stub("threads.pin", async () => {
+        throw new Error("pin update failed");
+      });
+
+      await expect(harness.behavior.callRpc("pin", { threadId: "thr_1" }))
+        .rejects.toThrow("pin update failed");
+      await expect(harness.behavior.callRpc("listLifecycle", {})).resolves.toEqual(before);
+    },
+  );
 
   it("releases the agent session and only the terminals nobody used", async () => {
     const { bb, harness } = createFakePluginHost({
@@ -513,7 +581,7 @@ describe("lifecycle RPC", () => {
     ).resolves.toEqual({ inboxThreadIds: ["thr_2"] });
   });
 
-  it("does not settle when native unpinning fails", async () => {
+  it.each(["settle", "snooze", "park"])("does not %s when native unpinning fails", async (method) => {
     const { bb, harness } = createFakePluginHost({
       pluginId: "bb-sidebar",
       sdk: {
@@ -528,11 +596,15 @@ describe("lifecycle RPC", () => {
     disposers.push(() => harness.lifecycle.dispose());
 
     await expect(
-      harness.behavior.callRpc("settle", { threadId: "thr_1" }),
+      harness.behavior.callRpc(method, {
+        threadId: "thr_1",
+        ...(method === "snooze" ? { snoozedUntil: Date.now() + 60_000 } : {}),
+      }),
     ).rejects.toThrow("pin update failed");
     await expect(
       harness.behavior.callRpc("listLifecycle", {}),
     ).resolves.toEqual({ rows: [] });
+    expect(harness.inspection.sdk.callsTo("threads.stop")).toEqual([]);
   });
 });
 

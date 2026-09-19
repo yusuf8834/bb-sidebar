@@ -367,8 +367,8 @@ export function useLifecycle(
     return {
       shelfFor: (thread) => {
         const row = rows.get(thread.id);
-        // Pinning keeps policy-settled rows active. Explicit snooze and
-        // manual settle remain authoritative, then return to pinned on wake.
+        // Keep explicit shelf changes visible while the host's unpin update
+        // propagates. The pin RPC clears these rows when pinning succeeds.
         if (
           thread.isPinned &&
           row?.settledOverride !== "settled" &&

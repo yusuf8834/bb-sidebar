@@ -90,6 +90,19 @@ export function RowContextMenu({
       finishTitleGeneration(thread.id);
     }
   };
+  const togglePin = async () => {
+    try {
+      if (thread.isPinned) {
+        await actions.setPinned(thread.id, false);
+      } else {
+        await rpc.call("pin", { threadId: thread.id });
+      }
+    } catch (error) {
+      toast.error(thread.isPinned ? "Could not unpin thread" : "Could not pin thread", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    }
+  };
 
   return (
     <ProjectActions project={project}>
@@ -130,9 +143,7 @@ export function RowContextMenu({
             </ContextMenu.Sub>
           ) : null}
           <Separator />
-          <Item
-            onSelect={() => void actions.setPinned(thread.id, !thread.isPinned)}
-          >
+          <Item onSelect={() => void togglePin()}>
             {thread.isPinned ? "Unpin" : "Pin"}
           </Item>
           {onPark ? <Item onSelect={onPark}>Park thread</Item> : null}

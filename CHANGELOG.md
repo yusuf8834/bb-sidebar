@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- Pinning a thread clears Settled, Snoozed, and Parked states. Settling, snoozing, or parking a thread removes its pin.
+
 ## [0.2.17] - 2026-09-18
 
 ### Added
