@@ -2,8 +2,11 @@
 
 ## Unreleased
 
+## [0.2.18] - 2026-09-19
+
 ### Improved
 
+- Show one branch-name line in thread hover cards, using the worktree icon for worktrees and the branch icon for plain checkouts, matching the thread card.
 - Add Park thread at the bottom of the snooze icon's menu.
 - Reuse the section status icons for thread context-menu actions and Park thread in the snooze menu.
 
