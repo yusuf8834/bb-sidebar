@@ -4819,6 +4819,57 @@ it("keeps parked threads parked when opened and offers Resume with Undo", async 
 
 
 describe("parent thread menu", () => {
+  it("puts pinned and Active-shelf candidates before the remaining threads, including during search", async () => {
+    const now = Date.now();
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "child", title: "Choose my parent", updatedAt: now }),
+          thread({ id: "settled", title: "Settled parent", updatedAt: now }),
+          thread({ id: "active", title: "Active parent", updatedAt: now }),
+          thread({ id: "inactive", title: "Older parent" }),
+          thread({ id: "pinned", title: "Pinned parent", isPinned: true }),
+          thread({ id: "snoozed", title: "Snoozed parent", updatedAt: now }),
+          thread({ id: "pinned-2", title: "Pinned second", isPinned: true }),
+          thread({ id: "parked", title: "Parked parent", updatedAt: now }),
+          thread({ id: "descendant", title: "Forbidden pinned child", parentThreadId: "child", isPinned: true }),
+          thread({ id: "other", title: "Foreign pinned thread", projectId: "proj_other", isPinned: true }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: {
+        getSidebarSettings: () => ({ ...defaultSidebarSettings, inactiveThreadsEnabled: true, inactiveAfterHours: 6 }),
+        listLifecycle: () => ({ rows: [
+          { threadId: "settled", settledAt: now, snoozedUntil: null, snoozedAt: null },
+          { threadId: "snoozed", settledAt: null, snoozedUntil: now + 3_600_000, snoozedAt: now },
+          { threadId: "parked", settledAt: null, snoozedUntil: null, snoozedAt: null, parkedAt: now },
+        ] }),
+      },
+    });
+    await screen.findByRole("region", { name: "Inactive" });
+    await screen.findByRole("region", { name: "Settled" });
+    fireEvent.contextMenu(await screen.findByText("Choose my parent"));
+    fireEvent.keyDown(screen.getByRole("menuitem", { name: "Parent" }), { key: "ArrowRight" });
+    const search = await screen.findByRole("textbox", { name: "Search parent threads" });
+    const menu = search.closest<HTMLElement>('[role="menu"]')!;
+    expect(within(menu).getAllByRole("menuitemradio").map(item => item.textContent)).toEqual([
+      "None", "Pinned parent", "Pinned second", "Active parent",
+      "Settled parent", "Older parent", "Snoozed parent", "Parked parent",
+    ]);
+    const divider = within(menu).getByRole("separator", { name: "Other threads" });
+    expect(divider.previousElementSibling?.textContent).toBe("Active parent");
+    expect(divider.nextElementSibling?.textContent).toBe("Settled parent");
+    expect(within(menu).getByRole("menuitemradio", { name: "Pinned parent" }).querySelector('[data-icon="Pin"]')).not.toBeNull();
+
+    fireEvent.change(search, { target: { value: "pinned" } });
+    expect(within(menu).getAllByRole("menuitemradio").map(item => item.textContent)).toEqual(["None", "Pinned parent", "Pinned second"]);
+    expect(within(menu).queryByRole("separator")).toBeNull();
+    fireEvent.change(search, { target: { value: "older" } });
+    expect(within(menu).getAllByRole("menuitemradio").map(item => item.textContent)).toEqual(["None", "Older parent"]);
+    expect(within(menu).queryByRole("separator")).toBeNull();
+  });
+
   async function openParentMenu(setThreadParent = vi.fn(() => ({ ok: true }))) {
     renderSlot(inbox, listProps, {
       sidebarThreads: {

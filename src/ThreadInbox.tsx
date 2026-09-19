@@ -38,6 +38,7 @@ import { usePinnedReorder } from "./usePinnedReorder";
 import { useInboxReorder } from "./useInboxReorder";
 import { TRAILING_GLYPH_BOX_CLASS } from "./StatusSlot";
 import { WorkingSinceContext, useWorkingSince } from "./useWorkingSince";
+import { ParentThreadPriorityContext } from "./ParentThreadMenu";
 import { OpenPortsProvider } from "./OpenPorts";
 import {
   ALL_PROJECTS,
@@ -446,6 +447,15 @@ export function ThreadInbox({
     return () => clearInterval(timer);
   }, []);
   const now = nowMinute * 60_000;
+  const parentPriorityIds = useMemo(() => new Set(
+    threads
+      .filter((thread) =>
+        !thread.isArchived &&
+        lifecycle.shelfFor(thread) === "active" &&
+        (thread.isPinned || !isInactiveThread(thread, now, inactiveAfterHours)),
+      )
+      .map((thread) => thread.id),
+  ), [threads, lifecycle, now, inactiveAfterHours]);
   const [expandedShelves, setExpandedShelves] =
     useState<ShelfExpansionState>(readShelfExpansion);
   const [expandedChildParentIds, setExpandedChildParentIds] =
@@ -1123,6 +1133,7 @@ export function ThreadInbox({
 
   return (
     <WorkingSinceContext.Provider value={workingSince}>
+    <ParentThreadPriorityContext.Provider value={parentPriorityIds}>
     <OpenPortsProvider>
       <div className="flex min-h-0 flex-1 flex-col">
         {/* The one control the host has no equivalent for. Everything else in
@@ -1342,6 +1353,7 @@ export function ThreadInbox({
         </div>
       </div>
     </OpenPortsProvider>
+    </ParentThreadPriorityContext.Provider>
     </WorkingSinceContext.Provider>
   );
 }
