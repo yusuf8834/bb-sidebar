@@ -2743,6 +2743,93 @@ describe("ThreadInbox", () => {
     expect(screen.queryByRole("region", { name: "Settled" })).toBeNull();
   });
 
+  it("keeps Woke beside pending, failed, running, and idle states in search", async () => {
+    const acknowledged: string[] = [];
+    let navigated = 0;
+    const now = Math.floor(Date.now() / 60_000) * 60_000;
+    window.localStorage.setItem(
+      "bb-sidebar:working-since:v1",
+      JSON.stringify({ search_runtime: now - 5 * 60_000 }),
+    );
+    const threads = [
+      thread({
+        id: "search_pending",
+        title: "Match pending",
+        indicator: "waiting-for-input",
+        hasPendingInteraction: true,
+      }),
+      thread({
+        id: "search_failed",
+        title: "Match failed",
+        indicator: "unread-error",
+      }),
+      thread({
+        id: "search_runtime",
+        title: "Match runtime",
+        indicator: "runtime",
+      }),
+      thread({
+        id: "search_idle",
+        title: "Match idle",
+        updatedAt: now - 31 * 60_000,
+      }),
+    ];
+
+    const rendered = renderSlot(
+      inbox,
+      {
+        ...listProps,
+        searchQuery: "match",
+        onNavigate: () => (navigated += 1),
+      },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads,
+          projects: [{ id: "proj_1", name: "A very long project name", isPersonal: false }],
+        },
+        rpc: {
+          listLifecycle: () => ({
+            rows: threads.map((candidate) => ({
+              threadId: candidate.id,
+              settledAt: null,
+              snoozedUntil:
+                candidate.id === "search_pending" ? now + 60_000 : now - 1,
+              snoozedAt: now - 60_000,
+            })),
+          }),
+          acknowledgeWake: (input) => {
+            acknowledged.push((input as { threadId: string }).threadId);
+            return { ok: true };
+          },
+        },
+      },
+    );
+
+    const expected = [
+      ["Match pending", "Needs you"],
+      ["Match failed", "Failed"],
+      ["Match runtime", "Working · 5m"],
+      ["Match idle", "31m"],
+    ] as const;
+    await waitFor(() => expect(screen.getAllByRole("option")).toHaveLength(4));
+    for (const [title, status] of expected) {
+      const result = screen.getByRole("option", { name: new RegExp(title) });
+      expect(within(result).getByText("Woke")).toBeDefined();
+      expect(within(result).getByText(status)).toBeDefined();
+      expect(within(result).queryByRole("button")).toBeNull();
+    }
+
+    fireEvent.click(screen.getByRole("option", { name: /Match runtime/ }));
+    await waitFor(() => expect(acknowledged).toEqual(["search_runtime"]));
+    expect(rendered.sidebarActionCalls).toContainEqual({
+      method: "open",
+      threadId: "search_runtime",
+      options: { split: false },
+    });
+    expect(navigated).toBe(1);
+  });
+
   it("keeps project scope active while searching", async () => {
     renderSlot(
       inbox,
@@ -3441,43 +3528,104 @@ describe("parking threads", () => {
     expect(within(shelf).queryByText(/Load .* more/)).toBeNull();
   });
 
-  it("marks timer and attention wakes until the user dismisses or opens them", async () => {
+  it("keeps Woke beside the current card status and preserves its controls", async () => {
     const acknowledged: string[] = [];
-    const now = Date.now();
+    const now = Math.floor(Date.now() / 60_000) * 60_000;
+    window.localStorage.setItem(
+      "bb-sidebar:working-since:v1",
+      JSON.stringify({ runtime: now - 5 * 60_000 }),
+    );
+    const threads = [
+      thread({
+        id: "pending",
+        title: "Pending wake",
+        indicator: "waiting-for-input",
+        hasPendingInteraction: true,
+      }),
+      thread({
+        id: "failed",
+        title: "Failed wake",
+        indicator: "unread-error",
+        isPinned: true,
+      }),
+      thread({ id: "runtime", title: "Runtime wake", indicator: "runtime" }),
+      thread({
+        id: "idle",
+        title: "Idle wake",
+        updatedAt: now - 31 * 60_000,
+      }),
+    ];
+    let lifecycleRows = threads.map((candidate) => ({
+      threadId: candidate.id,
+      settledAt: null,
+      snoozedUntil: candidate.id === "pending" ? now + 60_000 : now - 1,
+      snoozedAt: now - 60_000,
+    }));
     const rendered = renderSlot(inbox, listProps, {
       sidebarThreads: {
         status: "ready",
-        threads: [
-          thread({ id: "timer", title: "Timer wake", latestAttentionAt: 10 }),
-          thread({ id: "attention", title: "Attention wake", latestAttentionAt: now }),
-        ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        threads,
+        projects: [{ id: "proj_1", name: "A very long project name", isPersonal: false }],
       },
       rpc: {
-        listLifecycle: () => ({
-          rows: [
-            { threadId: "timer", settledAt: null, snoozedUntil: now - 1, snoozedAt: 20 },
-            { threadId: "attention", settledAt: null, snoozedUntil: now + 60_000, snoozedAt: now - 1 },
-          ],
-        }),
+        listLifecycle: () => ({ rows: lifecycleRows }),
         acknowledgeWake: (input) => {
-          acknowledged.push((input as { threadId: string }).threadId);
+          const threadId = (input as { threadId: string }).threadId;
+          acknowledged.push(threadId);
+          lifecycleRows = lifecycleRows.filter((row) => row.threadId !== threadId);
           return { ok: true };
         },
       },
     });
 
-    const timerRow = (await screen.findByText("Timer wake")).closest("li")!;
-    const attentionRow = screen.getByText("Attention wake").closest("li")!;
-    expect(within(timerRow).getByText("Woke")).toBeDefined();
-    expect(within(attentionRow).getByText("Woke")).toBeDefined();
+    const expected = [
+      ["Pending wake", "Needs you"],
+      ["Failed wake", "Failed"],
+      ["Runtime wake", "Working · 5m"],
+      ["Idle wake", "31m"],
+    ] as const;
+    for (const [title, status] of expected) {
+      const row = (await screen.findByText(title)).closest("li")!;
+      expect(within(row).getByRole("button", { name: "Dismiss Woke marker" })).toBeDefined();
+      expect(within(row).getByText(status)).toBeDefined();
+    }
 
-    fireEvent.click(within(timerRow).getByRole("button", { name: "Dismiss Woke marker" }));
-    fireEvent.click(within(attentionRow).getByRole("link", { name: "Attention wake" }));
-    await waitFor(() => expect(acknowledged).toEqual(["timer", "attention"]));
+    const pendingRow = screen.getByText("Pending wake").closest("li")!;
+    fireEvent.click(within(pendingRow).getByRole("button", { name: "Dismiss Woke marker" }));
+    await waitFor(() => expect(acknowledged).toEqual(["pending"]));
+    await rendered.emitRealtime("lifecycle", {});
+    await waitFor(() =>
+      expect(
+        within(screen.getByText("Pending wake").closest("li")!).queryByRole(
+          "button",
+          { name: "Dismiss Woke marker" },
+        ),
+      ).toBeNull(),
+    );
+    expect(
+      within(screen.getByText("Pending wake").closest("li")!).getByText(
+        "Needs you",
+      ),
+    ).toBeDefined();
+    expect(rendered.sidebarActionCalls.some((call) => call.method === "open")).toBe(false);
+
+    const failedRow = screen.getByText("Failed wake").closest("li")!;
+    fireEvent.click(within(failedRow).getByRole("button", { name: "Unpin Failed wake" }));
+    await waitFor(() =>
+      expect(rendered.sidebarActionCalls).toContainEqual({
+        method: "setPinned",
+        threadId: "failed",
+        pinned: false,
+      }),
+    );
+    expect(acknowledged).toEqual(["pending"]);
+    expect(within(failedRow).getByText("Failed")).toBeDefined();
+
+    fireEvent.click(within(failedRow).getByRole("link", { name: "Failed wake" }));
+    await waitFor(() => expect(acknowledged).toEqual(["pending", "failed"]));
     expect(rendered.sidebarActionCalls).toContainEqual({
       method: "open",
-      threadId: "attention",
+      threadId: "failed",
       options: { split: false },
     });
   });

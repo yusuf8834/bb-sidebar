@@ -223,7 +223,7 @@ export function ThreadCard({
               <span className="min-w-0 truncate">{projectName ?? " "}</span>
             </span>
             {isWoke ? (
-              <span className={cn(STATUS_SLOT_CLASS, "w-auto min-w-20 gap-0.5")}>
+              <span className={cn(STATUS_SLOT_CLASS, "w-auto gap-1.5")}>
                 {unpinButton}
                 <Tooltip label="Dismiss Woke marker">
                   <button
@@ -239,6 +239,7 @@ export function ThreadCard({
                     Woke
                   </button>
                 </Tooltip>
+                <StatusOrTime thread={thread} now={now} />
               </span>
             ) : (
               <span

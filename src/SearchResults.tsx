@@ -167,17 +167,29 @@ function SearchResultRow({
           onNavigate();
         }}
         className={cn(
-          "flex h-9 items-center gap-2 rounded-md px-2.5 text-sm outline-none transition-colors",
+          "rounded-md px-2.5 text-sm outline-none transition-colors",
+          isWoke
+            ? "grid h-11 grid-cols-[minmax(0,1fr)_auto] grid-rows-2 items-center gap-x-2"
+            : "flex h-9 items-center gap-2",
           isHighlighted || isActive
             ? "bg-sidebar-accent text-foreground"
             : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
           !isActive && layout !== null && "bg-sidebar-accent/30",
         )}
       >
-        <ThreadTitle threadId={thread.id} title={title} className="min-w-0 flex-1 truncate" />
-        <OpenPortsIndicator thread={thread} />
+        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+          <ThreadTitle threadId={thread.id} title={title} className="min-w-0 flex-1 truncate" />
+          <OpenPortsIndicator thread={thread} />
+        </span>
         {projectName ? (
-          <span className="flex max-w-28 shrink-0 items-center gap-1.5 text-2xs text-muted-foreground/70">
+          <span
+            className={cn(
+              "flex min-w-0 items-center gap-1.5 text-2xs text-muted-foreground/70",
+              isWoke
+                ? "col-start-1 row-start-2 max-w-full"
+                : "max-w-28 shrink-0",
+            )}
+          >
             <ProjectFavicon src={projectIconUrl} className="size-3" />
             <span className="min-w-0 truncate">{projectName}</span>
           </span>
@@ -185,11 +197,15 @@ function SearchResultRow({
         <span
           className={cn(
             STATUS_SLOT_CLASS,
-            isWoke &&
-              "justify-end text-2xs font-medium text-amber-700 dark:text-amber-300",
+            isWoke && "col-start-2 row-span-2 row-start-1 w-auto gap-1",
           )}
         >
-          {isWoke ? "Woke" : <StatusOrTime thread={thread} now={now} />}
+          {isWoke ? (
+            <span className="shrink-0 text-2xs font-medium text-amber-700 dark:text-amber-300">
+              Woke
+            </span>
+          ) : null}
+          <StatusOrTime thread={thread} now={now} />
         </span>
       </a>
     </li>
