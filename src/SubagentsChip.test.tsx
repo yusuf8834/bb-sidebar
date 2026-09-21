@@ -166,6 +166,73 @@ describe("SubagentsChip", () => {
     });
   });
 
+  // The header variant draws a glyph rather than the sidebar's text slot, so
+  // the accessible name is the only place its status is spelled out. It uses
+  // the same vocabulary as a parent card, including a raised hand outranking
+  // a reported runtime and an unknown kind saying nothing at all.
+  it("labels header child rows with the shared status vocabulary", () => {
+    renderSlot(
+      childrenChip,
+      { threadId: "parent", projectId: "proj_1", isCompactViewport: false },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "parent", title: "Parent" }),
+            thread({
+              id: "monitor",
+              title: "Monitor child",
+              parentThreadId: "parent",
+              indicator: "runtime",
+              indicatorLabel: "Thread monitoring",
+              createdAt: 101,
+            }),
+            thread({
+              id: "asking",
+              title: "Asking child",
+              parentThreadId: "parent",
+              hasPendingInteraction: true,
+              indicator: "runtime",
+              indicatorLabel: "Agent is working",
+              createdAt: 102,
+            }),
+            thread({
+              id: "future",
+              title: "Future child",
+              parentThreadId: "parent",
+              indicator: "something-bb-ships-later" as never,
+              indicatorLabel: "Brand new",
+              createdAt: 103,
+            }),
+            thread({
+              id: "idle",
+              title: "Idle child",
+              parentThreadId: "parent",
+              createdAt: 104,
+            }),
+          ],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+      },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "4 child threads" }));
+    const list = screen.getByRole("list", { name: "Child threads" });
+    expect(list.getAttribute("data-child-thread-list")).toBe("header");
+    for (const name of [
+      "Open child thread: Monitor child, Monitoring",
+      "Open child thread: Asking child, Needs you",
+      "Open child thread: Future child",
+      "Open child thread: Idle child",
+    ]) {
+      expect(within(list).getByRole("button", { name })).toBeDefined();
+    }
+    // No text status slot in this variant, and no leftover raw host labels.
+    expect(within(list).queryByText("Monitoring")).toBeNull();
+    expect(within(list).queryByText("Needs you")).toBeNull();
+    expect(within(list).queryByText("Brand new")).toBeNull();
+  });
+
   it("keeps grandchildren collapsed until their child disclosure opens", () => {
     const rendered = renderSlot(
       childrenChip,

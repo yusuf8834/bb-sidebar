@@ -295,6 +295,35 @@ function render(
   });
 }
 
+
+/**
+ * The card's trailing slot and the two spans it stacks: the status, and the
+ * park actions that replace it on a hover device. On touch both stay put, so
+ * the tests need each span separately.
+ */
+function statusSlotParts(row: HTMLElement, statusText: string) {
+  const status = within(row).getByText(statusText);
+  const statusWrapper = status.parentElement!;
+  const slot = statusWrapper.parentElement!;
+  return {
+    status,
+    statusWrapper,
+    slot,
+    actions: slot.lastElementChild as HTMLElement,
+  };
+}
+
+/**
+ * Controls nested inside other controls. A `<button>` inside an `<a>` is
+ * invalid interactive nesting and breaks keyboard behaviour, so every row that
+ * mixes a navigation target with its own buttons must report none.
+ */
+function nestedInteractiveControls(root: HTMLElement): string[] {
+  return Array.from(
+    root.querySelectorAll("a a, a button, button a, button button"),
+  ).map((element) => element.outerHTML);
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason?: unknown) => void;
@@ -1225,6 +1254,36 @@ describe("ThreadInbox", () => {
     expect(screen.getByText("Working child")).toBeDefined();
   });
 
+  // The needs-you rollup lost its coverage when the expanded-rows test was
+  // rewritten: a raised hand anywhere in the subtree outranks live work, and
+  // the badge has to say so in its tone, its data attribute and its glyph.
+  it("marks a badge whose most urgent child needs the user", () => {
+    render([
+      thread({ id: "parent", title: "Parent" }),
+      thread({
+        id: "working",
+        title: "Working child",
+        parentThreadId: "parent",
+        indicator: "runtime",
+      }),
+      thread({
+        id: "asking",
+        title: "Asking child",
+        parentThreadId: "parent",
+        hasPendingInteraction: true,
+        indicator: "waiting-for-input",
+      }),
+    ]);
+
+    const badge = screen.getByRole("button", {
+      name: "2 child threads, 1 need you, 1 working",
+    });
+    expect(badge.getAttribute("data-child-status")).toBe("needs-you");
+    expect(badge.className).toContain("bg-amber-100");
+    expect(badge.querySelector('[data-icon="CircleQuestion"]')).not.toBeNull();
+    expect(badge.querySelector('[data-icon="Loading"]')).toBeNull();
+  });
+
   it("can hide running children while their section is collapsed", async () => {
     renderSlot(inbox, listProps, {
       sidebarThreads: {
@@ -1411,6 +1470,136 @@ describe("ThreadInbox", () => {
         ),
       ).toEqual(["parent"]),
     );
+  });
+
+  // bb adds indicator kinds over time. One this build has never seen has to
+  // fall through to the age on a child row exactly as it does on a parent
+  // card, and must not tint the rollup badge either.
+  it("keeps the age on child and grandchild rows with an unrecognized indicator", () => {
+    const minute = Math.floor(Date.now() / 60_000) * 60_000;
+    render([
+      thread({ id: "parent", title: "Parent" }),
+      thread({
+        id: "child",
+        title: "Future child",
+        parentThreadId: "parent",
+        indicator: "something-bb-ships-later" as never,
+        indicatorLabel: "Doing something new",
+        updatedAt: minute - 4 * 60_000,
+      }),
+      thread({
+        id: "grandchild",
+        title: "Future grandchild",
+        parentThreadId: "child",
+        indicator: "another-thing-bb-ships-later" as never,
+        indicatorLabel: "Also new",
+        updatedAt: minute - 7 * 60_000,
+      }),
+    ]);
+
+    const badge = screen.getByRole("button", { name: "1 child thread" });
+    expect(badge.getAttribute("data-child-status")).toBeNull();
+    expect(badge.className).toContain("bg-muted");
+    fireEvent.click(badge);
+
+    const childList = screen.getByRole("list", { name: "Child threads" });
+    expect(within(childList).getByText("4m")).toBeDefined();
+    expect(within(childList).queryByText("Doing something new")).toBeNull();
+    expect(
+      within(childList).getByRole("button", {
+        name: "Open child thread: Future child",
+      }),
+    ).toBeDefined();
+
+    fireEvent.click(
+      within(childList).getByRole("button", {
+        name: "Show 1 grandchild thread for Future child",
+      }),
+    );
+    const grandchildList = screen.getByRole("list", {
+      name: "Grandchildren of Future child",
+    });
+    expect(within(grandchildList).getByText("7m")).toBeDefined();
+    expect(within(grandchildList).queryByText("Also new")).toBeNull();
+    expect(
+      within(grandchildList).getByRole("button", {
+        name: "Open grandchild thread: Future grandchild",
+      }),
+    ).toBeDefined();
+  });
+
+  // Grandchildren are rows like any other: they get the same vocabulary, and
+  // the status sits beside the disclosure button rather than displacing it.
+  it("shows the shared status on grandchild rows and beside a disclosure", () => {
+    const minute = Math.floor(Date.now() / 60_000) * 60_000;
+    window.localStorage.setItem(
+      "bb-sidebar:working-since:v1",
+      JSON.stringify({ child: minute - 5 * 60_000 }),
+    );
+    const rendered = render([
+      thread({ id: "parent", title: "Parent" }),
+      thread({
+        id: "child",
+        title: "Busy child",
+        parentThreadId: "parent",
+        indicator: "runtime",
+      }),
+      thread({
+        id: "failed-grandchild",
+        title: "Failed grandchild",
+        parentThreadId: "child",
+        indicator: "unread-error",
+        indicatorLabel: "Unread thread failed",
+      }),
+      thread({
+        id: "asking-grandchild",
+        title: "Asking grandchild",
+        parentThreadId: "child",
+        hasPendingInteraction: true,
+        indicator: "runtime",
+        indicatorLabel: "Agent is working",
+      }),
+    ]);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "1 child thread, 1 failed, 1 need you, 1 working",
+      }),
+    );
+    const childList = screen.getByRole("list", { name: "Child threads" });
+    const childRow = within(childList)
+      .getByRole("button", { name: "Open child thread: Busy child, Working · 5m" })
+      .closest("[data-child-thread-row]") as HTMLElement;
+    const disclosure = within(childRow).getByRole("button", {
+      name: "Show 2 grandchild threads for Busy child",
+    });
+    expect(within(childRow).getByText("Working · 5m")).toBeDefined();
+    fireEvent.click(disclosure);
+
+    const grandchildList = screen.getByRole("list", {
+      name: "Grandchildren of Busy child",
+    });
+    expect(within(grandchildList).getByText("Failed")).toBeDefined();
+    expect(within(grandchildList).getByText("Needs you")).toBeDefined();
+    // A raised hand outranks the runtime bb still reports for that thread.
+    expect(within(grandchildList).queryByText(/^Working/)).toBeNull();
+    for (const name of [
+      "Open grandchild thread: Failed grandchild, Failed",
+      "Open grandchild thread: Asking grandchild, Needs you",
+    ]) {
+      expect(within(grandchildList).getByRole("button", { name })).toBeDefined();
+    }
+
+    fireEvent.click(
+      within(grandchildList).getByRole("button", {
+        name: "Open grandchild thread: Failed grandchild, Failed",
+      }),
+    );
+    expect(rendered.sidebarActionCalls).toContainEqual({
+      method: "open",
+      threadId: "failed-grandchild",
+      options: { split: false },
+    });
   });
 
   it("retains the newest child expansions after saving and remounting", async () => {
@@ -2883,6 +3072,171 @@ describe("ThreadInbox", () => {
     expect(navigated).toBe(1);
   });
 
+  // The woke row is a two-row grid instead of a flex line, so the roving
+  // listbox has to keep working across a mix of the two shapes.
+  it("moves through woke and plain search results with the keyboard", async () => {
+    const acknowledged: string[] = [];
+    let navigated = 0;
+    const now = Math.floor(Date.now() / 60_000) * 60_000;
+    const rendered = renderSlot(
+      inbox,
+      {
+        ...listProps,
+        searchQuery: "match",
+        onNavigate: () => (navigated += 1),
+      },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({
+              id: "woke_match",
+              title: "Woke match",
+              indicator: "unread-error",
+              indicatorLabel: "Unread thread failed",
+              updatedAt: now,
+            }),
+            thread({
+              id: "plain_match",
+              title: "Plain match",
+              updatedAt: now - 31 * 60_000,
+            }),
+          ],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+        rpc: {
+          listLifecycle: () => ({
+            rows: [
+              {
+                threadId: "woke_match",
+                settledAt: null,
+                snoozedUntil: now - 1,
+                snoozedAt: now - 60_000,
+              },
+            ],
+          }),
+          acknowledgeWake: (input) => {
+            acknowledged.push((input as { threadId: string }).threadId);
+            return { ok: true };
+          },
+        },
+      },
+    );
+
+    await waitFor(() => expect(screen.getAllByRole("option")).toHaveLength(2));
+    const options = screen.getAllByRole("option");
+    const woke = options.find(
+      (option) => within(option).queryByText("Woke") !== null,
+    )!;
+    const plain = options.find((option) => option !== woke)!;
+    // Woke, the real status, and the project all keep their place on the row.
+    expect(within(woke).getByText("Failed")).toBeDefined();
+    expect(within(woke).getByText("bb")).toBeDefined();
+    expect(within(plain).getByText("31m")).toBeDefined();
+    expect(within(plain).queryByText("Woke")).toBeNull();
+    // Woke is text in search, not a control: an option must not nest one.
+    expect(within(woke).queryByRole("button")).toBeNull();
+    expect(nestedInteractiveControls(woke)).toEqual([]);
+
+    const next = options[(options.indexOf(woke) + 1) % options.length]!;
+    woke.focus();
+    fireEvent.keyDown(woke, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(next);
+    fireEvent.keyDown(next, { key: "ArrowUp" });
+    expect(document.activeElement).toBe(woke);
+    expect(woke.tabIndex).toBe(0);
+    expect(plain.tabIndex).toBe(-1);
+
+    fireEvent.keyDown(woke, { key: "Enter" });
+    await waitFor(() => expect(acknowledged).toEqual(["woke_match"]));
+    expect(rendered.sidebarActionCalls).toContainEqual({
+      method: "open",
+      threadId: "woke_match",
+      options: { split: false },
+    });
+    expect(navigated).toBe(1);
+  });
+
+  // The woke grid moves the project name to its own row. Without a project
+  // there is nothing to move, and the accessible name stays the bare title.
+  it("keeps Woke and the status on a search result with no project", async () => {
+    const now = Math.floor(Date.now() / 60_000) * 60_000;
+    renderSlot(
+      inbox,
+      { ...listProps, searchQuery: "match" },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({
+              id: "orphan_match",
+              title: "Orphan match",
+              projectId: "proj_unknown",
+              indicator: "unread-success",
+              indicatorLabel: "Unread thread succeeded",
+              updatedAt: now,
+            }),
+          ],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+        rpc: {
+          listLifecycle: () => ({
+            rows: [
+              {
+                threadId: "orphan_match",
+                settledAt: null,
+                snoozedUntil: now - 1,
+                snoozedAt: now - 60_000,
+              },
+            ],
+          }),
+        },
+      },
+    );
+
+    const result = await screen.findByRole("option", { name: "Orphan match" });
+    expect(within(result).getByText("Woke")).toBeDefined();
+    expect(within(result).getByText("Unread")).toBeDefined();
+  });
+
+  // The slot renders one status, and a raised hand outranks the runtime bb
+  // still reports for the same thread.
+  it("prefers a pending question to a running indicator in search results", async () => {
+    const now = Math.floor(Date.now() / 60_000) * 60_000;
+    window.localStorage.setItem(
+      "bb-sidebar:working-since:v1",
+      JSON.stringify({ asking_match: now - 5 * 60_000 }),
+    );
+    renderSlot(
+      inbox,
+      { ...listProps, searchQuery: "match" },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({
+              id: "asking_match",
+              title: "Asking match",
+              hasPendingInteraction: true,
+              indicator: "runtime",
+              indicatorLabel: "Agent is working",
+              updatedAt: now,
+            }),
+          ],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+        rpc: { listLifecycle: () => ({ rows: [] }) },
+      },
+    );
+
+    const result = await screen.findByRole("option", { name: /Asking match/ });
+    expect(within(result).getByText("Needs you")).toBeDefined();
+    expect(within(result).queryByText(/^Working/)).toBeNull();
+    // The runtime's own label must not outlive the status it was replaced by.
+    expect(within(result).getByLabelText("Needs you")).toBeDefined();
+    expect(within(result).queryByLabelText("Agent is working")).toBeNull();
+  });
+
   it("keeps project scope active while searching", async () => {
     renderSlot(
       inbox,
@@ -3269,6 +3623,159 @@ describe("parking threads", () => {
     );
   });
 
+  // jsdom cannot evaluate `@media (hover: none)`, so the regression this
+  // guards — a touch layout that faded the status out behind the park actions
+  // — only shows in the class contract. The structural half is asserted too:
+  // status and actions are rendered together, and neither is hidden.
+  it("keeps the status beside the touch park actions instead of fading it out", async () => {
+    const minute = Math.floor(Date.now() / 60_000) * 60_000;
+    const parkable = [
+      ["Touch failed", "unread-error", "Failed"],
+      ["Touch unread", "unread-success", "Unread"],
+      // A question bb reports without a pending interaction is still parkable.
+      ["Touch asked", "waiting-for-input", "Needs you"],
+      ["Touch idle", "none", "4m"],
+    ] as const;
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: parkable.map(([title, indicator]) =>
+          thread({
+            id: title,
+            title,
+            indicator,
+            updatedAt: minute - 4 * 60_000,
+          }),
+        ),
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: { listLifecycle: () => ({ rows: [] }) },
+    });
+
+    await screen.findByText("Touch failed");
+    for (const [title, , statusText] of parkable) {
+      const row = screen.getByText(title).closest("li")!;
+      // The actions the touch layout has to sit beside, not on top of.
+      expect(
+        within(row).getByRole("combobox", { name: "Snooze thread" }),
+      ).toBeDefined();
+      expect(
+        within(row).getByRole("button", { name: "Settle thread" }),
+      ).toBeDefined();
+      // The card's anchor is a sibling of the controls, not their ancestor.
+      expect(nestedInteractiveControls(row)).toEqual([]);
+
+      const { status, statusWrapper, slot, actions } = statusSlotParts(
+        row,
+        statusText,
+      );
+      expect(actions).not.toBe(statusWrapper);
+      expect(status.getAttribute("aria-hidden")).toBeNull();
+      expect(status.hasAttribute("hidden")).toBe(false);
+      expect(statusWrapper.getAttribute("aria-hidden")).toBeNull();
+      // Touch: both spans return to the flow at full opacity, and the slot
+      // widens so they sit side by side instead of stacked.
+      for (const className of [
+        "[@media(hover:none)]:static",
+        "[@media(hover:none)]:opacity-100",
+      ]) {
+        expect(statusWrapper.className).toContain(className);
+        expect(actions.className).toContain(className);
+      }
+      expect(slot.className).toContain("[@media(hover:none)]:w-auto");
+      expect(slot.className).toContain("[@media(hover:none)]:gap-1.5");
+      expect(statusWrapper.className).not.toContain(
+        "[@media(hover:none)]:opacity-0",
+      );
+      // A hover device still trades the status for the actions.
+      expect(statusWrapper.className).toContain(
+        "[@media(hover:hover)]:group-hover/card:opacity-0",
+      );
+    }
+  });
+
+  // Opening the snooze menu pins the actions open on a hover device by hiding
+  // the status. On touch the two already share the row, so the status stays.
+  it("keeps the touch status visible while the snooze menu is open", async () => {
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "thr_open", title: "Menu open", indicator: "unread-error" }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: { listLifecycle: () => ({ rows: [] }) },
+    });
+
+    const row = (await screen.findByText("Menu open")).closest("li")!;
+    fireEvent.keyDown(
+      within(row).getByRole("combobox", { name: "Snooze thread" }),
+      { key: "Enter" },
+    );
+    await screen.findByRole("option", { name: "1 hour" });
+
+    const { statusWrapper } = statusSlotParts(row, "Failed");
+    expect(within(row).getByText("Failed")).toBeDefined();
+    expect(statusWrapper.className).toContain("opacity-0");
+    expect(statusWrapper.className).toContain(
+      "[@media(hover:none)]:opacity-100",
+    );
+  });
+
+  // A working or blocked thread cannot be parked, so it has no actions to
+  // share the slot with — but it must still show its status on touch.
+  it("keeps the status on rows that offer no park actions", async () => {
+    const now = Math.floor(Date.now() / 60_000) * 60_000;
+    window.localStorage.setItem(
+      "bb-sidebar:working-since:v1",
+      JSON.stringify({ thr_working: now - 5 * 60_000 }),
+    );
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({
+            id: "thr_working",
+            title: "Still working",
+            indicator: "runtime",
+            indicatorLabel: "Agent is working",
+            updatedAt: now,
+          }),
+          thread({
+            id: "thr_pending",
+            title: "Still asking",
+            hasPendingInteraction: true,
+            indicator: "waiting-for-input",
+            updatedAt: now,
+          }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: { listLifecycle: () => ({ rows: [] }) },
+    });
+
+    await screen.findByText("Still working");
+    for (const [title, statusText] of [
+      ["Still working", "Working · 5m"],
+      ["Still asking", "Needs you"],
+    ] as const) {
+      const row = screen.getByText(title).closest("li")!;
+      expect(
+        within(row).queryByRole("combobox", { name: "Snooze thread" }),
+      ).toBeNull();
+      expect(
+        within(row).queryByRole("button", { name: "Settle thread" }),
+      ).toBeNull();
+      const { status, statusWrapper, slot } = statusSlotParts(row, statusText);
+      expect(status.getAttribute("aria-hidden")).toBeNull();
+      expect(statusWrapper.className).not.toContain("opacity-0");
+      // Intrinsic width with a floor: nothing is layered over the status.
+      expect(slot.className).toContain("w-auto");
+      expect(slot.className).toContain("min-w-20");
+    }
+  });
+
   it("settles a thread when the user clicks Settle", async () => {
     let settled: string | null = null;
     renderSlot(inbox, listProps, {
@@ -3287,6 +3794,99 @@ describe("parking threads", () => {
     });
     fireEvent.click(await screen.findByLabelText("Settle thread"));
     await waitFor(() => expect(settled).toBe("thr_park"));
+  });
+
+  // A raised hand outranks a reported runtime in the slot, and it also
+  // outranks any stored shelf: the row stays on Active with no park controls.
+  it("prefers a pending question to a running indicator on a parent card", async () => {
+    const now = Math.floor(Date.now() / 60_000) * 60_000;
+    window.localStorage.setItem(
+      "bb-sidebar:working-since:v1",
+      JSON.stringify({ thr_ask: now - 5 * 60_000 }),
+    );
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({
+            id: "thr_ask",
+            title: "Asking while working",
+            hasPendingInteraction: true,
+            indicator: "runtime",
+            indicatorLabel: "Agent is working",
+            updatedAt: now,
+          }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      // Settled in the store, but a raised hand brings it straight back.
+      rpc: {
+        listLifecycle: () => ({
+          rows: [
+            {
+              threadId: "thr_ask",
+              settledAt: 200,
+              snoozedUntil: null,
+              snoozedAt: null,
+            },
+          ],
+        }),
+      },
+    });
+
+    const active = screen.getByRole("region", { name: "Active" });
+    const row = (
+      await within(active).findByText("Asking while working")
+    ).closest("li")!;
+    expect(within(row).getByText("Needs you")).toBeDefined();
+    expect(within(row).queryByText(/^Working/)).toBeNull();
+    expect(within(row).getByLabelText("Needs you")).toBeDefined();
+    expect(within(row).queryByLabelText("Agent is working")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Settled" })).toBeNull();
+  });
+
+  // Parked rows share the status vocabulary: a settled thread that failed
+  // says so rather than falling back to its age.
+  it("shows a settled row's status instead of its age", async () => {
+    const now = Date.now();
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({
+            id: "thr_settled",
+            title: "Settled failure",
+            indicator: "unread-error",
+            indicatorLabel: "Unread thread failed",
+            updatedAt: now - (3 * 3_600_000 + 60_000),
+            createdAt: now - (3 * 3_600_000 + 60_000),
+            latestAttentionAt: now - (3 * 3_600_000 + 60_000),
+          }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: {
+        listLifecycle: () => ({
+          rows: [
+            {
+              threadId: "thr_settled",
+              settledAt: now,
+              snoozedUntil: null,
+              snoozedAt: null,
+            },
+          ],
+        }),
+      },
+    });
+
+    const shelf = await screen.findByRole("region", { name: "Settled" });
+    fireEvent.click(within(shelf).getByRole("button"));
+    const row = within(shelf).getByText("Settled failure").closest("li")!;
+    expect(within(row).getByText("Failed").className).toContain("text-red-700");
+    expect(within(row).queryByText("3h")).toBeNull();
+    expect(
+      within(row).getByRole("button", { name: "Un-settle thread" }),
+    ).toBeDefined();
   });
 
   it("keeps the last usable view when lifecycle refresh fails", async () => {
@@ -3682,6 +4282,76 @@ describe("parking threads", () => {
       options: { split: false },
     });
   });
+  // Dismissing the marker is a correction, not navigation: the row stays put
+  // with its real status, and nothing opens.
+  it("dismisses the Woke marker without opening or navigating", async () => {
+    const acknowledged: string[] = [];
+    let navigated = 0;
+    const now = Math.floor(Date.now() / 60_000) * 60_000;
+    let lifecycleRows = [
+      {
+        threadId: "woke",
+        settledAt: null,
+        snoozedUntil: now - 1,
+        snoozedAt: now - 60_000,
+      },
+    ];
+    const rendered = renderSlot(
+      inbox,
+      { ...listProps, onNavigate: () => (navigated += 1) },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({
+              id: "woke",
+              title: "Woke work",
+              indicator: "unread-error",
+              indicatorLabel: "Unread thread failed",
+              updatedAt: now,
+            }),
+          ],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+        rpc: {
+          listLifecycle: () => ({ rows: lifecycleRows }),
+          acknowledgeWake: (input) => {
+            acknowledged.push((input as { threadId: string }).threadId);
+            lifecycleRows = [];
+            return { ok: true };
+          },
+        },
+      },
+    );
+
+    const row = (await screen.findByText("Woke work")).closest("li")!;
+    const dismiss = within(row).getByRole("button", {
+      name: "Dismiss Woke marker",
+    });
+    expect(within(row).getByText("Failed")).toBeDefined();
+    // The card's navigation anchor is a sibling of the controls, never their
+    // ancestor, so no control ends up inside another control.
+    expect(dismiss.closest("a")).toBeNull();
+    expect(nestedInteractiveControls(row)).toEqual([]);
+
+    fireEvent.click(dismiss);
+    await waitFor(() => expect(acknowledged).toEqual(["woke"]));
+    expect(navigated).toBe(0);
+    expect(rendered.sidebarActionCalls).toEqual([]);
+
+    await rendered.emitRealtime("lifecycle", {});
+    const settled = () => screen.getByText("Woke work").closest("li")!;
+    await waitFor(() =>
+      expect(
+        within(settled()).queryByRole("button", {
+          name: "Dismiss Woke marker",
+        }),
+      ).toBeNull(),
+    );
+    expect(within(settled()).getByText("Failed")).toBeDefined();
+    expect(navigated).toBe(0);
+  });
+
 });
 
 type ParkingAction = "settle" | "snooze" | "park";
