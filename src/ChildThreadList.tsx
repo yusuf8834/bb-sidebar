@@ -474,9 +474,18 @@ function ChildThreadRow({
             {variant === "sidebar" ? (
               // Match parent cards: a recognized status owns the trailing
               // slot; an idle or future unknown status leaves it to the age.
-              // Children reserve 112px so Monitoring plus a duration remains
-              // readable beside a separate grandchild disclosure button.
-              <span className={cn(STATUS_SLOT_CLASS, "w-28 pr-2")}>
+              //
+              // Sized to the label rather than fixed at the 112px "Monitoring
+              // · 27m" needs: a child row also pays an indent rail and a
+              // grandchild disclosure, so at a 280px sidebar a fixed slot left
+              // the title about six characters. "Draft" and "31m" now hand
+              // their share back. The floor keeps a child's status column
+              // roughly where its parent card's sits, and the ceiling keeps
+              // the longest status intact; the cost is that the title's
+              // truncation point shifts as a duration gains a digit.
+              <span
+                className={cn(STATUS_SLOT_CLASS, "w-auto min-w-20 max-w-28 pr-2")}
+              >
                 <StatusOrTime thread={thread} now={effectiveNow} />
               </span>
             ) : null}

@@ -1471,6 +1471,16 @@ describe("ThreadInbox", () => {
       }).parentElement?.className,
     ).not.toContain("--bb-sidebar-needs-you-accent");
 
+    // The slot takes the width its label needs, between the parent card's 80px
+    // and the 112px the longest status wants, so a short status hands the rest
+    // back to a child title that a narrow sidebar has little room for.
+    const monitoringSlot = within(childList).getByText("Monitoring · 5m")
+      .parentElement!;
+    expect(monitoringSlot.className).toContain("w-auto");
+    expect(monitoringSlot.className).toContain("min-w-20");
+    expect(monitoringSlot.className).toContain("max-w-28");
+    expect(monitoringSlot.className.split(" ")).not.toContain("w-28");
+
     fireEvent.click(
       within(childList).getByRole("button", {
         name: "Open child thread: Monitoring child, Monitoring · 5m",
@@ -3001,6 +3011,32 @@ describe("ThreadInbox", () => {
     expect(within(results).getByText("Settled match")).toBeDefined();
     expect(screen.queryByRole("region", { name: "Snoozed" })).toBeNull();
     expect(screen.queryByRole("region", { name: "Settled" })).toBeNull();
+  });
+
+  // A plain search row puts the title, the project and the status on one line.
+  // A fixed 112px project column left the title about six characters at a
+  // 280px sidebar, so the project yields first: the title is what was searched
+  // for. The woke row keeps its own two-row grid instead.
+  it("caps the project proportionally on a single-line search row", async () => {
+    renderSlot(
+      inbox,
+      { ...listProps, searchQuery: "match" },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [thread({ id: "plain", title: "Match plain" })],
+          projects: [
+            { id: "proj_1", name: "A very long project name", isPersonal: false },
+          ],
+        },
+      },
+    );
+
+    const result = await screen.findByRole("option", { name: /Match plain/ });
+    const project = within(result).getByText("A very long project name")
+      .parentElement!;
+    expect(project.className).toContain("max-w-[30%]");
+    expect(project.className.split(" ")).not.toContain("max-w-28");
   });
 
   it("keeps Woke beside pending, failed, running, and idle states in search", async () => {

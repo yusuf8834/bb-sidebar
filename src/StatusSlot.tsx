@@ -12,8 +12,8 @@ import { statusWithDuration } from "./working-since";
  *
  * Fixed rather than intrinsic because both ages and live-status labels vary in
  * width. The slot holds "Planning · 12m" without dragging the project column
- * back and forth as a thread changes state. Child trees use the same component
- * with a wider fixed slot because their disclosure button sits beside it.
+ * back and forth as a thread changes state. Child trees override the width:
+ * they carry no project column, so there the label's own width wins.
  */
 export const STATUS_SLOT_CLASS = "flex w-20 shrink-0 items-center justify-end";
 

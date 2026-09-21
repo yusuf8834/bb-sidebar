@@ -187,7 +187,12 @@ function SearchResultRow({
               "flex min-w-0 items-center gap-1.5 text-2xs text-muted-foreground/70",
               isWoke
                 ? "col-start-1 row-start-2 max-w-full"
-                : "max-w-28 shrink-0",
+                : // Proportional rather than a fixed 112px: on one line the
+                  // project shares the row with the title and the status
+                  // slot, and at a 280px sidebar a fixed cap left the title
+                  // about six characters. The title is what the user searched
+                  // for, so the project yields first.
+                  "max-w-[30%] shrink-0",
             )}
           >
             <ProjectFavicon src={projectIconUrl} className="size-3" />
