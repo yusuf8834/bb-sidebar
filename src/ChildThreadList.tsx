@@ -150,13 +150,13 @@ export function ChildThreadDots({
 function childStatusBadgeClass(kind: ChildStatusKind | null): string {
   switch (kind) {
     case "failed":
-      return "bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300";
+      return "bg-[color:var(--bb-sidebar-badge-failed-bg)] text-[color:var(--bb-sidebar-badge-failed-fg)]";
     case "needs-you":
-      return "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300";
+      return "bg-[color:var(--bb-sidebar-badge-needs-you-bg)] text-[color:var(--bb-sidebar-badge-needs-you-fg)]";
     case "done":
-      return "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300";
+      return "bg-[color:var(--bb-sidebar-badge-done-bg)] text-[color:var(--bb-sidebar-badge-done-fg)]";
     case "working":
-      return "bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300";
+      return "bg-[color:var(--bb-sidebar-badge-working-bg)] text-[color:var(--bb-sidebar-badge-working-fg)]";
     default:
       return "bg-muted text-foreground";
   }
@@ -405,7 +405,14 @@ function ChildThreadRow({
           variant === "sidebar" &&
             needsYou &&
             !isActive &&
-            "bg-amber-50 hover:bg-amber-50 dark:bg-amber-950/30 dark:hover:bg-amber-950/40",
+            cn(
+              "bg-[color:var(--bb-sidebar-needs-you-tint)]",
+              "hover:bg-[color:var(--bb-sidebar-needs-you-tint-hover)]",
+              // In dark the amber fill is only a 1.07:1 step off the sidebar,
+              // so a leading rule carries where the fill cannot. It is
+              // transparent in light, where the cream band already reads.
+              "shadow-[inset_2px_0_0_0_var(--bb-sidebar-needs-you-accent)]",
+            ),
           // The open chat gets the same tint as an active parent card, so the
           // eye finds it in a long tree the way it finds a card in the list.
           isActive &&

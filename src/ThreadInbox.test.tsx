@@ -1229,7 +1229,9 @@ describe("ThreadInbox", () => {
       name: "3 child threads, 1 failed, 1 done, 1 working",
     });
     expect(badge.getAttribute("data-child-status")).toBe("failed");
-    expect(badge.className).toContain("bg-red-100");
+    expect(badge.className).toContain(
+      "bg-[color:var(--bb-sidebar-badge-failed-bg)]",
+    );
     expect(badge.querySelector('[data-icon="CircleX"]')).not.toBeNull();
   });
 
@@ -1248,7 +1250,9 @@ describe("ThreadInbox", () => {
       name: "1 child thread, 1 working",
     });
     expect(badge.getAttribute("data-child-status")).toBe("working");
-    expect(badge.className).toContain("bg-sky-100");
+    expect(badge.className).toContain(
+      "bg-[color:var(--bb-sidebar-badge-working-bg)]",
+    );
     expect(badge.querySelector('[data-icon="Loading"]')).not.toBeNull();
     expect(screen.getByRole("list", { name: "Child threads" })).toBeDefined();
     expect(screen.getByText("Working child")).toBeDefined();
@@ -1279,7 +1283,9 @@ describe("ThreadInbox", () => {
       name: "2 child threads, 1 need you, 1 working",
     });
     expect(badge.getAttribute("data-child-status")).toBe("needs-you");
-    expect(badge.className).toContain("bg-amber-100");
+    expect(badge.className).toContain(
+      "bg-[color:var(--bb-sidebar-badge-needs-you-bg)]",
+    );
     expect(badge.querySelector('[data-icon="CircleQuestion"]')).not.toBeNull();
     expect(badge.querySelector('[data-icon="Loading"]')).toBeNull();
   });
@@ -1447,11 +1453,23 @@ describe("ThreadInbox", () => {
     ]) {
       expect(within(childList).getByRole("button", { name })).toBeDefined();
     }
+    // Tint plus a leading rule: in dark the amber fill is only a 1.07:1 step
+    // off the sidebar, so the rule is what actually finds the row.
+    const needsYouRow = within(childList).getByRole("button", {
+      name: "Open child thread: Pending runtime child, Needs you",
+    }).parentElement!;
+    expect(needsYouRow.className).toContain(
+      "bg-[color:var(--bb-sidebar-needs-you-tint)]",
+    );
+    expect(needsYouRow.className).toContain(
+      "shadow-[inset_2px_0_0_0_var(--bb-sidebar-needs-you-accent)]",
+    );
+    // and only that row: the rule is the tint's partner, not a row border.
     expect(
       within(childList).getByRole("button", {
-        name: "Open child thread: Pending runtime child, Needs you",
+        name: "Open child thread: Failed child, Failed",
       }).parentElement?.className,
-    ).toContain("bg-amber-50");
+    ).not.toContain("--bb-sidebar-needs-you-accent");
 
     fireEvent.click(
       within(childList).getByRole("button", {
@@ -3882,7 +3900,9 @@ describe("parking threads", () => {
     const shelf = await screen.findByRole("region", { name: "Settled" });
     fireEvent.click(within(shelf).getByRole("button"));
     const row = within(shelf).getByText("Settled failure").closest("li")!;
-    expect(within(row).getByText("Failed").className).toContain("text-red-700");
+    expect(within(row).getByText("Failed").className).toContain(
+      "text-[color:var(--bb-sidebar-tone-error)]",
+    );
     expect(within(row).queryByText("3h")).toBeNull();
     expect(
       within(row).getByRole("button", { name: "Un-settle thread" }),
@@ -5541,7 +5561,9 @@ describe("card metadata", () => {
       }),
     ]);
     expect(await screen.findByLabelText("Agent is working")).toBeDefined();
-    expect(screen.getByText("Working").className).toContain("text-sky-600");
+    expect(screen.getByText("Working").className).toContain(
+      "text-[color:var(--bb-sidebar-tone-working)]",
+    );
     expect(screen.queryByText("3h")).toBeNull();
   });
 
@@ -5621,14 +5643,19 @@ describe("attention states", () => {
       "waiting-for-input",
       "Thread needs user input",
       "Needs you",
-      "text-indigo-600",
+      "text-[color:var(--bb-sidebar-tone-pending)]",
     ],
-    ["unread-error", "Unread thread failed", "Failed", "text-red-700"],
+    [
+      "unread-error",
+      "Unread thread failed",
+      "Failed",
+      "text-[color:var(--bb-sidebar-tone-error)]",
+    ],
     [
       "unread-success",
       "Unread thread succeeded",
       "Unread",
-      "text-emerald-700",
+      "text-[color:var(--bb-sidebar-tone-success)]",
     ],
   ] as const;
 
@@ -5706,26 +5733,26 @@ describe("pull request badge", () => {
     const failing = withPr("checks_failed");
     expect(
       (await screen.findByRole("link", { name: "#412" })).className,
-    ).toContain("text-red-600");
+    ).toContain("text-[color:var(--bb-sidebar-pr-alert)]");
     failing.unmount();
 
     withPr("ready_to_merge");
     expect(
       (await screen.findByRole("link", { name: "#412" })).className,
-    ).toContain("text-emerald-600");
+    ).toContain("text-[color:var(--bb-sidebar-pr-open)]");
   });
 
   it("covers pending, review, draft, closed, and merged states", async () => {
     const pending = withPr("checks_pending");
     expect(
       (await screen.findByRole("link", { name: "#412" })).className,
-    ).toContain("text-emerald-600");
+    ).toContain("text-[color:var(--bb-sidebar-pr-open)]");
     pending.unmount();
 
     const review = withPr("review_requested");
     expect(
       (await screen.findByRole("link", { name: "#412" })).className,
-    ).toContain("text-emerald-600");
+    ).toContain("text-[color:var(--bb-sidebar-pr-open)]");
     review.unmount();
 
     const draft = withPr("draft", "draft");
@@ -5737,13 +5764,13 @@ describe("pull request badge", () => {
     const closed = withPr("closed", "closed");
     expect(
       (await screen.findByRole("link", { name: "#412" })).className,
-    ).toContain("text-red-600");
+    ).toContain("text-[color:var(--bb-sidebar-pr-alert)]");
     closed.unmount();
 
     withPr("merged", "merged");
     expect(
       (await screen.findByRole("link", { name: "#412" })).className,
-    ).toContain("text-violet-600");
+    ).toContain("text-[color:var(--bb-sidebar-pr-merged)]");
   });
 });
 

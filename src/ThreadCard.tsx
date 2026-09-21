@@ -234,7 +234,7 @@ export function ThreadCard({
                       event.stopPropagation();
                       onAcknowledgeWake();
                     }}
-                    className="pointer-events-auto text-2xs font-medium text-amber-700 hover:underline dark:text-amber-300"
+                    className="pointer-events-auto text-2xs font-medium text-[color:var(--bb-sidebar-woke)] hover:underline"
                   >
                     Woke
                   </button>
@@ -457,7 +457,7 @@ function pullRequestStatusLabel(pullRequest: PluginSidebarPullRequest): string {
 
 function pullRequestToneClass(pullRequest: PluginSidebarPullRequest): string {
   if (pullRequest.state === "merged" || pullRequest.attention === "merged") {
-    return "text-violet-600 dark:text-violet-300/90";
+    return "text-[color:var(--bb-sidebar-pr-merged)]";
   }
   if (
     pullRequest.attention === "blocked" ||
@@ -465,7 +465,7 @@ function pullRequestToneClass(pullRequest: PluginSidebarPullRequest): string {
     pullRequest.attention === "checks_failed" ||
     pullRequest.attention === "conflicts"
   ) {
-    return "text-red-600 dark:text-red-300/90";
+    return "text-[color:var(--bb-sidebar-pr-alert)]";
   }
   if (
     pullRequest.state === "draft" ||
@@ -474,10 +474,10 @@ function pullRequestToneClass(pullRequest: PluginSidebarPullRequest): string {
     return "text-muted-foreground/60";
   }
   if (pullRequest.state === "closed" || pullRequest.attention === "closed") {
-    return "text-red-600 dark:text-red-300/90";
+    return "text-[color:var(--bb-sidebar-pr-alert)]";
   }
   if (pullRequest.state === "open") {
-    return "text-emerald-600 dark:text-emerald-300/90";
+    return "text-[color:var(--bb-sidebar-pr-open)]";
   }
   return "text-muted-foreground";
 }
@@ -500,8 +500,8 @@ function ParkButton({
       }}
       className={cn(
         "bb-sidebar-settle group/settle relative flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground",
-        "transition-colors duration-200 ease-out hover:text-emerald-700 dark:hover:text-emerald-300",
-        "focus-visible:text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 dark:focus-visible:text-emerald-300",
+        "transition-colors duration-200 ease-out hover:text-[color:var(--bb-sidebar-settle-active)]",
+        "focus-visible:text-[color:var(--bb-sidebar-settle-active)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50",
         "motion-reduce:transition-none",
       )}
     >

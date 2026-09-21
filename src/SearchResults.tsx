@@ -201,7 +201,7 @@ function SearchResultRow({
           )}
         >
           {isWoke ? (
-            <span className="shrink-0 text-2xs font-medium text-amber-700 dark:text-amber-300">
+            <span className="shrink-0 text-2xs font-medium text-[color:var(--bb-sidebar-woke)]">
               Woke
             </span>
           ) : null}

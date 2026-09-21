@@ -50,12 +50,12 @@ export function ProviderGlyph({
           <>
             <span
               aria-hidden
-              className="size-3 dark:hidden"
+              className="bb-sidebar-theme-light-only size-3"
               style={{ ...maskStyle, backgroundColor: tint.light }}
             />
             <span
               aria-hidden
-              className="hidden size-3 dark:block"
+              className="bb-sidebar-theme-dark-only hidden size-3"
               style={{ ...maskStyle, backgroundColor: tint.dark }}
             />
           </>

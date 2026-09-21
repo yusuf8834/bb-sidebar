@@ -2,6 +2,7 @@
 // Manual order stays fixed until the user moves a row. Optional views can sort
 // by activity, creation date, or project without changing the saved order.
 import { definePluginApp } from "@get-bb/plugin-sdk/app";
+import "./src/theme.css";
 import { ThreadInbox } from "./src/ThreadInbox";
 import { ParentChip } from "./src/ParentChip";
 import { SubagentsChip } from "./src/SubagentsChip";
