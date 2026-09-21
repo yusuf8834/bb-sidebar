@@ -3063,28 +3063,70 @@ describe("parking threads", () => {
     await waitFor(() => expect(park).toHaveBeenCalledTimes(2));
   });
 
-  it("keeps hover-only snooze controls visible while the menu is open", async () => {
-    render([thread({ id: "thr_snooze_anchor", title: "Quiet" })]);
-
-    const snooze = await screen.findByRole("combobox", {
-      name: "Snooze thread",
+  it("keeps status rows actionable through snooze, settle, and unpin controls", async () => {
+    const snooze = vi.fn(() => ({ ok: true }));
+    const settle = vi.fn(() => ({ ok: true, reclaim: SETTLED_NOTHING }));
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({
+            id: "thr_failed",
+            title: "Failed work",
+            indicator: "unread-error",
+            indicatorLabel: "Failed",
+            isPinned: true,
+          }),
+          thread({
+            id: "thr_unread",
+            title: "Unread work",
+            indicator: "unread-success",
+            indicatorLabel: "Unread",
+          }),
+          thread({
+            id: "thr_idle",
+            title: "Idle work",
+            updatedAt: Date.now() - 2 * 60_000,
+          }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: { listLifecycle: () => ({ rows: [] }), snooze, settle },
     });
-    const controls = snooze.parentElement;
-    expect(controls).not.toBeNull();
-    expect(controls!.classList.contains("opacity-0")).toBe(true);
-    expect(controls!.classList.contains("pointer-events-none")).toBe(true);
-    expect(
-      controls!.classList.contains("[@media(hover:none)]:opacity-100"),
-    ).toBe(true);
-    expect(
-      controls!.classList.contains("[@media(hover:none)]:pointer-events-auto"),
-    ).toBe(true);
 
-    fireEvent.keyDown(snooze, { key: "Enter" });
-    await screen.findByRole("option", { name: "1 hour" });
+    expect(await screen.findByText("Failed")).toBeDefined();
+    expect(screen.getByText("Unread")).toBeDefined();
+    expect(screen.getByText(/^\d+m$/)).toBeDefined();
 
-    expect(controls!.classList.contains("opacity-100")).toBe(true);
-    expect(controls!.classList.contains("pointer-events-auto")).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Unpin Failed work" }));
+    await waitFor(() =>
+      expect(rendered.sidebarActionCalls).toContainEqual({
+        method: "setPinned",
+        threadId: "thr_failed",
+        pinned: false,
+      }),
+    );
+
+    const unreadRow = screen.getByText("Unread work").closest("li")!;
+    fireEvent.click(
+      within(unreadRow).getByRole("button", { name: "Settle thread" }),
+    );
+    await waitFor(() =>
+      expect(settle).toHaveBeenCalledWith({ threadId: "thr_unread" }),
+    );
+
+    const idleRow = screen.getByText("Idle work").closest("li")!;
+    fireEvent.keyDown(
+      within(idleRow).getByRole("combobox", { name: "Snooze thread" }),
+      { key: "Enter" },
+    );
+    fireEvent.click(await screen.findByRole("option", { name: "1 hour" }));
+    await waitFor(() =>
+      expect(snooze).toHaveBeenCalledWith({
+        threadId: "thr_idle",
+        snoozedUntil: expect.any(Number),
+      }),
+    );
   });
 
   it("settles a thread when the user clicks Settle", async () => {

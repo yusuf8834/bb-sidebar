@@ -245,6 +245,8 @@ export function ThreadCard({
                 className={cn(
                   STATUS_SLOT_CLASS,
                   "group/status-slot pointer-events-auto relative h-5",
+                  showParkActions &&
+                    "[@media(hover:none)]:w-auto [@media(hover:none)]:gap-1.5",
                   !showParkActions && "w-auto min-w-20",
                 )}
               >
@@ -252,8 +254,9 @@ export function ThreadCard({
                   className={cn(
                     "flex items-center justify-end gap-0.5 transition-opacity duration-150 ease-out motion-reduce:transition-none",
                     showParkActions &&
-                      "absolute inset-y-0 right-0 group-hover/card:opacity-0 [@media(hover:none)]:opacity-0 group-has-[:focus-visible]/status-slot:opacity-0",
-                    isSnoozeOpen && "opacity-0",
+                      "absolute inset-y-0 right-0 [@media(hover:hover)]:group-hover/card:opacity-0 [@media(hover:hover)]:group-has-[:focus-visible]/status-slot:opacity-0 [@media(hover:none)]:static [@media(hover:none)]:opacity-100",
+                    isSnoozeOpen &&
+                      "opacity-0 [@media(hover:none)]:opacity-100",
                   )}
                 >
                   {!showParkActions ? unpinButton : null}
@@ -262,7 +265,7 @@ export function ThreadCard({
                 {showParkActions ? (
                   <span
                     className={cn(
-                      "pointer-events-none absolute inset-y-0 right-0 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 ease-out has-[:focus-visible]:pointer-events-auto has-[:focus-visible]:opacity-100 group-hover/card:pointer-events-auto group-hover/card:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100 motion-reduce:transition-none",
+                      "pointer-events-none absolute inset-y-0 right-0 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 ease-out has-[:focus-visible]:pointer-events-auto has-[:focus-visible]:opacity-100 group-hover/card:pointer-events-auto group-hover/card:opacity-100 [@media(hover:none)]:static [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100 motion-reduce:transition-none",
                       isSnoozeOpen && "pointer-events-auto opacity-100",
                     )}
                   >
