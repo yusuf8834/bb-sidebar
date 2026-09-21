@@ -8,11 +8,12 @@ import { useWorkingSinceContext } from "./useWorkingSince";
 import { statusWithDuration } from "./working-since";
 
 /**
- * The row's trailing slot: one fixed width, right-aligned, on every row.
+ * The default trailing slot for cards and flat rows: fixed and right-aligned.
  *
  * Fixed rather than intrinsic because both ages and live-status labels vary in
  * width. The slot holds "Planning · 12m" without dragging the project column
- * back and forth as a thread changes state.
+ * back and forth as a thread changes state. Child trees use the same component
+ * with a wider fixed slot because their disclosure button sits beside it.
  */
 export const STATUS_SLOT_CLASS = "flex w-20 shrink-0 items-center justify-end";
 
@@ -43,14 +44,14 @@ export function StatusOrTime({
   now: number;
 }) {
   const workingSince = useWorkingSinceContext();
-  const status = shortStatus(thread.indicator, thread.indicatorLabel);
+  const status = threadShortStatus(thread);
   if (status !== null) {
-    const label = status.showsDuration
-      ? statusWithDuration(status.label, workingSince.get(thread.id), now)
-      : status.label;
+    const label = shortStatusLabel(status, workingSince.get(thread.id), now);
     return (
       <span
-        aria-label={thread.indicatorLabel ?? label}
+        aria-label={
+          thread.hasPendingInteraction ? label : (thread.indicatorLabel ?? label)
+        }
         className={cn(
           "max-w-full truncate text-2xs font-medium",
           status.showsDuration && "tabular-nums",
@@ -68,15 +69,17 @@ export function StatusOrTime({
   );
 }
 
-function shortStatus(
-  indicator: PluginSidebarThreadIndicator,
-  indicatorLabel: string | null,
-): {
+export interface ShortStatus {
   label: string;
   className: string;
   /** Live work gets a running duration; a verdict or a request does not. */
   showsDuration: boolean;
-} | null {
+}
+
+export function shortStatus(
+  indicator: PluginSidebarThreadIndicator,
+  indicatorLabel: string | null,
+): ShortStatus | null {
   const className = statusToneClass(indicator);
   switch (indicator) {
     case "unread-error":
@@ -112,6 +115,34 @@ function shortStatus(
   }
 }
 
+/** A pending user interaction outranks any concurrently reported runtime. */
+export function threadShortStatus(
+  thread: PluginSidebarThread,
+): ShortStatus | null {
+  return thread.hasPendingInteraction
+    ? shortStatus("waiting-for-input", null)
+    : shortStatus(thread.indicator, thread.indicatorLabel);
+}
+
+export function shortStatusLabel(
+  status: ShortStatus,
+  startedAt: number | undefined,
+  now: number,
+): string {
+  return status.showsDuration
+    ? statusWithDuration(status.label, startedAt, now)
+    : status.label;
+}
+
+export function threadStatusLabel(
+  thread: PluginSidebarThread,
+  startedAt: number | undefined,
+  now: number,
+): string | null {
+  const status = threadShortStatus(thread);
+  return status === null ? null : shortStatusLabel(status, startedAt, now);
+}
+
 /**
  * A monitor is still a runtime, so the indicator keeps the usual spinner and
  * working duration. BB's accessible label carries the more precise state.
@@ -120,7 +151,7 @@ function isMonitoringLabel(label: string | null): boolean {
   return label?.toLocaleLowerCase().includes("monitoring") ?? false;
 }
 
-/** Status palette shared by cards and child-thread chips. */
+/** Status palette shared by cards, child labels, and glyphs. */
 export function statusToneClass(
   indicator: PluginSidebarThreadIndicator,
 ): string {

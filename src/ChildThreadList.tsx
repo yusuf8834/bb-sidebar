@@ -4,8 +4,13 @@ import { Icon } from "./components/Icon";
 import { Tooltip } from "./components/Tooltip";
 import { Disc } from "./Disc";
 import { cn } from "./lib/utils";
-import { relativeTimeLabel } from "./relative-time";
 import { StatusGlyph } from "./StatusGlyph";
+import {
+  STATUS_SLOT_CLASS,
+  StatusOrTime,
+  threadStatusLabel,
+} from "./StatusSlot";
+import { useWorkingSinceContext } from "./useWorkingSince";
 import { threadDisplayTitle } from "./inbox";
 import { canParkThread } from "./lifecycle";
 import { RowContextMenu } from "./RowContextMenu";
@@ -373,7 +378,13 @@ function ChildThreadRow({
 }) {
   const title = threadDisplayTitle(thread);
   const needsYou = thread.hasPendingInteraction;
-  const running = !needsYou && isChildRunning(thread);
+  const effectiveNow = now ?? Date.now();
+  const workingSince = useWorkingSinceContext();
+  const visibleStatus = threadStatusLabel(
+    thread,
+    workingSince.get(thread.id),
+    effectiveNow,
+  );
   const [isRenaming, setIsRenaming] = useState(false);
   const RowAction = isRenaming ? "div" : "button";
 
@@ -406,7 +417,11 @@ function ChildThreadRow({
         <ThreadDetailsTooltip thread={thread} disabled={isRenaming}>
           <RowAction
             type={isRenaming ? undefined : "button"}
-            aria-label={isRenaming ? undefined : childThreadOpenLabel(thread, relation, title)}
+            aria-label={
+              isRenaming
+                ? undefined
+                : childThreadOpenLabel(relation, title, visibleStatus)
+            }
             aria-current={isActive && !isRenaming ? "page" : undefined}
             onClick={isRenaming ? undefined : () => onOpenThread(thread.id)}
             onKeyDown={isRenaming ? (event) => event.stopPropagation() : undefined}
@@ -450,12 +465,12 @@ function ChildThreadRow({
               </span>
             ) : null}
             {variant === "sidebar" ? (
-              <span className="flex shrink-0 items-center gap-1 pr-2">
-                {needsYou ? <ChildStatusFlag kind="needs-you" /> : null}
-                {running ? <ChildStatusFlag kind="running" /> : null}
-                <span className="shrink-0 font-mono text-2xs tabular-nums text-muted-foreground/60">
-                  {relativeTimeLabel(thread.updatedAt, now ?? Date.now())}
-                </span>
+              // Match parent cards: a recognized status owns the trailing
+              // slot; an idle or future unknown status leaves it to the age.
+              // Children reserve 112px so Monitoring plus a duration remains
+              // readable beside a separate grandchild disclosure button.
+              <span className={cn(STATUS_SLOT_CLASS, "w-28 pr-2")}>
+                <StatusOrTime thread={thread} now={effectiveNow} />
               </span>
             ) : null}
           </RowAction>
@@ -469,15 +484,10 @@ function ChildThreadRow({
 }
 
 function childThreadOpenLabel(
-  thread: PluginSidebarThread,
   relation: "child" | "grandchild",
   title: string,
+  status: string | null,
 ): string {
-  const status = thread.hasPendingInteraction
-    ? "Needs you"
-    : isChildRunning(thread)
-      ? "Running"
-      : thread.indicatorLabel;
   return `Open ${relation} thread: ${title}${status ? `, ${status}` : ""}`;
 }
 
@@ -513,20 +523,5 @@ function GrandchildDisclosureButton({
         />
       </button>
     </Tooltip>
-  );
-}
-
-function ChildStatusFlag({ kind }: { kind: "needs-you" | "running" }) {
-  return (
-    <span
-      className={cn(
-        "shrink-0 rounded px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-[0.08em]",
-        kind === "needs-you"
-          ? "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
-          : "bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300",
-      )}
-    >
-      {kind === "needs-you" ? "Needs you" : "Running"}
-    </span>
   );
 }

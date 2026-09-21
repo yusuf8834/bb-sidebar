@@ -1291,24 +1291,62 @@ describe("ThreadInbox", () => {
     ).toContain("bg-sidebar-accent");
   });
 
-  it("expands child rows with attention, running state, ages, and navigation", async () => {
+  it("shows every child status or an idle age in expanded rows and accessible names", async () => {
     const minute = Math.floor(Date.now() / 60_000) * 60_000;
+    window.localStorage.setItem(
+      "bb-sidebar:working-since:v1",
+      JSON.stringify({
+        monitoring: minute - 5 * 60_000,
+        planning: minute - 5 * 60_000,
+      }),
+    );
     const rendered = render([
       thread({ id: "parent", title: "Parent" }),
       thread({
-        id: "blocked",
-        title: "Blocked child",
+        id: "failed",
+        title: "Failed child",
         parentThreadId: "parent",
-        hasPendingInteraction: true,
-        indicator: "waiting-for-input",
-        updatedAt: minute - 4 * 60_000,
+        indicator: "unread-error",
       }),
       thread({
-        id: "running",
-        title: "Running child",
+        id: "unread",
+        title: "Unread child",
+        parentThreadId: "parent",
+        indicator: "unread-success",
+      }),
+      thread({
+        id: "waiting",
+        title: "Waiting child",
+        parentThreadId: "parent",
+        indicator: "waiting-for-input",
+      }),
+      thread({
+        id: "monitoring",
+        title: "Monitoring child",
         parentThreadId: "parent",
         indicator: "runtime",
-        updatedAt: minute - 2 * 60_000,
+        indicatorLabel: "Thread monitoring",
+      }),
+      thread({
+        id: "planning",
+        title: "Planning child",
+        parentThreadId: "parent",
+        indicator: "plan-mode",
+        activity: {
+          workflows: 0,
+          backgroundAgents: 0,
+          backgroundCommands: 0,
+          planMode: 1,
+          goals: 0,
+        },
+      }),
+      thread({
+        id: "pending-runtime",
+        title: "Pending runtime child",
+        parentThreadId: "parent",
+        hasPendingInteraction: true,
+        indicator: "runtime",
+        indicatorLabel: "Agent is working",
       }),
       thread({
         id: "idle",
@@ -1319,36 +1357,51 @@ describe("ThreadInbox", () => {
     ]);
 
     const badge = screen.getByRole("button", {
-      name: "3 child threads, 1 need you, 1 working",
+      name: "7 child threads, 1 failed, 2 need you, 1 done, 2 working",
     });
-    expect(badge.className).toContain("bg-amber-100");
-    expect(badge.getAttribute("data-child-status")).toBe("needs-you");
-    expect(badge.querySelector('[data-icon="CircleQuestion"]')).not.toBeNull();
     fireEvent.click(badge);
 
     expect(badge.getAttribute("aria-expanded")).toBe("true");
     expect(badge.querySelector('[data-icon="ChevronUp"]')).not.toBeNull();
     const childList = screen.getByRole("list", { name: "Child threads" });
     expect(childList.getAttribute("data-child-thread-list")).toBe("sidebar");
-    expect(within(childList).getByText("Needs you")).toBeDefined();
-    expect(within(childList).getByText("Running")).toBeDefined();
-    expect(within(childList).getByText("4m")).toBeDefined();
-    expect(within(childList).getByText("2m")).toBeDefined();
+    for (const label of [
+      "Failed",
+      "Unread",
+      "Monitoring · 5m",
+      "Planning · 5m",
+    ]) {
+      expect(within(childList).getByText(label)).toBeDefined();
+    }
+    expect(within(childList).getAllByText("Needs you")).toHaveLength(2);
     expect(within(childList).getByText("31m")).toBeDefined();
+    expect(within(childList).queryByText("Agent is working")).toBeNull();
+
+    for (const name of [
+      "Open child thread: Failed child, Failed",
+      "Open child thread: Unread child, Unread",
+      "Open child thread: Waiting child, Needs you",
+      "Open child thread: Monitoring child, Monitoring · 5m",
+      "Open child thread: Planning child, Planning · 5m",
+      "Open child thread: Pending runtime child, Needs you",
+      "Open child thread: Idle child",
+    ]) {
+      expect(within(childList).getByRole("button", { name })).toBeDefined();
+    }
     expect(
       within(childList).getByRole("button", {
-        name: "Open child thread: Blocked child, Needs you",
+        name: "Open child thread: Pending runtime child, Needs you",
       }).parentElement?.className,
     ).toContain("bg-amber-50");
 
     fireEvent.click(
       within(childList).getByRole("button", {
-        name: "Open child thread: Running child, Running",
+        name: "Open child thread: Monitoring child, Monitoring · 5m",
       }),
     );
     expect(rendered.sidebarActionCalls).toContainEqual({
       method: "open",
-      threadId: "running",
+      threadId: "monitoring",
       options: { split: false },
     });
     await waitFor(() =>
@@ -1664,7 +1717,7 @@ describe("ThreadInbox", () => {
       fireEvent.contextMenu(
         screen.getByRole("button", {
           name: `Open child thread: ${busyChild.title}${
-            busyChild.hasPendingInteraction ? ", Needs you" : ", Running"
+            busyChild.hasPendingInteraction ? ", Needs you" : ", Working"
           }`,
         }),
       );
