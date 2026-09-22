@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Show a spinner and "Loading threads…" while bb loads the thread list, instead of an empty list. It appears only if loading takes longer than 200 ms, so fast loads do not flicker.
+
 ## [0.2.20] - 2026-09-21
 
 ### Added

@@ -1132,7 +1132,9 @@ export function ThreadInbox({
         </p>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-2">
-          {status === "loading" ? null : status === "error" ? (
+          {status === "loading" ? (
+            <ThreadListLoading />
+          ) : status === "error" ? (
             <p
               role="status"
               className="px-2 py-6 text-center text-xs text-muted-foreground"
@@ -1340,6 +1342,51 @@ export function ThreadInbox({
       </div>
     </OpenPortsProvider>
     </WorkingSinceContext.Provider>
+  );
+}
+
+/**
+ * How long the initial load may run before the indicator shows. Most loads
+ * finish well inside this, and a spinner that appears only to vanish at once
+ * reads as a flicker, not as progress.
+ */
+const LOADING_INDICATOR_DELAY_MS = 200;
+
+/**
+ * The list's placeholder while bb is still loading threads. The paragraph
+ * mounts empty at the size it will have with text, so the layout does not
+ * jump when the text arrives. Because the live region already exists before
+ * its text is added, a screen reader announces "Loading threads…" once, and
+ * says nothing when a load finishes before the delay. Unmounting on any new
+ * status cancels the timer.
+ */
+function ThreadListLoading() {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const timer = window.setTimeout(
+      () => setVisible(true),
+      LOADING_INDICATOR_DELAY_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, []);
+  return (
+    <p
+      role="status"
+      className="px-2 py-6 text-center text-xs text-muted-foreground"
+    >
+      <span className="flex h-4 items-center justify-center gap-1.5">
+        {visible ? (
+          <>
+            <Icon
+              name="Loading"
+              aria-hidden="true"
+              className="size-3.5 shrink-0 animate-spin opacity-75 motion-reduce:animate-none"
+            />
+            Loading threads…
+          </>
+        ) : null}
+      </span>
+    </p>
   );
 }
 
