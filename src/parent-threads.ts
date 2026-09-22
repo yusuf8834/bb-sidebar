@@ -1,7 +1,6 @@
 interface ParentThread {
   id: string;
   parentThreadId: string | null;
-  projectId: string;
   isArchived: boolean;
 }
 
@@ -26,7 +25,6 @@ export function parentCandidates<T extends ParentThread>(
     pending.push(...(children.get(id) ?? []));
   }
   return threads.filter((candidate) =>
-    candidate.projectId === thread.projectId &&
     (!candidate.isArchived || candidate.id === thread.parentThreadId) &&
     !excluded.has(candidate.id),
   );

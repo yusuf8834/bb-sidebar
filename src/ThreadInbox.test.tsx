@@ -5929,7 +5929,7 @@ describe("parent thread menu", () => {
           thread({ id: "descendant", title: "Forbidden pinned child", parentThreadId: "child", isPinned: true }),
           thread({ id: "other", title: "Foreign pinned thread", projectId: "proj_other", isPinned: true }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }, { id: "proj_other", name: "docs", isPersonal: false }],
       },
       rpc: {
         getSidebarSettings: () => ({ ...defaultSidebarSettings, inactiveThreadsEnabled: true, inactiveAfterHours: 6 }),
@@ -5949,14 +5949,16 @@ describe("parent thread menu", () => {
     expect(within(menu).getAllByRole("menuitemradio").map(item => item.textContent)).toEqual([
       "None", "Settled parent", "Nested work", "Snoozed parent", "Active parent",
       "Parked parent", "Nested active work", "Pinned second", "Nested pinned work",
-      "Pinned parent", "Orphan parent", "Older parent",
+      "Pinned parent", "Orphan parent", "Older parent", "docs · Foreign pinned thread",
     ]);
     expect(within(menu).queryByRole("separator")).toBeNull();
     expect(within(menu).getByRole("menuitemradio", { name: "Pinned parent" }).querySelector('[data-icon="Pin"]')).not.toBeNull();
 
     fireEvent.change(search, { target: { value: "pinned" } });
-    expect(within(menu).getAllByRole("menuitemradio").map(item => item.textContent)).toEqual(["None", "Pinned second", "Nested pinned work", "Pinned parent"]);
+    expect(within(menu).getAllByRole("menuitemradio").map(item => item.textContent)).toEqual(["None", "Pinned second", "Nested pinned work", "Pinned parent", "docs · Foreign pinned thread"]);
     expect(within(menu).queryByRole("separator")).toBeNull();
+    fireEvent.change(search, { target: { value: "docs" } });
+    expect(within(menu).getAllByRole("menuitemradio").map(item => item.textContent)).toEqual(["None", "docs · Foreign pinned thread"]);
     fireEvent.change(search, { target: { value: "older" } });
     expect(within(menu).getAllByRole("menuitemradio").map(item => item.textContent)).toEqual(["None", "Older parent"]);
     expect(within(menu).queryByRole("separator")).toBeNull();

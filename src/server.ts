@@ -1128,7 +1128,7 @@ export default async function plugin(bb: BbPluginApi) {
         : null;
     },
     async setThreadParent({ threadId, parentThreadId }) {
-      // BB validates parent relationships, including cycles and project scope.
+      // BB validates parent relationships, including cycles.
       await bb.sdk.threads.update({ threadId, parentThreadId });
       return { ok: true };
     },

@@ -13,7 +13,7 @@ import { usePortalScopeProps } from "./lib/portal-scope";
 import { parentCandidates } from "./parent-threads";
 
 export function ParentThreadMenu({ thread }: { thread: PluginSidebarThread }) {
-  const { threads } = useSidebarThreads();
+  const { projects, threads } = useSidebarThreads();
   const rpc = useRpc<typeof bbSidebarRpcContract>();
   const portalScope = usePortalScopeProps();
   const [open, setOpen] = useState(false);
@@ -28,18 +28,36 @@ export function ParentThreadMenu({ thread }: { thread: PluginSidebarThread }) {
     const timer = window.setTimeout(() => searchRef.current?.focus(), 0);
     return () => window.clearTimeout(timer);
   }, [open]);
+  const projectNameById = new Map(projects.map((project) => [project.id, project.name]));
+  // Threads from other projects read as "Project · Thread" and sort after this project's.
   const candidates = parentCandidates(threads, thread)
+    .map((candidate) => {
+      const isOtherProject = candidate.projectId !== thread.projectId;
+      const projectName = isOtherProject
+        ? projectNameById.get(candidate.projectId) ?? candidate.projectId
+        : null;
+      const threadTitle = threadDisplayTitle(candidate);
+      return {
+        id: candidate.id,
+        title: projectName === null ? threadTitle : `${projectName} · ${threadTitle}`,
+        projectName,
+        threadTitle,
+        isPinned: candidate.isPinned,
+        isOtherProject,
+        updatedAt: candidate.updatedAt,
+      };
+    })
     .filter((candidate) =>
-      threadDisplayTitle(candidate).toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
+      candidate.title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
     )
-    .sort((left, right) => right.updatedAt - left.updatedAt || left.id.localeCompare(right.id));
+    .sort((left, right) =>
+      Number(left.isOtherProject) - Number(right.isOtherProject) ||
+      right.updatedAt - left.updatedAt ||
+      left.id.localeCompare(right.id),
+    );
   const choices = [
-    { id: "", title: "None", isPinned: false },
-    ...candidates.map((candidate) => ({
-      id: candidate.id,
-      title: threadDisplayTitle(candidate),
-      isPinned: candidate.isPinned,
-    })),
+    { id: "", title: "None", projectName: null, threadTitle: "None", isPinned: false },
+    ...candidates,
   ];
   const updateParent = async (parentThreadId: string | null) => {
     if (inFlight.current || parentThreadId === thread.parentThreadId) return;
@@ -116,7 +134,12 @@ export function ParentThreadMenu({ thread }: { thread: PluginSidebarThread }) {
                 className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent data-[disabled]:opacity-50"
               >
                 {candidate.isPinned ? <Icon name="Pin" className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" /> : null}
-                <span className="flex-1 truncate">{candidate.title}</span>
+                <span className="flex-1 truncate">
+                  {candidate.projectName === null ? null : (
+                    <><span className="font-semibold">{candidate.projectName}</span> · </>
+                  )}
+                  {candidate.threadTitle}
+                </span>
                 <ContextMenu.ItemIndicator><Icon name="Check" className="size-4" /></ContextMenu.ItemIndicator>
               </ContextMenu.RadioItem>
             ))}
