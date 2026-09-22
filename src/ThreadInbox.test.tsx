@@ -453,7 +453,7 @@ describe("sidebar settings", () => {
     ).toContain("left-0.5");
     expect(
       screen
-        .getByRole("switch", { name: "Show running children" })
+        .getByRole("switch", { name: "Show children that need attention" })
         .getAttribute("aria-checked"),
     ).toBe("true");
 
@@ -461,7 +461,7 @@ describe("sidebar settings", () => {
       target: { value: "1h, Wait refresh=5h, Tonight=evening@20:00, Morning=tomorrow@08:30, Monday=next-week@10:00" },
     });
     fireEvent.click(
-      screen.getByRole("switch", { name: "Show running children" }),
+      screen.getByRole("switch", { name: "Show children that need attention" }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     await waitFor(() =>
@@ -1290,7 +1290,69 @@ describe("ThreadInbox", () => {
     expect(badge.querySelector('[data-icon="Loading"]')).toBeNull();
   });
 
-  it("can hide running children while their section is collapsed", async () => {
+  it("keeps every child with a status visible while collapsed, and folds read ones", () => {
+    render([
+      thread({ id: "parent", title: "Parent" }),
+      thread({
+        id: "failed",
+        title: "Failed child",
+        parentThreadId: "parent",
+        indicator: "unread-error",
+      }),
+      thread({
+        id: "waiting",
+        title: "Waiting child",
+        parentThreadId: "parent",
+        hasPendingInteraction: true,
+        indicator: "waiting-for-input",
+      }),
+      thread({
+        id: "unread",
+        title: "Unread child",
+        parentThreadId: "parent",
+        indicator: "unread-success",
+      }),
+      thread({
+        id: "working",
+        title: "Working child",
+        parentThreadId: "parent",
+        indicator: "runtime",
+      }),
+      thread({ id: "idle", title: "Idle child", parentThreadId: "parent" }),
+      // An idle child stays as the path to a grandchild that has news.
+      thread({ id: "carrier", title: "Carrier child", parentThreadId: "parent" }),
+      thread({
+        id: "failed-grandchild",
+        title: "Failed grandchild",
+        parentThreadId: "carrier",
+        indicator: "unread-error",
+      }),
+    ]);
+
+    // Nothing was expanded: the list below is the collapsed view.
+    const childList = screen.getByRole("list", { name: "Child threads" });
+    for (const title of [
+      "Failed child",
+      "Waiting child",
+      "Unread child",
+      "Working child",
+      "Carrier child",
+    ]) {
+      expect(within(childList).getByText(title)).toBeDefined();
+    }
+    expect(within(childList).queryByText("Idle child")).toBeNull();
+    expect(
+      within(
+        screen.getByRole("list", { name: "Grandchildren of Carrier child" }),
+      ).getByText("Failed grandchild"),
+    ).toBeDefined();
+    expect(
+      screen.getByRole("button", { name: /6 child threads/ })
+        .getAttribute("aria-expanded"),
+    ).toBe("false");
+  });
+
+  it("can hide children that need attention while their section is collapsed", async () => {
     renderSlot(inbox, listProps, {
       sidebarThreads: {
         status: "ready",

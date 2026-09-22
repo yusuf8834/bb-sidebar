@@ -310,11 +310,11 @@ export function SidebarSettings() {
           </p>
         </SettingRow>
         <SettingRow
-          title="Show running children"
-          description="Keep running child threads visible when their child section is collapsed."
+          title="Show children that need attention"
+          description="Keep failed, waiting, unread, and running child threads visible when their child section is collapsed. Read and idle children stay folded."
         >
           <Switch
-            label="Show running children"
+            label="Show children that need attention"
             checked={draft.showRunningChildrenWhenCollapsed}
             onChange={(checked) =>
               update("showRunningChildrenWhenCollapsed", checked)

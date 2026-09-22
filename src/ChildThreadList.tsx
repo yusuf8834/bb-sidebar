@@ -19,10 +19,10 @@ import { ThreadDetailsTooltip } from "./ThreadDetailsTooltip";
 import { OpenPortsIndicator } from "./OpenPorts";
 import {
   childStatusIndicator,
+  childStatusKind,
   childStatusPhrase,
   childStatusSummary,
   childSubtree,
-  isWorkingIndicator,
   type ChildStatusKind,
 } from "./child-status";
 
@@ -85,8 +85,15 @@ export function activeChildThreads(
   );
 }
 
-export function isChildRunning(thread: PluginSidebarThread): boolean {
-  return isWorkingIndicator(thread.indicator);
+/**
+ * Whether a child earns a row while its section is collapsed: anything with
+ * a status to report (failed, waiting on the user, finished but unread, or
+ * still working). Read and idle children fold away; so does any indicator bb
+ * ships later, until it is given a kind. This is the same set the collapsed
+ * badge counts, so the rows and the badge never disagree.
+ */
+export function childNeedsAttention(thread: PluginSidebarThread): boolean {
+  return childStatusKind(thread) !== null;
 }
 
 /** Children retained while collapsed, including paths to visible grandchildren. */
@@ -94,7 +101,7 @@ export function collapsedChildThreads(
   threads: readonly PluginSidebarThread[],
   childrenByParent: ReadonlyMap<string, readonly PluginSidebarThread[]>,
   activeThreadId: string | null | undefined,
-  showRunningChildren: boolean,
+  showAttentionChildren: boolean,
 ): PluginSidebarThread[] {
   return threads.filter((child) => {
     if (child.isArchived) return false;
@@ -102,11 +109,11 @@ export function collapsedChildThreads(
     return (
       child.id === activeThreadId ||
       grandchildren.some((grandchild) => grandchild.id === activeThreadId) ||
-      (showRunningChildren &&
-        (isChildRunning(child) ||
+      (showAttentionChildren &&
+        (childNeedsAttention(child) ||
           grandchildren.some(
             (grandchild) =>
-              !grandchild.isArchived && isChildRunning(grandchild),
+              !grandchild.isArchived && childNeedsAttention(grandchild),
           )))
     );
   });
@@ -242,6 +249,11 @@ export function ChildThreadList({
   activeThreadId?: string | null;
   /** When false, only the active child (or the child of the active grandchild) shows. */
   expanded?: boolean;
+  /**
+   * While collapsed, also keep children with something to report: failed,
+   * waiting on the user, unread, or working. The setting keeps its original
+   * key; only its wording changed when it grew beyond running children.
+   */
   showRunningChildrenWhenCollapsed?: boolean;
   onOpenThread: (threadId: string) => void;
 }) {
@@ -296,7 +308,7 @@ export function ChildThreadList({
               (grandchild) =>
                 grandchild.id === activeThreadId ||
                 (showRunningChildrenWhenCollapsed &&
-                  isChildRunning(grandchild)),
+                  childNeedsAttention(grandchild)),
             );
         const grandchildrenId = `${disclosureId}-${child.id}`;
         return (
