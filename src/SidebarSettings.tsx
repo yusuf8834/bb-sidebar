@@ -311,7 +311,7 @@ export function SidebarSettings() {
         </SettingRow>
         <SettingRow
           title="Show children that need attention"
-          description="Keep failed, waiting, unread, and running child threads visible when their child section is collapsed. Read and idle children stay folded."
+          description="Keep child threads that report a status visible when their child section is collapsed. Idle children stay folded."
         >
           <Switch
             label="Show children that need attention"
