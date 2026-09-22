@@ -478,13 +478,13 @@ function ChildThreadRow({
               // Sized to the label rather than fixed at the 112px "Monitoring
               // · 27m" needs: a child row also pays an indent rail and a
               // grandchild disclosure, so at a 280px sidebar a fixed slot left
-              // the title about six characters. "Draft" and "31m" now hand
-              // their share back. The floor keeps a child's status column
-              // roughly where its parent card's sits, and the ceiling keeps
-              // the longest status intact; the cost is that the title's
-              // truncation point shifts as a duration gains a digit.
+              // the title about six characters. No floor either: the label is
+              // right-aligned, so a floor under "8h" is only empty space the
+              // title could use. The ceiling keeps the longest status intact;
+              // the cost is that the title's truncation point shifts with the
+              // length of that row's status.
               <span
-                className={cn(STATUS_SLOT_CLASS, "w-auto min-w-20 max-w-28 pr-2")}
+                className={cn(STATUS_SLOT_CLASS, "w-auto max-w-28 pr-2")}
               >
                 <StatusOrTime thread={thread} now={effectiveNow} />
               </span>

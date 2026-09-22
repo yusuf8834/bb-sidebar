@@ -1471,15 +1471,18 @@ describe("ThreadInbox", () => {
       }).parentElement?.className,
     ).not.toContain("--bb-sidebar-needs-you-accent");
 
-    // The slot takes the width its label needs, between the parent card's 80px
-    // and the 112px the longest status wants, so a short status hands the rest
-    // back to a child title that a narrow sidebar has little room for.
+    // The slot takes exactly the width its label needs, up to the 112px the
+    // longest status wants, so a short status or age hands the rest back to a
+    // child title that a narrow sidebar has little room for.
     const monitoringSlot = within(childList).getByText("Monitoring · 5m")
       .parentElement!;
     expect(monitoringSlot.className).toContain("w-auto");
-    expect(monitoringSlot.className).toContain("min-w-20");
     expect(monitoringSlot.className).toContain("max-w-28");
     expect(monitoringSlot.className.split(" ")).not.toContain("w-28");
+    expect(monitoringSlot.className.split(" ")).not.toContain("min-w-20");
+    const idleSlot = within(childList).getByText("31m").parentElement!;
+    expect(idleSlot.className).toContain("w-auto");
+    expect(idleSlot.className.split(" ")).not.toContain("min-w-20");
 
     fireEvent.click(
       within(childList).getByRole("button", {
