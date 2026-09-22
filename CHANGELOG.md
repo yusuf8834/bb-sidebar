@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## [0.2.20] - 2026-09-21
+
+### Added
+
+- Show every child-thread status in expanded rows: Failed, Needs you, Unread, Working or Monitoring with duration, Planning, Workflow, Agent, Command, Goal, Draft, and Drafting, using the same vocabulary as thread cards.
+- Keep every child that reports a status visible while its section is collapsed, not only running ones. The "Show running children" setting is now "Show children that need attention"; its saved value carries over.
+
+### Improved
+
+- Child-thread rows size the status column to its label, so short statuses and ages leave more room for the title in a narrow sidebar.
+- Search results give the title priority over a long project name in a narrow sidebar.
+- The dark needs-you child row has a stronger tint and a leading amber edge.
+
+### Fixed
+
+- Status colours follow bb's theme instead of the OS colour scheme, so a dark bb on a light OS (or the reverse) no longer shows low-contrast statuses or a light needs-you band.
+- On touch screens, Failed, Unread, and idle ages stay visible beside the snooze and settle actions instead of being hidden behind them.
+- A woken thread shows "Woke" beside its current status in cards and search results instead of replacing it.
+
 ## [0.2.19] - 2026-09-19
 
 ### Added
