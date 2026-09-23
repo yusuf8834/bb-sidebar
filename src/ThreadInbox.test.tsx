@@ -5463,17 +5463,56 @@ describe("row context menu", () => {
     ));
   });
 
-  it("routes deletion through the host's confirmation", async () => {
-    const rendered = render([thread({ id: "thr_del", title: "Delete me" })]);
+  it("confirms deletion with the thread title and project before deleting", async () => {
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "thr_del", title: "Delete me" }),
+          thread({ id: "thr_child", title: "Child", parentThreadId: "thr_del" }),
+          thread({ id: "thr_grandchild", title: "Grandchild", parentThreadId: "thr_child" }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      providers: { status: "ready", providers: defaultProviders },
+      rpc: { listLifecycle: () => ({ rows: [] }), deleteThread: () => ({ ok: true }) },
+    });
     fireEvent.contextMenu(await screen.findByText("Delete me"));
     const menu = await screen.findByRole("menu", { name: "Thread actions" });
     fireEvent.click(within(menu).getByText("Delete"));
+
+    const dialog = await screen.findByRole("dialog", { name: "Delete thread?" });
+    expect(within(dialog).getByText("Delete me")).toBeTruthy();
+    expect(within(dialog).getByText("bb")).toBeTruthy();
+    expect(within(dialog).getByText(/its 2 child threads/)).toBeTruthy();
+    expect(rendered.rpcCalls.filter((call) => call.method === "deleteThread")).toEqual([]);
+    expect(rendered.sidebarActionCalls).not.toContainEqual(
+      expect.objectContaining({ method: "requestDelete" }),
+    );
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete thread" }));
     await waitFor(() =>
-      expect(rendered.sidebarActionCalls).toContainEqual({
-        method: "requestDelete",
-        threadId: "thr_del",
+      expect(rendered.rpcCalls).toContainEqual({
+        method: "deleteThread",
+        input: { threadId: "thr_del", childThreadsConfirmed: true },
       }),
     );
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Delete thread?" })).toBeNull(),
+    );
+  });
+
+  it("cancelling the delete confirmation deletes nothing", async () => {
+    const rendered = render([thread({ id: "thr_keep", title: "Keep me" })]);
+    fireEvent.contextMenu(await screen.findByText("Keep me"));
+    const menu = await screen.findByRole("menu", { name: "Thread actions" });
+    fireEvent.click(within(menu).getByText("Delete"));
+    const dialog = await screen.findByRole("dialog", { name: "Delete thread?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Delete thread?" })).toBeNull(),
+    );
+    expect(rendered.rpcCalls.filter((call) => call.method === "deleteThread")).toEqual([]);
   });
 
   it("uses custom snooze times from plugin settings", async () => {

@@ -776,6 +776,46 @@ describe("project icons", () => {
     ]);
   });
 
+  it("does not cache a failed icon read as a missing icon", async () => {
+    const project = standardProject();
+    let hostReady = false;
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "bb-sidebar",
+      sdk: {
+        projects: {
+          get: async () => project,
+          fileContent: async ({ path }) => {
+            if (!hostReady) throw new Error("Host host_1 is not connected");
+            if (path !== "icon.svg") throw new Error("not found");
+            return {
+              content: '<svg xmlns="http://www.w3.org/2000/svg"/>',
+              contentEncoding: "utf8" as const,
+              mimeType: "image/svg+xml",
+              sizeBytes: 46,
+            };
+          },
+        },
+      },
+    });
+    await plugin(bb);
+    disposers.push(() => harness.lifecycle.dispose());
+
+    const failed = await harness.behavior.fetchHttp(
+      "GET",
+      "/project-icon?projectId=proj_1",
+    );
+    expect(failed.status).toBe(503);
+    expect(failed.headers.get("cache-control")).toBe("no-store");
+
+    hostReady = true;
+    const recovered = await harness.behavior.fetchHttp(
+      "GET",
+      "/project-icon?projectId=proj_1",
+    );
+    expect(recovered.status).toBe(200);
+    await expect(recovered.text()).resolves.toContain("<svg");
+  });
+
   it("does not reuse or cache an icon resolution that was invalidated", async () => {
     const project = standardProject();
     let oldReadStarted!: () => void;

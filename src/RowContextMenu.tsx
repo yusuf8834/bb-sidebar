@@ -1,4 +1,4 @@
-import { useRef, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import {
   experimental_useSidebarThreadActions as useSidebarThreadActions,
@@ -9,6 +9,7 @@ import {
 import { toast } from "sonner";
 import type { bbSidebarRpcContract } from "./server";
 import { ParentThreadMenu } from "./ParentThreadMenu";
+import { DeleteThreadDialog } from "./DeleteThreadDialog";
 import { Icon, type IconName } from "./components/Icon";
 import { cn } from "./lib/utils";
 import { usePortalScopeProps } from "./lib/portal-scope";
@@ -26,9 +27,9 @@ import { beginTitleGeneration, finishTitleGeneration, useTitleGenerating } from 
  *
  * The plugin API ships no menu component on purpose, so a replaced sidebar
  * owns this surface. Native actions use
- * `experimental_useSidebarThreadActions`, and the destructive one is
- * `requestDelete`, which opens BB's confirmation rather than deleting a
- * subtree silently.
+ * `experimental_useSidebarThreadActions`. The destructive one goes through
+ * this sidebar's own confirmation, which names the thread and project, and
+ * then the plugin's `deleteThread` rpc; nothing deletes a subtree silently.
  */
 export function RowContextMenu({
   thread,
@@ -64,6 +65,7 @@ export function RowContextMenu({
   const rpc = useRpc<typeof bbSidebarRpcContract>();
   const regenerating = useTitleGenerating(thread.id);
   const renameAfterClose = useRef(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   // Archive takes the children with it, and bb leaves every idle one's agent
   // session loaded. Release them alongside the archive. Working children are
   // skipped, so this never interrupts a turn archive itself would not.
@@ -110,6 +112,7 @@ export function RowContextMenu({
   };
 
   return (
+    <>
     <ProjectActions project={project}>
     {({ items: projectItems, onOpenChange, onCloseAutoFocus }) => (
     <ContextMenu.Root>
@@ -120,6 +123,8 @@ export function RowContextMenu({
           aria-label="Thread actions"
           onCloseAutoFocus={(event) => {
             onCloseAutoFocus?.(event);
+            // The delete dialog takes focus next; do not pull it back to the row.
+            if (confirmingDelete) event.preventDefault();
             if (!renameAfterClose.current) return;
             renameAfterClose.current = false;
             // Hand focus to the editor after the menu releases its focus scope.
@@ -182,7 +187,7 @@ export function RowContextMenu({
           >
             Archive
           </Item>
-          <Item destructive onSelect={() => actions.requestDelete(thread.id)}>
+          <Item destructive onSelect={() => setConfirmingDelete(true)}>
             Delete
           </Item>
         </ContextMenu.Content>
@@ -190,6 +195,8 @@ export function RowContextMenu({
     </ContextMenu.Root>
     )}
     </ProjectActions>
+    <DeleteThreadDialog thread={thread} open={confirmingDelete} onOpenChange={setConfirmingDelete} />
+    </>
   );
 }
 

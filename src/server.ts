@@ -202,6 +202,10 @@ export const bbSidebarRpcContract = defineRpcContract({
     input: threadIdSchema.extend({ parentThreadId: z.string().trim().min(1).nullable() }).strict(),
     output: z.object({ ok: z.boolean() }),
   },
+  deleteThread: {
+    input: threadIdSchema.extend({ childThreadsConfirmed: z.boolean() }).strict(),
+    output: z.object({ ok: z.boolean() }),
+  },
   regenerateTitle: {
     input: threadIdSchema.strict(),
     output: z.object({ title: z.string().min(1).max(100) }).strict(),
@@ -415,6 +419,23 @@ const PROJECT_ICON_SOURCE_FILES = [
 const PROJECT_ICON_MAX_BYTES = 1_000_000;
 const PROJECT_ICON_CACHE_MS = 5 * 60_000;
 const PROJECT_ICON_MISS_CACHE_MS = 30_000;
+
+// Only a file that does not exist is a real miss. Any other read failure, such
+// as a host that is still connecting, must not be cached as "no icon".
+function isMissingFileError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const { status, code, message } = error as {
+    status?: unknown;
+    code?: unknown;
+    message?: unknown;
+  };
+  return (
+    status === 404 ||
+    code === "ENOENT" ||
+    (typeof message === "string" &&
+      /ENOENT|not found|does not exist/i.test(message))
+  );
+}
 
 function iconMimeType(path: string, reported: string): string {
   const lower = path.toLowerCase();
@@ -638,8 +659,9 @@ export default async function plugin(bb: BbPluginApi) {
         mimeType: iconMimeType(normalized, file.mimeType),
         path: normalized,
       };
-    } catch {
-      return null;
+    } catch (error) {
+      if (isMissingFileError(error)) return null;
+      throw error;
     }
   };
 
@@ -672,8 +694,14 @@ export default async function plugin(bb: BbPluginApi) {
     candidates.push(...PROJECT_ICON_CANDIDATES);
 
     let icon: ResolvedProjectIcon | null = null;
+    let unavailable = false;
     for (const candidate of new Set(candidates)) {
-      icon = await tryProjectIcon(projectId, environmentId, candidate);
+      try {
+        icon = await tryProjectIcon(projectId, environmentId, candidate);
+      } catch {
+        unavailable = true;
+        continue;
+      }
       if (icon) break;
     }
 
@@ -698,10 +726,14 @@ export default async function plugin(bb: BbPluginApi) {
             if (icon) break;
           }
           if (icon) break;
-        } catch {
+        } catch (error) {
           // Each source file is optional.
+          if (!isMissingFileError(error)) unavailable = true;
         }
       }
+    }
+    if (!icon && unavailable) {
+      throw new Error(`Project icon files for ${projectId} could not be read`);
     }
 
     if (projectIconGeneration(projectId) === generation) {
@@ -743,7 +775,12 @@ export default async function plugin(bb: BbPluginApi) {
     const projectId = context.req.query("projectId")?.trim();
     const environmentId = context.req.query("environmentId")?.trim() || null;
     if (!projectId) return context.text("Missing projectId", 400);
-    const icon = await resolveProjectIcon(projectId, environmentId);
+    let icon: ResolvedProjectIcon | null;
+    try {
+      icon = await resolveProjectIcon(projectId, environmentId);
+    } catch {
+      return context.body(null, 503, { "cache-control": "no-store" });
+    }
     if (!icon) return context.body(null, 404, { "cache-control": "no-store" });
     const body =
       icon.contentEncoding === "base64"
@@ -1130,6 +1167,13 @@ export default async function plugin(bb: BbPluginApi) {
     async setThreadParent({ threadId, parentThreadId }) {
       // BB validates parent relationships, including cycles.
       await bb.sdk.threads.update({ threadId, parentThreadId });
+      return { ok: true };
+    },
+    async deleteThread({ threadId, childThreadsConfirmed }) {
+      // The sidebar shows its own confirmation naming the thread and project,
+      // so bb's generic one is skipped. Deletion is recursive; bb refuses it
+      // unless the caller confirmed the children too.
+      await bb.sdk.threads.delete({ threadId, childThreadsConfirmed });
       return { ok: true };
     },
     regenerateTitle: ({ threadId }) => regenerateTitle(threadId),
