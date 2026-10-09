@@ -35,6 +35,7 @@ export interface SidebarSettingsValues {
   /** Experimental: keep the shelves below Active docked to the bottom. */
   dockShelves: boolean;
   projectColorsEnabled: boolean;
+  /** Where project stripes appear; enabled project names are always colored. */
   projectColorDisplay: ProjectColorDisplay;
   archivedShelfEnabled: boolean;
 }

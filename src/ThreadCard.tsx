@@ -204,8 +204,8 @@ export function ThreadCard({
     !isWoke &&
     isWorkingTree(thread, childThreads, childrenByParent);
   const compact = isRenaming ? compactAtRenameStart.current : naturalCompact;
-  const colorView = compact ? "collapsed" : "full";
-  const projectColor = useProjectColor(thread.projectId, colorView);
+  const stripeView = compact ? "collapsed" : "full";
+  const projectColor = useProjectColor(thread.projectId);
   const changeRenaming = (editing: boolean) => {
     if (editing) compactAtRenameStart.current = compact;
     setIsRenaming(editing);
@@ -314,7 +314,7 @@ export function ThreadCard({
             {isSettling ? (
               <span aria-hidden="true" className="bb-sidebar-settle-sweep" />
             ) : null}
-            {showProject && projectName ? <ProjectStripe projectId={thread.projectId} colorView={colorView} /> : null}
+            {showProject && projectName ? <ProjectStripe projectId={thread.projectId} view={stripeView} /> : null}
             <ThreadDetailsTooltip thread={thread} disabled={isRenaming || !!reorder?.isDragging}>
               <a
                 // Both attributes, or bb's nine thread shortcuts stop finding rows.
@@ -365,7 +365,7 @@ export function ThreadCard({
                 >
                   {showProject && projectName && !isRenaming ? (
                     <>
-                      <ProjectFavicon projectId={thread.projectId} colorView={colorView} src={projectIconUrl} name={projectName} className="size-3" />
+                      <ProjectFavicon projectId={thread.projectId} src={projectIconUrl} name={projectName} className="size-3" />
                       <span style={projectColor} className={cn("max-w-[40%] shrink truncate", projectColor ? "bb-sidebar-project-name" : "text-muted-foreground/70")}>
                         {projectName}
                       </span>
@@ -421,7 +421,7 @@ export function ThreadCard({
                   className="flex min-w-0 flex-1 items-center gap-1.5 text-2xs font-medium text-muted-foreground"
                 >
                   {projectName ? (
-                    <ProjectFavicon projectId={thread.projectId} colorView={colorView} src={projectIconUrl} name={projectName} className="size-3" />
+                    <ProjectFavicon projectId={thread.projectId} src={projectIconUrl} name={projectName} className="size-3" />
                   ) : null}
                   <span
                     style={projectColor}

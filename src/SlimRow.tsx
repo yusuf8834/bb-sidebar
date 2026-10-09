@@ -60,7 +60,7 @@ export function SlimRow({
   onSnooze: (snoozedUntil: number) => void;
 }) {
   const actions = useSidebarThreadActions();
-  const projectColor = useProjectColor(thread.projectId, "collapsed");
+  const projectColor = useProjectColor(thread.projectId);
   const jumpHint = useJumpHint(thread.id);
   const title = threadDisplayTitle(thread);
   const rowLabel = projectName ? `${projectName} · ${title}` : title;
@@ -98,7 +98,7 @@ export function SlimRow({
             isActive ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60",
           )}
         >
-          {projectName ? <ProjectStripe projectId={thread.projectId} colorView="collapsed" /> : null}
+          {projectName ? <ProjectStripe projectId={thread.projectId} view="collapsed" /> : null}
           <ThreadDetailsTooltip thread={thread} disabled={isRenaming}>
             <a
               data-sidebar-thread-shortcut-target=""
@@ -130,7 +130,7 @@ export function SlimRow({
           >
             {projectName && !isRenaming ? (
               <>
-                <ProjectFavicon projectId={thread.projectId} colorView="collapsed" src={projectIconUrl} name={projectName} className="size-3" />
+                <ProjectFavicon projectId={thread.projectId} src={projectIconUrl} name={projectName} className="size-3" />
                 <span
                   style={projectColor}
                   className={cn(

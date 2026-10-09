@@ -606,7 +606,7 @@ describe("sidebar settings", () => {
     expect(group.querySelectorAll("[data-project-stripe]")).toHaveLength(1);
   });
 
-  it("applies color display choices to full cards, compact rows, shelves, and project groups", async () => {
+  it("limits stripes by display mode while keeping all project names colored", async () => {
     localStorage.setItem("bb-sidebar:active-sort:v1", "project");
     localStorage.setItem("bb-sidebar:shelf-expansion:v1", JSON.stringify({ settled: true, archived: true }));
     let settings = {
@@ -638,10 +638,10 @@ describe("sidebar settings", () => {
     const group = await screen.findByRole("region", { name: "group project" });
     await screen.findByText("Archived row");
     await screen.findByText("Settled row");
-    const assertColor = (element: Element, expected: boolean) => {
-      expect(element.querySelectorAll("[data-project-stripe]")).toHaveLength(expected ? 1 : 0);
-      expect(element.querySelector(".bb-sidebar-project-name") !== null).toBe(expected);
-      expect(element.querySelector(".bb-sidebar-project-monogram") !== null).toBe(expected);
+    const assertColor = (element: Element, showStripe: boolean) => {
+      expect(element.querySelectorAll("[data-project-stripe]")).toHaveLength(showStripe ? 1 : 0);
+      expect(element.querySelector(".bb-sidebar-project-name")).not.toBeNull();
+      expect(element.querySelector(".bb-sidebar-project-monogram")).not.toBeNull();
     };
     const row = (title: string) => screen.getByText(title).closest("li")!;
     await waitFor(() => expect(row("Compact card").querySelector(".h-8")).not.toBeNull());
@@ -664,7 +664,14 @@ describe("sidebar settings", () => {
     fireEvent.click(await screen.findByRole("option", { name: "Manual order" }));
     await waitFor(() => expect(screen.queryByRole("region", { name: "group project" })).toBeNull());
     expect(document.querySelector("[data-project-stripe]")).toBeNull();
-    expect(document.querySelector(".bb-sidebar-project-name")).toBeNull();
+    for (const title of ["First grouped", "Second grouped", "Full card", "Compact card", "Settled row", "Archived row"]) {
+      assertColor(row(title), false);
+    }
+    settings = { ...settings, projectColorsEnabled: false };
+    await rendered.emitRealtime("sidebar-settings", {});
+    await waitFor(() => expect(document.querySelector(".bb-sidebar-project-name")).toBeNull());
+    expect(document.querySelector("[data-project-stripe]")).toBeNull();
+    expect(document.querySelector(".bb-sidebar-project-monogram")).toBeNull();
   });
 
   it("saves the opt-in switches and lets users choose and reset a project's color", async () => {
@@ -689,10 +696,10 @@ describe("sidebar settings", () => {
     });
     const toggle = await screen.findByRole("switch", { name: "Project colors" });
     expect(toggle.getAttribute("aria-checked")).toBe("false");
-    expect(screen.queryByRole("combobox", { name: "Show project colors in" })).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "Show project stripes in" })).toBeNull();
     expect(screen.getByRole("switch", { name: "Archived shelf" }).getAttribute("aria-checked")).toBe("false");
     fireEvent.click(toggle);
-    const colorDisplay = screen.getByRole("combobox", { name: "Show project colors in" });
+    const colorDisplay = screen.getByRole("combobox", { name: "Show project stripes in" });
     expect(colorDisplay).toHaveProperty("value", "all");
     expect(within(colorDisplay).getAllByRole("option").map((option) => option.textContent)).toEqual([
       "Full and collapsed mode", "Full mode only", "Grouped projects only",
@@ -701,10 +708,10 @@ describe("sidebar settings", () => {
     fireEvent.click(screen.getByRole("switch", { name: "Archived shelf" }));
     await waitFor(() => expect(saved).toMatchObject({ projectColorsEnabled: true, projectColorDisplay: "grouped", archivedShelfEnabled: true }));
     fireEvent.click(toggle);
-    expect(screen.queryByRole("combobox", { name: "Show project colors in" })).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "Show project stripes in" })).toBeNull();
     await waitFor(() => expect(saved.projectColorsEnabled).toBe(false));
     fireEvent.click(toggle);
-    expect(screen.getByRole("combobox", { name: "Show project colors in" })).toHaveProperty("value", "grouped");
+    expect(screen.getByRole("combobox", { name: "Show project stripes in" })).toHaveProperty("value", "grouped");
     const picker = await screen.findByLabelText("Project color");
     fireEvent.change(picker, { target: { value: "#13579b" } });
     fireEvent.click(screen.getByRole("button", { name: "Save color" }));
@@ -926,7 +933,7 @@ describe("sidebar settings", () => {
     });
 
     expect(screen.queryByText("Loading settings...")).toBeNull();
-    expect(screen.getByRole("combobox", { name: "Show project colors in" })).toHaveProperty("value", "all");
+    expect(screen.getByRole("combobox", { name: "Show project stripes in" })).toHaveProperty("value", "all");
     expect(
       (screen.getByLabelText("Hours before inactive") as HTMLInputElement).value,
     ).toBe("12");

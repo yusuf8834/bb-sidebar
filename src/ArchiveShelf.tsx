@@ -244,7 +244,7 @@ function ArchivedRow({
   onNavigate: () => void;
 }) {
   const actions = useSidebarThreadActions();
-  const projectColor = useProjectColor(thread.projectId, "collapsed");
+  const projectColor = useProjectColor(thread.projectId);
   const rpc = useRpc<typeof bbSidebarRpcContract>();
   const [busy, setBusy] = useState(false);
   const title = threadDisplayTitle(thread);
@@ -275,7 +275,7 @@ function ArchivedRow({
           isActive ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60",
         )}
       >
-        {projectName ? <ProjectStripe projectId={thread.projectId} colorView="collapsed" className="opacity-60" /> : null}
+        {projectName ? <ProjectStripe projectId={thread.projectId} view="collapsed" className="opacity-60" /> : null}
         <a
           href="#"
           title={dates}
@@ -290,7 +290,7 @@ function ArchivedRow({
         <span className="pointer-events-none relative flex min-w-0 flex-1 items-center gap-1 text-muted-foreground/60 group-hover/slim:text-foreground">
           {projectName ? (
             <>
-              <ProjectFavicon projectId={thread.projectId} colorView="collapsed" src={projectIconUrl} name={projectName} className="size-3" />
+              <ProjectFavicon projectId={thread.projectId} src={projectIconUrl} name={projectName} className="size-3" />
               <span style={projectColor} className={cn("max-w-[40%] shrink truncate", projectColor && "bb-sidebar-project-name")}>
                 {projectName}
               </span>

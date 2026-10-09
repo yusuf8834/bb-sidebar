@@ -4,7 +4,7 @@ import {
   projectMonogramColor,
   projectMonogramLetter,
 } from "./project-monogram";
-import { useProjectColor, type ProjectColorView } from "./ProjectColors";
+import { useProjectColor, useProjectStripeColor, type ProjectStripeView } from "./ProjectColors";
 
 // Keyed by the icon route URL. A loaded entry holds the attempt URL that
 // succeeded. A failure is retried with backoff instead of blocking the icon
@@ -40,14 +40,12 @@ export function ProjectMonogram({
   name,
   className,
   projectId,
-  colorView,
 }: {
   name: string;
   className?: string;
   projectId?: string;
-  colorView?: ProjectColorView;
 }) {
-  const color = useProjectColor(projectId, colorView);
+  const color = useProjectColor(projectId);
   return (
     <span
       aria-hidden="true"
@@ -67,8 +65,8 @@ export function ProjectMonogram({
  * one project read as a group even when the project has its own icon. The row
  * must be `relative`.
  */
-export function ProjectStripe({ projectId, className, colorView }: { projectId: string; className?: string; colorView?: ProjectColorView }) {
-  const color = useProjectColor(projectId, colorView);
+export function ProjectStripe({ projectId, className, view }: { projectId: string; className?: string; view?: ProjectStripeView }) {
+  const color = useProjectStripeColor(projectId, view);
   if (!color) return null;
   return (
     <span
@@ -89,7 +87,6 @@ export function ProjectFavicon({
   className,
   fallback,
   projectId,
-  colorView,
 }: {
   src: string | null;
   /** The project's name; without an explicit fallback, draws its letter tile. */
@@ -97,10 +94,9 @@ export function ProjectFavicon({
   className?: string;
   fallback?: ReactNode;
   projectId?: string;
-  colorView?: ProjectColorView;
 }) {
   if (fallback === undefined) {
-    fallback = name ? <ProjectMonogram name={name} projectId={projectId} colorView={colorView} className={className} /> : null;
+    fallback = name ? <ProjectMonogram name={name} projectId={projectId} className={className} /> : null;
   }
   const [, setRenderCount] = useState(0);
   const rerender = () => setRenderCount((count) => count + 1);

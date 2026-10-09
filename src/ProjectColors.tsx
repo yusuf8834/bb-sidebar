@@ -4,7 +4,7 @@ import type { bbSidebarRpcContract } from "./server";
 import { automaticProjectColor, projectColorsById, projectColorStyle, PROJECT_COLORS_CHANNEL } from "./project-colors";
 import type { ProjectColorDisplay } from "./sidebar-settings";
 
-export type ProjectColorView = "full" | "collapsed" | "group-full" | "group-collapsed";
+export type ProjectStripeView = "full" | "collapsed" | "group-full" | "group-collapsed";
 
 export function useProjectColorOverrides(enabled = true) {
   const rpc = useRpc<typeof bbSidebarRpcContract>();
@@ -44,10 +44,17 @@ export function ProjectColorsProvider({ enabled, display, projectIds, children }
   return <ProjectColorsContext.Provider value={value}>{children}</ProjectColorsContext.Provider>;
 }
 
-export function useProjectColor(projectId: string | undefined, view: ProjectColorView = "full") {
+export function useProjectColor(projectId: string | undefined) {
   const context = useContext(ProjectColorsContext);
   if (!context || !projectId) return undefined;
+  return projectColorStyle(context.colors.get(projectId) ?? automaticProjectColor(projectId));
+}
+
+export function useProjectStripeColor(projectId: string, view: ProjectStripeView = "full") {
+  const context = useContext(ProjectColorsContext);
+  const color = useProjectColor(projectId);
+  if (!context) return undefined;
   if (context.display === "full" && (view === "collapsed" || view === "group-collapsed")) return undefined;
   if (context.display === "grouped" && view !== "group-full" && view !== "group-collapsed") return undefined;
-  return projectColorStyle(context.colors.get(projectId) ?? automaticProjectColor(projectId));
+  return color;
 }

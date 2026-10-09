@@ -451,16 +451,16 @@ export function SidebarSettings() {
       <SettingsSection title="Appearance" status={statusFor("Appearance")}>
         <SettingRow
           title="Project colors"
-          description="Color project names and add a stripe to each row, or one continuous stripe for a project group. Choose each project's color below."
+          description="Color project names in every mode. Choose where stripes appear below, and set each project's color under Projects."
           control={<Switch label="Project colors" checked={draft.projectColorsEnabled} onChange={(checked) => update("projectColorsEnabled", checked)} />}
         />
         {draft.projectColorsEnabled ? (
           <SettingRow
-            title="Show colors in"
-            description="Full mode shows cards and expanded project groups. Grouped projects applies only to combined project blocks when sorting by Project."
+            title="Show stripes in"
+            description="Only the stripes follow this choice. Full mode includes cards and expanded project groups. Grouped projects means combined blocks when sorting by Project."
             control={
               <SettingsSelect
-                aria-label="Show project colors in"
+                aria-label="Show project stripes in"
                 value={draft.projectColorDisplay}
                 onChange={(event) => update("projectColorDisplay", event.target.value as ProjectColorDisplay)}
                 className="w-52"
