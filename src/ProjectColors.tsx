@@ -2,6 +2,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
 import type { bbSidebarRpcContract } from "./server";
 import { automaticProjectColor, projectColorsById, projectColorStyle, PROJECT_COLORS_CHANNEL } from "./project-colors";
+import type { ProjectColorDisplay } from "./sidebar-settings";
+
+export type ProjectColorView = "full" | "collapsed" | "group-full" | "group-collapsed";
 
 export function useProjectColorOverrides(enabled = true) {
   const rpc = useRpc<typeof bbSidebarRpcContract>();
@@ -25,19 +28,26 @@ export function useProjectColorOverrides(enabled = true) {
   return { overrides, reload: load };
 }
 
-const ProjectColorsContext = createContext<ReadonlyMap<string, string> | null>(null);
+const ProjectColorsContext = createContext<{
+  colors: ReadonlyMap<string, string>;
+  display: ProjectColorDisplay;
+} | null>(null);
 
-export function ProjectColorsProvider({ enabled, projectIds, children }: {
+export function ProjectColorsProvider({ enabled, display, projectIds, children }: {
   enabled: boolean;
+  display: ProjectColorDisplay;
   projectIds: readonly string[];
   children: ReactNode;
 }) {
   const { overrides } = useProjectColorOverrides(enabled);
-  const colors = useMemo(() => enabled ? projectColorsById(projectIds, overrides) : null, [enabled, projectIds, overrides]);
-  return <ProjectColorsContext.Provider value={colors}>{children}</ProjectColorsContext.Provider>;
+  const value = useMemo(() => enabled ? { colors: projectColorsById(projectIds, overrides), display } : null, [enabled, projectIds, overrides, display]);
+  return <ProjectColorsContext.Provider value={value}>{children}</ProjectColorsContext.Provider>;
 }
 
-export function useProjectColor(projectId: string | undefined) {
-  const colors = useContext(ProjectColorsContext);
-  return colors && projectId ? projectColorStyle(colors.get(projectId) ?? automaticProjectColor(projectId)) : undefined;
+export function useProjectColor(projectId: string | undefined, view: ProjectColorView = "full") {
+  const context = useContext(ProjectColorsContext);
+  if (!context || !projectId) return undefined;
+  if (context.display === "full" && (view === "collapsed" || view === "group-collapsed")) return undefined;
+  if (context.display === "grouped" && view !== "group-full" && view !== "group-collapsed") return undefined;
+  return projectColorStyle(context.colors.get(projectId) ?? automaticProjectColor(projectId));
 }

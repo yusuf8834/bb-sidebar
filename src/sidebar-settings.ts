@@ -9,6 +9,9 @@ export type ChildThreadSortDirection =
 export const CHILD_THREAD_ICON_STYLES = ["disc", "provider"] as const;
 export type ChildThreadIconStyle = (typeof CHILD_THREAD_ICON_STYLES)[number];
 
+export const PROJECT_COLOR_DISPLAYS = ["all", "full", "grouped"] as const;
+export type ProjectColorDisplay = (typeof PROJECT_COLOR_DISPLAYS)[number];
+
 export interface ChildThreadSort {
   field: ChildThreadSortField;
   direction: ChildThreadSortDirection;
@@ -32,6 +35,7 @@ export interface SidebarSettingsValues {
   /** Experimental: keep the shelves below Active docked to the bottom. */
   dockShelves: boolean;
   projectColorsEnabled: boolean;
+  projectColorDisplay: ProjectColorDisplay;
   archivedShelfEnabled: boolean;
 }
 
@@ -53,6 +57,7 @@ export const DEFAULT_SIDEBAR_SETTINGS: SidebarSettingsValues = {
   workingShelf: false,
   dockShelves: false,
   projectColorsEnabled: false,
+  projectColorDisplay: "all",
   archivedShelfEnabled: false,
 };
 
@@ -78,6 +83,10 @@ function oneOf<const T extends string>(
   fallback: T,
 ): T {
   return allowed.includes(value as T) ? (value as T) : fallback;
+}
+
+export function projectColorDisplayOf(value: unknown): ProjectColorDisplay {
+  return oneOf(PROJECT_COLOR_DISPLAYS, value, DEFAULT_SIDEBAR_SETTINGS.projectColorDisplay);
 }
 
 /**
@@ -136,6 +145,7 @@ function readStoredSidebarSettings(): SidebarSettingsValues | null {
       workingShelf: value.workingShelf === true,
       dockShelves: value.dockShelves === true,
       projectColorsEnabled: value.projectColorsEnabled === true,
+      projectColorDisplay: projectColorDisplayOf(value.projectColorDisplay),
       archivedShelfEnabled: value.archivedShelfEnabled === true,
     } as SidebarSettingsValues;
   } catch {

@@ -8,6 +8,7 @@
 - Each Settled row has an Archive button on hover.
 - Optional Archived shelf, disabled by default. Enable it in Settings > Shelves to browse archived threads and restore them.
 - Optional project colors, disabled by default. Each project gets an automatic color based on its ID, with a custom color picker and reset control in Settings > Projects. Project groups share one continuous stripe; ungrouped rows have their own stripe.
+- While project colors are enabled, choose whether to show them in full and collapsed mode, full mode only, or grouped projects only when sorting by Project.
 - The Archived shelf has a filter field (title or project name), laid out like a row with a search icon in the icon column, a clear button and Escape to clear, and shows how long ago each thread was archived; hovering a row shows when it started and when it was archived.
 
 ### Changed

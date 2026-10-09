@@ -9,11 +9,13 @@ import {
   CHILD_THREAD_SORT_DIRECTIONS,
   CHILD_THREAD_SORT_FIELDS,
   DEFAULT_SIDEBAR_SETTINGS,
+  PROJECT_COLOR_DISPLAYS,
   SIDEBAR_SETTINGS_CHANNEL,
   type ChildThreadIconStyle,
   type ChildThreadSortDirection,
   type ChildThreadSortField,
   type SidebarSettingsValues,
+  type ProjectColorDisplay,
 } from "./sidebar-settings";
 import { ProjectSettings } from "./ProjectSettings";
 import { ArchiveSettings } from "./ArchiveShelf";
@@ -52,6 +54,12 @@ const CHILD_SORT_DIRECTION_LABELS: Record<ChildThreadSortDirection, string> = {
   descending: "Newest first",
 };
 
+const PROJECT_COLOR_DISPLAY_LABELS: Record<ProjectColorDisplay, string> = {
+  all: "Full and collapsed mode",
+  full: "Full mode only",
+  grouped: "Grouped projects only",
+};
+
 /** Long enough to finish typing a shortcut, short enough to feel instant. */
 const SAVE_DELAY_MS = 500;
 /** How long "Saved" stays beside a section before it fades. */
@@ -74,6 +82,7 @@ const SECTION_BY_SETTING: Record<keyof SidebarSettingsValues, string> = {
   dockShelves: "Experimental",
   archivedShelfEnabled: "Shelves",
   projectColorsEnabled: "Appearance",
+  projectColorDisplay: "Appearance",
 };
 
 /**
@@ -445,6 +454,24 @@ export function SidebarSettings() {
           description="Color project names and add a stripe to each row, or one continuous stripe for a project group. Choose each project's color below."
           control={<Switch label="Project colors" checked={draft.projectColorsEnabled} onChange={(checked) => update("projectColorsEnabled", checked)} />}
         />
+        {draft.projectColorsEnabled ? (
+          <SettingRow
+            title="Show colors in"
+            description="Full mode shows cards and expanded project groups. Grouped projects applies only to combined project blocks when sorting by Project."
+            control={
+              <SettingsSelect
+                aria-label="Show project colors in"
+                value={draft.projectColorDisplay}
+                onChange={(event) => update("projectColorDisplay", event.target.value as ProjectColorDisplay)}
+                className="w-52"
+              >
+                {PROJECT_COLOR_DISPLAYS.map((display) => (
+                  <option key={display} value={display}>{PROJECT_COLOR_DISPLAY_LABELS[display]}</option>
+                ))}
+              </SettingsSelect>
+            }
+          />
+        ) : null}
       </SettingsSection>
 
       <ProjectSettings />

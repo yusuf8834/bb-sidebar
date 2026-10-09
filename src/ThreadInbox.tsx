@@ -1502,7 +1502,11 @@ export function ThreadInbox({
   );
 
   return (
-    <ProjectColorsProvider enabled={sidebarSettings?.projectColorsEnabled === true} projectIds={projects.map((project) => project.id)}>
+    <ProjectColorsProvider
+      enabled={sidebarSettings?.projectColorsEnabled === true}
+      display={sidebarSettings?.projectColorDisplay ?? DEFAULT_SIDEBAR_SETTINGS.projectColorDisplay}
+      projectIds={projects.map((project) => project.id)}
+    >
     <WorkingSinceContext.Provider value={workingSince}>
     <ChildThreadDisplayContext.Provider value={childDisplay}>
     <OpenPortsProvider>
@@ -2233,7 +2237,8 @@ function ActiveProjectGroup({
   reorder: ThreadReorderControls;
   children: React.ReactNode;
 }) {
-  const projectColor = useProjectColor(projectId);
+  const colorView = expanded ? "group-full" : "group-collapsed";
+  const projectColor = useProjectColor(projectId, colorView);
   const attachListAutoAnimateRef = useListAutoAnimate<HTMLUListElement>();
   return (
     // One item of the top-level list, so the whole project is a single drop
@@ -2247,7 +2252,7 @@ function ActiveProjectGroup({
       )}
     >
       <section data-drag-visual="" className="relative" aria-label={`${projectName} project`}>
-        <ProjectStripe projectId={projectId} className="z-10" />
+        <ProjectStripe projectId={projectId} colorView={colorView} className="z-10" />
         <button
           type="button"
           data-reorder-key={unitKey}
@@ -2265,7 +2270,7 @@ function ActiveProjectGroup({
             !reorder.disabled && "cursor-grab active:cursor-grabbing",
           )}
         >
-          <ProjectFavicon projectId={projectId} src={projectIconUrl} name={projectName} className="size-3" />
+          <ProjectFavicon projectId={projectId} colorView={colorView} src={projectIconUrl} name={projectName} className="size-3" />
           <span style={projectColor} className={cn("min-w-0 truncate text-2xs font-medium", projectColor ? "bb-sidebar-project-name" : "text-muted-foreground")}>
             {projectName}
           </span>

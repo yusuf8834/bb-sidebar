@@ -36,6 +36,8 @@ import {
   CHILD_THREAD_SORT_FIELDS,
   childThreadSettingsOf,
   DEFAULT_SIDEBAR_SETTINGS,
+  PROJECT_COLOR_DISPLAYS,
+  projectColorDisplayOf,
   SIDEBAR_SETTINGS_CHANNEL,
   type SidebarSettingsValues,
 } from "./sidebar-settings";
@@ -110,6 +112,7 @@ const migrations = [
      project_id TEXT PRIMARY KEY,
      color TEXT NOT NULL
    )`,
+  `ALTER TABLE sidebar_settings ADD COLUMN project_color_display TEXT NOT NULL DEFAULT 'all'`,
 ];
 
 export interface StoredLifecycleRow {
@@ -145,6 +148,7 @@ interface SidebarSettingsDbRow {
   working_shelf: number;
   dock_shelves: number;
   project_colors_enabled: number;
+  project_color_display: string;
   archived_shelf_enabled: number;
 }
 
@@ -228,6 +232,7 @@ const sidebarSettingsSchema = z
     workingShelf: z.boolean(),
     dockShelves: z.boolean(),
     projectColorsEnabled: z.boolean(),
+    projectColorDisplay: z.enum(PROJECT_COLOR_DISPLAYS),
     archivedShelfEnabled: z.boolean(),
   })
   .strict();
@@ -329,6 +334,7 @@ export const bbSidebarRpcContract = defineRpcContract({
       workingShelf: true,
       dockShelves: true,
       projectColorsEnabled: true,
+      projectColorDisplay: true,
       archivedShelfEnabled: true,
     }),
     output: sidebarSettingsSchema,
@@ -582,7 +588,7 @@ export default async function plugin(bb: BbPluginApi) {
                 auto_settle_after_days, auto_settle_on_merge,
                 child_sort_field, child_sort_direction, child_icon_style,
                 compact_working_threads, working_shelf, dock_shelves,
-                project_colors_enabled, archived_shelf_enabled
+                project_colors_enabled, archived_shelf_enabled, project_color_display
            FROM sidebar_settings
           WHERE id = 1`,
       )
@@ -606,6 +612,7 @@ export default async function plugin(bb: BbPluginApi) {
           workingShelf: row.working_shelf === 1,
           dockShelves: row.dock_shelves === 1,
           projectColorsEnabled: row.project_colors_enabled === 1,
+          projectColorDisplay: projectColorDisplayOf(row.project_color_display),
           archivedShelfEnabled: row.archived_shelf_enabled === 1,
         }
       : { ...DEFAULT_SIDEBAR_SETTINGS };
@@ -619,8 +626,8 @@ export default async function plugin(bb: BbPluginApi) {
          auto_settle_after_days, auto_settle_on_merge,
          child_sort_field, child_sort_direction, child_icon_style,
          compact_working_threads, working_shelf, dock_shelves,
-         project_colors_enabled, archived_shelf_enabled
-       ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         project_colors_enabled, archived_shelf_enabled, project_color_display
+       ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          snooze_presets = excluded.snooze_presets,
          inactive_threads_enabled = excluded.inactive_threads_enabled,
@@ -637,7 +644,8 @@ export default async function plugin(bb: BbPluginApi) {
          working_shelf = excluded.working_shelf,
          dock_shelves = excluded.dock_shelves,
          project_colors_enabled = excluded.project_colors_enabled,
-         archived_shelf_enabled = excluded.archived_shelf_enabled`,
+         archived_shelf_enabled = excluded.archived_shelf_enabled,
+         project_color_display = excluded.project_color_display`,
     ).run(
       values.snoozePresets,
       values.inactiveThreadsEnabled ? 1 : 0,
@@ -654,6 +662,7 @@ export default async function plugin(bb: BbPluginApi) {
       values.dockShelves ? 1 : 0,
       values.projectColorsEnabled ? 1 : 0,
       values.archivedShelfEnabled ? 1 : 0,
+      values.projectColorDisplay,
     );
   };
 
@@ -711,6 +720,7 @@ export default async function plugin(bb: BbPluginApi) {
         workingShelf: DEFAULT_SIDEBAR_SETTINGS.workingShelf,
         dockShelves: DEFAULT_SIDEBAR_SETTINGS.dockShelves,
         projectColorsEnabled: false,
+        projectColorDisplay: DEFAULT_SIDEBAR_SETTINGS.projectColorDisplay,
         archivedShelfEnabled: false,
       });
       if (hasLegacyValues && migrated.success) {
@@ -1747,6 +1757,7 @@ export default async function plugin(bb: BbPluginApi) {
         workingShelf: values.workingShelf ?? stored.workingShelf,
         dockShelves: values.dockShelves ?? stored.dockShelves,
         projectColorsEnabled: values.projectColorsEnabled ?? stored.projectColorsEnabled,
+        projectColorDisplay: values.projectColorDisplay ?? stored.projectColorDisplay,
         archivedShelfEnabled: values.archivedShelfEnabled ?? stored.archivedShelfEnabled,
       });
       bb.realtime.publish(SIDEBAR_SETTINGS_CHANNEL, {});

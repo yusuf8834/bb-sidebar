@@ -71,6 +71,7 @@ const defaultSidebarSettings = {
   workingShelf: false,
   dockShelves: false,
   projectColorsEnabled: false,
+  projectColorDisplay: "all",
   archivedShelfEnabled: false,
 };
 
@@ -605,6 +606,67 @@ describe("sidebar settings", () => {
     expect(group.querySelectorAll("[data-project-stripe]")).toHaveLength(1);
   });
 
+  it("applies color display choices to full cards, compact rows, shelves, and project groups", async () => {
+    localStorage.setItem("bb-sidebar:active-sort:v1", "project");
+    localStorage.setItem("bb-sidebar:shelf-expansion:v1", JSON.stringify({ settled: true, archived: true }));
+    let settings = {
+      ...defaultSidebarSettings,
+      projectColorsEnabled: true,
+      archivedShelfEnabled: true,
+      inactiveThreadsEnabled: false,
+      compactWorkingThreads: true,
+    };
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        projects: ["group", "single", "busy", "settled", "archived"].map((id) => ({ id, name: id, isPersonal: false, href: "", settingsHref: "" })),
+        threads: [
+          thread({ id: "a", projectId: "group", title: "First grouped" }),
+          thread({ id: "b", projectId: "group", title: "Second grouped" }),
+          thread({ id: "single", projectId: "single", title: "Full card" }),
+          thread({ id: "busy", projectId: "busy", title: "Compact card", indicator: "runtime", indicatorLabel: "Working" }),
+          thread({ id: "settled", projectId: "settled", title: "Settled row" }),
+          thread({ id: "archived", projectId: "archived", title: "Archived row", isArchived: true, archivedAt: 500 }),
+        ],
+      },
+      rpc: {
+        getSidebarSettings: () => settings,
+        getProjectColors: () => ({ colors: {} }),
+        listLifecycle: () => ({ rows: [{ threadId: "settled", settledAt: 200, snoozedUntil: null, snoozedAt: null }] }),
+      },
+    });
+    const group = await screen.findByRole("region", { name: "group project" });
+    await screen.findByText("Archived row");
+    await screen.findByText("Settled row");
+    const assertColor = (element: Element, expected: boolean) => {
+      expect(element.querySelectorAll("[data-project-stripe]")).toHaveLength(expected ? 1 : 0);
+      expect(element.querySelector(".bb-sidebar-project-name") !== null).toBe(expected);
+      expect(element.querySelector(".bb-sidebar-project-monogram") !== null).toBe(expected);
+    };
+    const row = (title: string) => screen.getByText(title).closest("li")!;
+    await waitFor(() => expect(row("Compact card").querySelector(".h-8")).not.toBeNull());
+    for (const display of ["all", "full", "grouped"]) {
+      settings = { ...settings, projectColorDisplay: display };
+      await rendered.emitRealtime("sidebar-settings", {});
+      await waitFor(() => {
+        assertColor(group, true);
+        assertColor(row("Full card"), display !== "grouped");
+        assertColor(row("Compact card"), display === "all");
+        assertColor(row("Settled row"), display === "all");
+        assertColor(row("Archived row"), display === "all");
+      });
+      expect(within(group).getByRole("list").querySelector("[data-project-stripe]")).toBeNull();
+      fireEvent.click(within(group).getByRole("button", { name: "group (2)" }));
+      assertColor(group, display !== "full");
+      fireEvent.click(within(group).getByRole("button", { name: "group (2)" }));
+    }
+    fireEvent.keyDown(screen.getByRole("combobox", { name: /Sort active threads/ }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("option", { name: "Manual order" }));
+    await waitFor(() => expect(screen.queryByRole("region", { name: "group project" })).toBeNull());
+    expect(document.querySelector("[data-project-stripe]")).toBeNull();
+    expect(document.querySelector(".bb-sidebar-project-name")).toBeNull();
+  });
+
   it("saves the opt-in switches and lets users choose and reset a project's color", async () => {
     let saved = { ...defaultSidebarSettings };
     let colors: Record<string, string> = {};
@@ -627,10 +689,22 @@ describe("sidebar settings", () => {
     });
     const toggle = await screen.findByRole("switch", { name: "Project colors" });
     expect(toggle.getAttribute("aria-checked")).toBe("false");
+    expect(screen.queryByRole("combobox", { name: "Show project colors in" })).toBeNull();
     expect(screen.getByRole("switch", { name: "Archived shelf" }).getAttribute("aria-checked")).toBe("false");
     fireEvent.click(toggle);
+    const colorDisplay = screen.getByRole("combobox", { name: "Show project colors in" });
+    expect(colorDisplay).toHaveProperty("value", "all");
+    expect(within(colorDisplay).getAllByRole("option").map((option) => option.textContent)).toEqual([
+      "Full and collapsed mode", "Full mode only", "Grouped projects only",
+    ]);
+    fireEvent.change(colorDisplay, { target: { value: "grouped" } });
     fireEvent.click(screen.getByRole("switch", { name: "Archived shelf" }));
-    await waitFor(() => expect(saved).toMatchObject({ projectColorsEnabled: true, archivedShelfEnabled: true }));
+    await waitFor(() => expect(saved).toMatchObject({ projectColorsEnabled: true, projectColorDisplay: "grouped", archivedShelfEnabled: true }));
+    fireEvent.click(toggle);
+    expect(screen.queryByRole("combobox", { name: "Show project colors in" })).toBeNull();
+    await waitFor(() => expect(saved.projectColorsEnabled).toBe(false));
+    fireEvent.click(toggle);
+    expect(screen.getByRole("combobox", { name: "Show project colors in" })).toHaveProperty("value", "grouped");
     const picker = await screen.findByLabelText("Project color");
     fireEvent.change(picker, { target: { value: "#13579b" } });
     fireEvent.click(screen.getByRole("button", { name: "Save color" }));
@@ -838,6 +912,8 @@ describe("sidebar settings", () => {
     delete previous.childSortField;
     delete previous.childSortDirection;
     delete previous.childIconStyle;
+    delete previous.projectColorDisplay;
+    previous.projectColorsEnabled = true;
     window.localStorage.setItem(
       "bb-sidebar:settings-cache:v1",
       JSON.stringify(previous),
@@ -850,6 +926,7 @@ describe("sidebar settings", () => {
     });
 
     expect(screen.queryByText("Loading settings...")).toBeNull();
+    expect(screen.getByRole("combobox", { name: "Show project colors in" })).toHaveProperty("value", "all");
     expect(
       (screen.getByLabelText("Hours before inactive") as HTMLInputElement).value,
     ).toBe("12");

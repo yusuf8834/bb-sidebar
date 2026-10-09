@@ -527,6 +527,7 @@ describe("lifecycle RPC", () => {
       workingShelf: false,
       dockShelves: false,
       projectColorsEnabled: false,
+      projectColorDisplay: "all",
       archivedShelfEnabled: false,
     });
     await expect(
@@ -545,6 +546,7 @@ describe("lifecycle RPC", () => {
         workingShelf: true,
         dockShelves: true,
         projectColorsEnabled: true,
+        projectColorDisplay: "grouped",
         archivedShelfEnabled: true,
       }),
     ).resolves.toEqual({
@@ -562,6 +564,7 @@ describe("lifecycle RPC", () => {
       workingShelf: true,
       dockShelves: true,
       projectColorsEnabled: true,
+      projectColorDisplay: "grouped",
       archivedShelfEnabled: true,
     });
     // A client that predates the setting leaves it out and must not reset it.
@@ -578,7 +581,7 @@ describe("lifecycle RPC", () => {
         childSortDirection: "descending",
         childIconStyle: "provider",
       }),
-    ).resolves.toMatchObject({ compactWorkingThreads: true, workingShelf: true, dockShelves: true, projectColorsEnabled: true, archivedShelfEnabled: true });
+    ).resolves.toMatchObject({ compactWorkingThreads: true, workingShelf: true, dockShelves: true, projectColorsEnabled: true, projectColorDisplay: "grouped", archivedShelfEnabled: true });
     expect(harness.inspection.realtimeSignals).toContainEqual({
       channel: "sidebar-settings",
       payload: {},
@@ -586,6 +589,19 @@ describe("lifecycle RPC", () => {
     expect(harness.inspection.registrations.schedules).toContainEqual(
       expect.objectContaining({ name: "auto-settle", cron: "*/5 * * * *" }),
     );
+  });
+
+  it("persists color display mode across reloads and rejects unknown modes", async () => {
+    const harness = await loadPlugin();
+    const settings = await harness.behavior.callRpc("getSidebarSettings", {}) as Record<string, unknown>;
+    await harness.behavior.callRpc("updateSidebarSettings", { ...settings, projectColorDisplay: "full" });
+    await expect(harness.behavior.callRpc("updateSidebarSettings", { ...settings, projectColorDisplay: "invalid" })).rejects.toThrow("rpc input validation failed");
+    const reloaded = await harness.lifecycle.reload(plugin);
+    disposers.push(() => reloaded.harness.lifecycle.dispose());
+    await expect(reloaded.harness.behavior.callRpc("getSidebarSettings", {})).resolves.toMatchObject({
+      projectColorDisplay: "full",
+      projectColorsEnabled: false,
+    });
   });
 
   it("rejects invalid snooze shortcuts at the RPC boundary", async () => {
@@ -661,6 +677,7 @@ describe("lifecycle RPC", () => {
       workingShelf: false,
       dockShelves: false,
       projectColorsEnabled: false,
+      projectColorDisplay: "all",
       archivedShelfEnabled: false,
     });
   });
