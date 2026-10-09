@@ -72,18 +72,23 @@ export function ProjectManagement() {
       ) : (
         <>
           <SettingRow
-            title="Project"
-            description="Choose the project to remove from BB."
+            title="Remove from BB"
+            description="Removes the project and its threads from BB."
             control={
-              <SettingsSelect
-                aria-label="Project to remove"
-                value={selected.id}
-                disabled={removing}
-                onChange={(event) => { setSelectedId(event.target.value); setConfirming(false); }}
-                className="w-48"
-              >
-                {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
-              </SettingsSelect>
+              <div className="flex flex-wrap items-center gap-2">
+                <SettingsSelect
+                  aria-label="Project to remove"
+                  value={selected.id}
+                  disabled={removing}
+                  onChange={(event) => { setSelectedId(event.target.value); setConfirming(false); }}
+                  className="w-48"
+                >
+                  {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+                </SettingsSelect>
+                {!confirming ? (
+                  <button type="button" onClick={() => setConfirming(true)} className={cn(secondaryButtonClass, "text-destructive-text hover:bg-destructive/10")}>Remove…</button>
+                ) : null}
+              </div>
             }
           />
           {confirming ? (
@@ -99,13 +104,7 @@ export function ProjectManagement() {
                 </button>
               </div>
             </div>
-          ) : (
-            <SettingRow
-              title="Remove from BB"
-              description="Removes the project and its threads from BB."
-              control={<button type="button" onClick={() => setConfirming(true)} className={cn(secondaryButtonClass, "text-destructive-text hover:bg-destructive/10")}>Remove…</button>}
-            />
-          )}
+          ) : null}
         </>
       )}
     </SettingsSection>

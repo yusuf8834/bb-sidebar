@@ -27,17 +27,15 @@ export function ArchiveSettings() {
   const scoped = hideChildrenOfVisibleParents(filterByProject(visibleInboxThreads(threads), projectId || null));
   const settled = status === "ready" ? scoped.filter((thread) => lifecycle.shelfFor(thread) === "settled") : [];
   return (
-    <>
-      <SettingRow title="Project scope" description="Choose which project's settled threads to archive." control={
+    <SettingRow title="Archive settled threads" description={status === "loading" ? "Loading threads..." : status === "error" ? "Could not load threads." : `${settled.length} settled ${settled.length === 1 ? "thread" : "threads"}. Review the list before archiving.`} control={
+      <div className="flex flex-wrap items-center gap-2">
         <SettingsSelect aria-label="Archive project" value={projectId} onChange={(event) => setProjectId(event.target.value)} className="w-48">
           <option value="">All projects</option>
           {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
         </SettingsSelect>
-      } />
-      <SettingRow title="Archive settled threads" description={status === "loading" ? "Loading threads..." : status === "error" ? "Could not load threads." : `${settled.length} settled ${settled.length === 1 ? "thread" : "threads"}. Review the list before archiving.`} control={
         <ArchiveSettledDialog threads={settled} />
-      } />
-    </>
+      </div>
+    } />
   );
 }
 
