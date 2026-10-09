@@ -758,8 +758,27 @@ describe("sidebar settings", () => {
     expect(
       (await screen.findAllByRole("heading", { level: 2 })).map((heading) => heading.textContent),
     ).toEqual([
-      "Shelves", "Snooze", "Automatic settle", "Child threads", "Appearance", "Projects", "Archiving", "This device", "Experimental",
+      "Sidebar layout", "Project appearance", "Thread behavior", "Child threads", "Archiving", "This device", "Project management",
     ]);
+    const navigation = screen.getByRole("navigation", { name: "Settings sections" });
+    for (const link of within(navigation).getAllByRole("link")) {
+      const target = document.querySelector(link.getAttribute("href")!);
+      expect(target?.getAttribute("aria-labelledby")).toBe(`${target?.id}-heading`);
+    }
+    const layout = screen.getByRole("region", { name: "Sidebar layout" });
+    expect(within(layout).getAllByText("Experimental")).toHaveLength(3);
+    expect(within(layout).getByRole("switch", { name: "Working shelf" })).toBeDefined();
+    expect(within(layout).queryByRole("switch", { name: "Archived shelf" })).toBeNull();
+    const appearance = screen.getByRole("region", { name: "Project appearance" });
+    expect(within(appearance).getByRole("switch", { name: "Project colors" })).toBeDefined();
+    expect(await within(appearance).findByLabelText("Project color")).toBeDefined();
+    expect(within(appearance).getByLabelText("Choose project icon image")).toBeDefined();
+    expect(within(appearance).queryByRole("button", { name: "Remove…" })).toBeNull();
+    const archiving = screen.getByRole("region", { name: "Archiving" });
+    expect(within(archiving).getByRole("switch", { name: "Archived shelf" })).toBeDefined();
+    expect(within(archiving).getByRole("button", { name: "Archive all settled threads" })).toBeDefined();
+    fireEvent.click(within(navigation).getByRole("link", { name: "Archiving" }));
+    expect(document.activeElement).toBe(within(archiving).getByRole("heading", { level: 2 }));
     expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
     expect(
       screen
@@ -803,7 +822,7 @@ describe("sidebar settings", () => {
       ).toBe("Saved"),
     );
     expect(
-      within(screen.getByRole("region", { name: "Shelves" })).getByRole("status").textContent,
+      within(screen.getByRole("region", { name: "Sidebar layout" })).getByRole("status").textContent,
     ).toBe("");
   });
 
@@ -1014,12 +1033,15 @@ describe("sidebar settings", () => {
     expect(screen.getByText("Newest project")).toBeDefined();
   });
 
-  it("requires a second inline click before removing a project", async () => {
+  it("keeps project removal separate from appearance and requires confirmation", async () => {
     let removal: { projectId: string; confirmation: string } | null = null;
     renderSlot(sidebarSettings, {}, {
       rpc: {
         getSidebarSettings: () => defaultSidebarSettings,
-        listProjectIconSettings: () => ({ projects: [] }),
+        listProjectIconSettings: () => ({ projects: [
+          { id: "proj_1", name: "Sidebar", customPath: null, customUploadName: null },
+          { id: "personal", name: "Personal", customPath: null, customUploadName: null },
+        ] }),
         listProjects: () => ({
           projects: [{ id: "proj_1", name: "Sidebar" }],
         }),
@@ -1030,8 +1052,13 @@ describe("sidebar settings", () => {
       },
     });
 
-    expect(await screen.findByText("Projects")).toBeDefined();
-    fireEvent.click(await screen.findByRole("button", { name: "Remove…" }));
+    const appearance = await screen.findByRole("region", { name: "Project appearance" });
+    fireEvent.change(await within(appearance).findByRole("combobox", { name: "Project" }), { target: { value: "personal" } });
+    expect(within(appearance).queryByRole("button", { name: "Remove…" })).toBeNull();
+    const management = screen.getByRole("region", { name: "Project management" });
+    expect(within(management).getByRole("combobox", { name: "Project to remove" })).toHaveProperty("value", "proj_1");
+    expect(within(management).queryByRole("option", { name: "Personal" })).toBeNull();
+    fireEvent.click(await within(management).findByRole("button", { name: "Remove…" }));
     expect(screen.queryByRole("alertdialog")).toBeNull();
     const confirmation = screen.getByRole("group", {
       name: "Confirm removal of Sidebar",
@@ -1049,7 +1076,8 @@ describe("sidebar settings", () => {
         confirmation: "Sidebar",
       }),
     );
-    expect(await screen.findByText("No projects yet.")).toBeDefined();
+    expect(await within(management).findByText("No projects to remove.")).toBeDefined();
+    expect(within(appearance).getByRole("combobox", { name: "Project" })).toHaveProperty("value", "personal");
     expect(toastMocks.success).toHaveBeenCalledWith("Sidebar removed from BB");
   });
 });

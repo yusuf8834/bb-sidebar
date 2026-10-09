@@ -17,7 +17,8 @@ import {
   type SidebarSettingsValues,
   type ProjectColorDisplay,
 } from "./sidebar-settings";
-import { ProjectSettings } from "./ProjectSettings";
+import { ProjectAppearanceSettings } from "./ProjectSettings";
+import { ProjectManagement } from "./ProjectManagement";
 import { ArchiveSettings } from "./ArchiveShelf";
 import { PortLinkSettings } from "./PortLinkSettings";
 import {
@@ -36,6 +37,8 @@ import {
   InlineNumber,
   SettingRow,
   SettingsSection,
+  SettingsGroup,
+  SettingsNavigation,
   SettingsSelect,
   Switch,
   type SaveStatus,
@@ -60,6 +63,11 @@ const PROJECT_COLOR_DISPLAY_LABELS: Record<ProjectColorDisplay, string> = {
   grouped: "Grouped projects only",
 };
 
+const SETTINGS_SECTIONS = [
+  "Sidebar layout", "Project appearance", "Thread behavior", "Child threads",
+  "Archiving", "This device", "Project management",
+] as const;
+
 /** Long enough to finish typing a shortcut, short enough to feel instant. */
 const SAVE_DELAY_MS = 500;
 /** How long "Saved" stays beside a section before it fades. */
@@ -67,22 +75,22 @@ const SAVED_VISIBLE_MS = 2_000;
 
 /** The section each setting lives in, so its save feedback shows there. */
 const SECTION_BY_SETTING: Record<keyof SidebarSettingsValues, string> = {
-  inactiveThreadsEnabled: "Shelves",
-  inactiveAfterHours: "Shelves",
-  snoozePresets: "Snooze",
-  autoSettleInactive: "Automatic settle",
-  autoSettleAfterDays: "Automatic settle",
-  autoSettleOnMerge: "Automatic settle",
+  inactiveThreadsEnabled: "Sidebar layout",
+  inactiveAfterHours: "Sidebar layout",
+  snoozePresets: "Thread behavior",
+  autoSettleInactive: "Thread behavior",
+  autoSettleAfterDays: "Thread behavior",
+  autoSettleOnMerge: "Thread behavior",
   showRunningChildrenWhenCollapsed: "Child threads",
   childSortField: "Child threads",
   childSortDirection: "Child threads",
   childIconStyle: "Child threads",
-  compactWorkingThreads: "Experimental",
-  workingShelf: "Experimental",
-  dockShelves: "Experimental",
-  archivedShelfEnabled: "Shelves",
-  projectColorsEnabled: "Appearance",
-  projectColorDisplay: "Appearance",
+  compactWorkingThreads: "Sidebar layout",
+  workingShelf: "Sidebar layout",
+  dockShelves: "Sidebar layout",
+  archivedShelfEnabled: "Archiving",
+  projectColorsEnabled: "Project appearance",
+  projectColorDisplay: "Project appearance",
 };
 
 /**
@@ -251,11 +259,31 @@ export function SidebarSettings() {
 
   return (
     <div className="max-w-3xl space-y-8 pb-4">
-      <SettingsSection title="Shelves" status={statusFor("Shelves")}>
+      <SettingsNavigation sections={SETTINGS_SECTIONS} />
+      <SettingsSection title="Sidebar layout" status={statusFor("Sidebar layout")}>
         <SettingRow
-          title="Archived shelf"
-          description="Show archived threads at the bottom of the sidebar, with filtering and restore controls."
-          control={<Switch label="Archived shelf" checked={draft.archivedShelfEnabled} onChange={(checked) => update("archivedShelfEnabled", checked)} />}
+          title="Compact working threads"
+          experimental
+          description="Use one line while a thread or its child agents are working. Expand it when work finishes, fails, or needs you."
+          control={
+            <Switch
+              label="Compact working threads"
+              checked={draft.compactWorkingThreads}
+              onChange={(checked) => update("compactWorkingThreads", checked)}
+            />
+          }
+        />
+        <SettingRow
+          title="Working shelf"
+          experimental
+          description="Keep working threads in their own shelf. They return to Active when work finishes, fails, or needs you. Pinned threads stay pinned."
+          control={
+            <Switch
+              label="Working shelf"
+              checked={draft.workingShelf}
+              onChange={(checked) => update("workingShelf", checked)}
+            />
+          }
         />
         <SettingRow
           title="Inactive shelf"
@@ -282,89 +310,135 @@ export function SidebarSettings() {
             />
           ) : null}
         </SettingRow>
-      </SettingsSection>
 
-      <SettingsSection title="Snooze" status={statusFor("Snooze")}>
         <SettingRow
-          title="Snooze shortcuts"
-          description={
-            <>
-              Comma-separated. Durations like <Code>30m</Code> or{" "}
-              <Code>2h</Code>, times like <Code>evening@18:00</Code>,{" "}
-              <Code>tomorrow@09:00</Code> or <Code>next-week@09:00</Code>.
-              Rename one with <Code>Label=value</Code>.
-            </>
-          }
-        >
-          <textarea
-            aria-label="Snooze shortcuts"
-            aria-invalid={snoozePresetsError !== null}
-            aria-describedby="snooze-shortcuts-feedback"
-            value={draft.snoozePresets}
-            onChange={(event) => update("snoozePresets", event.target.value)}
-            rows={2}
-            spellCheck={false}
-            className="w-full resize-y rounded-md border border-border bg-background px-2.5 py-2 font-mono text-xs leading-5 text-foreground outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring aria-[invalid=true]:border-destructive"
-          />
-          <div id="snooze-shortcuts-feedback" className="mt-1.5">
-            {snoozePresetsError ? (
-              <p className="text-2xs text-destructive">{snoozePresetsError}</p>
-            ) : (
-              <ul
-                aria-label="Snooze menu preview"
-                className="flex flex-wrap items-center gap-1"
-              >
-                {snoozePreview.map((label, index) => (
-                  <li
-                    key={`${index}-${label}`}
-                    className="rounded border border-border bg-muted/50 px-1.5 py-0.5 text-2xs text-muted-foreground"
-                  >
-                    {label}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </SettingRow>
-      </SettingsSection>
-
-      <SettingsSection title="Automatic settle" status={statusFor("Automatic settle")}>
-        <SettingRow
-          title="Settle quiet threads"
-          description="Move threads to Settled after a longer quiet period."
+          title="Dock shelves to the bottom"
+          experimental
+          description="Keep shelves below Active at the bottom of the sidebar. Expanded shelves scroll with the thread list."
           control={
             <Switch
-              label="Settle inactive threads"
-              checked={draft.autoSettleInactive}
-              onChange={(checked) => update("autoSettleInactive", checked)}
-            />
-          }
-        >
-          {draft.autoSettleInactive ? (
-            <InlineNumber
-              label="Days before auto-settle"
-              prefix="After"
-              suffix="days without activity"
-              value={draft.autoSettleAfterDays}
-              min={MIN_AUTO_SETTLE_AFTER_DAYS}
-              max={MAX_AUTO_SETTLE_AFTER_DAYS}
-              valid={autoSettleDaysValid}
-              errorId="auto-settle-days-error"
-              onChange={(value) => update("autoSettleAfterDays", value)}
-            />
-          ) : null}
-        </SettingRow>
-        <SettingRow
-          title="Settle merged pull requests"
-          description="Closed pull requests always count as finished."
-          control={
-            <Switch
-              label="Settle merged pull requests"
-              checked={draft.autoSettleOnMerge}
-              onChange={(checked) => update("autoSettleOnMerge", checked)}
+              label="Dock shelves to the bottom"
+              checked={draft.dockShelves}
+              onChange={(checked) => update("dockShelves", checked)}
             />
           }
         />
+      </SettingsSection>
+
+      <SettingsSection title="Project appearance" status={statusFor("Project appearance")}>
+        <SettingRow
+          title="Project colors"
+          description="Color project names in every mode. Choose where their stripes appear below."
+          control={<Switch label="Project colors" checked={draft.projectColorsEnabled} onChange={(checked) => update("projectColorsEnabled", checked)} />}
+        >
+          {draft.projectColorsEnabled ? (
+            <div className="border-l-2 border-border">
+              <SettingRow
+                title="Show stripes in"
+                description="Full mode includes cards and expanded groups. Grouped projects means combined blocks when sorting by Project."
+                control={
+                  <SettingsSelect
+                    aria-label="Show project stripes in"
+                    value={draft.projectColorDisplay}
+                    onChange={(event) => update("projectColorDisplay", event.target.value as ProjectColorDisplay)}
+                    className="w-52"
+                  >
+                    {PROJECT_COLOR_DISPLAYS.map((display) => (
+                      <option key={display} value={display}>{PROJECT_COLOR_DISPLAY_LABELS[display]}</option>
+                    ))}
+                  </SettingsSelect>
+                }
+              />
+            </div>
+          ) : null}
+        </SettingRow>
+        <SettingsGroup title="Customize a project">
+          <ProjectAppearanceSettings />
+        </SettingsGroup>
+      </SettingsSection>
+
+      <SettingsSection title="Thread behavior" status={statusFor("Thread behavior")}>
+        <SettingsGroup title="Snooze">
+          <SettingRow
+            title="Snooze shortcuts"
+            description={
+              <>
+                Comma-separated. Durations like <Code>30m</Code> or{" "}
+                <Code>2h</Code>, times like <Code>evening@18:00</Code>,{" "}
+                <Code>tomorrow@09:00</Code> or <Code>next-week@09:00</Code>.
+                Rename one with <Code>Label=value</Code>.
+              </>
+            }
+          >
+            <textarea
+              aria-label="Snooze shortcuts"
+              aria-invalid={snoozePresetsError !== null}
+              aria-describedby="snooze-shortcuts-feedback"
+              value={draft.snoozePresets}
+              onChange={(event) => update("snoozePresets", event.target.value)}
+              rows={2}
+              spellCheck={false}
+              className="w-full resize-y rounded-md border border-border bg-background px-2.5 py-2 font-mono text-xs leading-5 text-foreground outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring aria-[invalid=true]:border-destructive"
+            />
+            <div id="snooze-shortcuts-feedback" className="mt-1.5">
+              {snoozePresetsError ? (
+                <p className="text-2xs text-destructive">{snoozePresetsError}</p>
+              ) : (
+                <ul
+                  aria-label="Snooze menu preview"
+                  className="flex flex-wrap items-center gap-1"
+                >
+                  {snoozePreview.map((label, index) => (
+                    <li
+                      key={`${index}-${label}`}
+                      className="rounded border border-border bg-muted/50 px-1.5 py-0.5 text-2xs text-muted-foreground"
+                    >
+                      {label}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </SettingRow>
+        </SettingsGroup>
+        <SettingsGroup title="Automatic settle">
+          <SettingRow
+            title="Settle quiet threads"
+            description="Move threads to Settled after a longer quiet period."
+            control={
+              <Switch
+                label="Settle inactive threads"
+                checked={draft.autoSettleInactive}
+                onChange={(checked) => update("autoSettleInactive", checked)}
+              />
+            }
+          >
+            {draft.autoSettleInactive ? (
+              <InlineNumber
+                label="Days before auto-settle"
+                prefix="After"
+                suffix="days without activity"
+                value={draft.autoSettleAfterDays}
+                min={MIN_AUTO_SETTLE_AFTER_DAYS}
+                max={MAX_AUTO_SETTLE_AFTER_DAYS}
+                valid={autoSettleDaysValid}
+                errorId="auto-settle-days-error"
+                onChange={(value) => update("autoSettleAfterDays", value)}
+              />
+            ) : null}
+          </SettingRow>
+          <SettingRow
+            title="Settle merged pull requests"
+            description="Closed pull requests always count as finished."
+            control={
+              <Switch
+                label="Settle merged pull requests"
+                checked={draft.autoSettleOnMerge}
+                onChange={(checked) => update("autoSettleOnMerge", checked)}
+              />
+            }
+          />
+        </SettingsGroup>
       </SettingsSection>
 
       <SettingsSection title="Child threads" status={statusFor("Child threads")}>
@@ -385,7 +459,7 @@ export function SidebarSettings() {
           title="Order"
           description="Also used in the thread header."
           control={
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <SettingsSelect
                 aria-label="Child threads sort field"
                 value={draft.childSortField}
@@ -448,34 +522,16 @@ export function SidebarSettings() {
         />
       </SettingsSection>
 
-      <SettingsSection title="Appearance" status={statusFor("Appearance")}>
+      <SettingsSection title="Archiving" status={statusFor("Archiving")}>
         <SettingRow
-          title="Project colors"
-          description="Color project names in every mode. Choose where stripes appear below, and set each project's color under Projects."
-          control={<Switch label="Project colors" checked={draft.projectColorsEnabled} onChange={(checked) => update("projectColorsEnabled", checked)} />}
+          title="Archived shelf"
+          description="Show archived threads at the bottom of the sidebar, with filtering and restore controls."
+          control={<Switch label="Archived shelf" checked={draft.archivedShelfEnabled} onChange={(checked) => update("archivedShelfEnabled", checked)} />}
         />
-        {draft.projectColorsEnabled ? (
-          <SettingRow
-            title="Show stripes in"
-            description="Only the stripes follow this choice. Full mode includes cards and expanded project groups. Grouped projects means combined blocks when sorting by Project."
-            control={
-              <SettingsSelect
-                aria-label="Show project stripes in"
-                value={draft.projectColorDisplay}
-                onChange={(event) => update("projectColorDisplay", event.target.value as ProjectColorDisplay)}
-                className="w-52"
-              >
-                {PROJECT_COLOR_DISPLAYS.map((display) => (
-                  <option key={display} value={display}>{PROJECT_COLOR_DISPLAY_LABELS[display]}</option>
-                ))}
-              </SettingsSelect>
-            }
-          />
-        ) : null}
+        <SettingsGroup title="Bulk archive">
+          <ArchiveSettings />
+        </SettingsGroup>
       </SettingsSection>
-
-      <ProjectSettings />
-      <ArchiveSettings />
 
       <SettingsSection title="This device" status={statusFor("This device")}>
         <PortLinkSettings
@@ -483,41 +539,7 @@ export function SidebarSettings() {
         />
       </SettingsSection>
 
-      <SettingsSection title="Experimental" status={statusFor("Experimental")}>
-        <SettingRow
-          title="Compact working threads"
-          description="Show a working thread as one line with a small status icon and its run time. It stays that way while its child threads or background agents run, and becomes a full card when all of it is done, or when it fails or needs you."
-          control={
-            <Switch
-              label="Compact working threads"
-              checked={draft.compactWorkingThreads}
-              onChange={(checked) => update("compactWorkingThreads", checked)}
-            />
-          }
-        />
-        <SettingRow
-          title="Working shelf"
-          description="Move a thread that is working, or has work running under it, out of Active into its own shelf below, shown as one line like the other shelves. It returns to its place in Active when all of it is done, or when it fails or needs you. Pinned threads stay pinned."
-          control={
-            <Switch
-              label="Working shelf"
-              checked={draft.workingShelf}
-              onChange={(checked) => update("workingShelf", checked)}
-            />
-          }
-        />
-        <SettingRow
-          title="Dock shelves to the bottom"
-          description="Keep every shelf below Active at the bottom of the sidebar, below the space Pinned and Active leave free. An open shelf that needs more room extends the list, and everything scrolls together."
-          control={
-            <Switch
-              label="Dock shelves to the bottom"
-              checked={draft.dockShelves}
-              onChange={(checked) => update("dockShelves", checked)}
-            />
-          }
-        />
-      </SettingsSection>
+      <ProjectManagement />
     </div>
   );
 }

@@ -2,6 +2,33 @@ import { useEffect, useState, type ComponentProps, type ReactNode } from "react"
 import { Icon } from "./components/Icon";
 import { cn } from "./lib/utils";
 
+export function settingsSectionId(title: string): string {
+  return `settings-${title.toLowerCase().replaceAll(" ", "-")}`;
+}
+
+export function SettingsNavigation({ sections }: { sections: readonly string[] }) {
+  return (
+    <nav aria-label="Settings sections" className="flex flex-wrap gap-x-4 gap-y-2 border-b border-border pb-4 text-xs">
+      {sections.map((title) => (
+        <a
+          key={title}
+          href={`#${settingsSectionId(title)}`}
+          className="rounded-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={(event) => {
+            const section = document.getElementById(settingsSectionId(title));
+            if (!section) return;
+            event.preventDefault();
+            section.scrollIntoView({ block: "start" });
+            section.querySelector("h2")?.focus({ preventScroll: true });
+          }}
+        >
+          {title}
+        </a>
+      ))}
+    </nav>
+  );
+}
+
 /**
  * The settings page's building blocks, drawn after bb's own settings: a short
  * section title over a bordered card, and undivided rows with the label on
@@ -17,11 +44,11 @@ export function SettingsSection({
   status?: SaveStatus;
   children: ReactNode;
 }) {
-  const id = `settings-${title.toLowerCase().replaceAll(" ", "-")}`;
+  const id = settingsSectionId(title);
   return (
-    <section aria-labelledby={id}>
+    <section id={id} aria-labelledby={`${id}-heading`} className="scroll-mt-4">
       <div className="mb-2 flex items-center justify-between gap-3">
-        <h2 id={id} className="text-sm font-medium text-foreground">
+        <h2 id={`${id}-heading`} tabIndex={-1} className="text-sm font-medium text-foreground focus:outline-none">
           {title}
         </h2>
         <SaveIndicator status={status} />
@@ -30,6 +57,15 @@ export function SettingsSection({
         {children}
       </div>
     </section>
+  );
+}
+
+export function SettingsGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="mt-2 border-t border-border pt-3 first:mt-0 first:border-t-0 first:pt-1">
+      <h3 className="px-4 pb-1 text-xs font-medium text-muted-foreground">{title}</h3>
+      {children}
+    </div>
   );
 }
 
@@ -82,17 +118,22 @@ export function SettingRow({
   description,
   control,
   children,
+  experimental = false,
 }: {
   title: ReactNode;
   description?: ReactNode;
   control?: ReactNode;
   children?: ReactNode;
+  experimental?: boolean;
 }) {
   return (
     <div className="px-4 py-2.5">
-      <div className="flex items-center justify-between gap-6">
-        <div className="min-w-0">
-          <p className="text-sm text-foreground">{title}</p>
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+        <div className="min-w-0 flex-1 basis-48">
+          <p className="flex flex-wrap items-center gap-2 text-sm text-foreground">
+            {title}
+            {experimental ? <span className="rounded border border-border px-1.5 py-0.5 text-2xs font-normal text-muted-foreground">Experimental</span> : null}
+          </p>
           {description ? (
             <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
               {description}

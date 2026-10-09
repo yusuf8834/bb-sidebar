@@ -17,7 +17,7 @@ import { useProjectColor } from "./ProjectColors";
 import { relativeTimeLabel } from "./relative-time";
 import { projectIconUrl } from "./project-icons";
 import type { bbSidebarRpcContract } from "./server";
-import { SettingRow, SettingsSection, SettingsSelect, secondaryButtonClass } from "./settings-ui";
+import { SettingRow, SettingsSelect, secondaryButtonClass } from "./settings-ui";
 import { useLifecycle } from "./useLifecycle";
 
 export function ArchiveSettings() {
@@ -27,8 +27,8 @@ export function ArchiveSettings() {
   const scoped = hideChildrenOfVisibleParents(filterByProject(visibleInboxThreads(threads), projectId || null));
   const settled = status === "ready" ? scoped.filter((thread) => lifecycle.shelfFor(thread) === "settled") : [];
   return (
-    <SettingsSection title="Archiving">
-      <SettingRow title="Project" description="Choose which project's settled threads to archive." control={
+    <>
+      <SettingRow title="Project scope" description="Choose which project's settled threads to archive." control={
         <SettingsSelect aria-label="Archive project" value={projectId} onChange={(event) => setProjectId(event.target.value)} className="w-48">
           <option value="">All projects</option>
           {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
@@ -37,7 +37,7 @@ export function ArchiveSettings() {
       <SettingRow title="Archive settled threads" description={status === "loading" ? "Loading threads..." : status === "error" ? "Could not load threads." : `${settled.length} settled ${settled.length === 1 ? "thread" : "threads"}. Review the list before archiving.`} control={
         <ArchiveSettledDialog threads={settled} />
       } />
-    </SettingsSection>
+    </>
   );
 }
 

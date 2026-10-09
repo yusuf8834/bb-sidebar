@@ -9,10 +9,8 @@ import {
 } from "./project-icons";
 import { ProjectMonogram } from "./ProjectFavicon";
 import { ProjectColorSetting } from "./ProjectColorSetting";
-import { cn } from "./lib/utils";
 import {
   SettingRow,
-  SettingsSection,
   SettingsSelect,
   secondaryButtonClass,
 } from "./settings-ui";
@@ -48,29 +46,22 @@ function readFileAsBase64(file: File): Promise<string> {
   });
 }
 
-/**
- * Per-project settings behind one project picker: the sidebar icon, and
- * removing the project from bb. Personal projects have an icon but cannot be
- * removed, so the remove row only shows for projects the server lists as
- * removable.
- */
-export function ProjectSettings() {
+/** Project color and icon controls, rendered inside Project appearance. */
+export function ProjectAppearanceSettings() {
   const rpc = useRpc<typeof bbSidebarRpcContract>();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const loadRequestSeq = useRef(0);
   const [iconSettings, setIconSettings] = useState<ProjectIconSetting[]>([]);
-  const [removable, setRemovable] = useState<ProjectChoice[]>([]);
+  const [projects, setProjects] = useState<ProjectChoice[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [confirmingRemoval, setConfirmingRemoval] = useState(false);
-  const [removing, setRemoving] = useState(false);
   const [revision, setRevision] = useState(0);
   const [previewFailed, setPreviewFailed] = useState(false);
 
   const load = useCallback(async () => {
     const seq = ++loadRequestSeq.current;
-    const [icons, projects] = await Promise.allSettled([
+    const [icons, directory] = await Promise.allSettled([
       rpc.call("listProjectIconSettings", {}),
       rpc.call("listProjects", {}),
     ]);
@@ -83,12 +74,12 @@ export function ProjectSettings() {
           icons.reason instanceof Error ? icons.reason.message : undefined,
       });
     }
-    if (projects.status === "fulfilled") {
-      setRemovable(projects.value.projects);
+    if (directory.status === "fulfilled") {
+      setProjects(directory.value.projects);
     } else {
       toast.error("Could not load projects", {
         description:
-          projects.reason instanceof Error ? projects.reason.message : undefined,
+          directory.reason instanceof Error ? directory.reason.message : undefined,
       });
     }
     setLoading(false);
@@ -105,7 +96,7 @@ export function ProjectSettings() {
   // Every project either list knows, in the icon list's order.
   const choices: ProjectChoice[] = [
     ...iconSettings,
-    ...removable.filter(
+    ...projects.filter(
       (project) => !iconSettings.some((icon) => icon.id === project.id),
     ),
   ];
@@ -115,7 +106,6 @@ export function ProjectSettings() {
     null;
   const selectedId = selected?.id ?? "";
   const icon = iconSettings.find((project) => project.id === selectedId) ?? null;
-  const canRemove = removable.some((project) => project.id === selectedId);
   const hasCustomIcon = !!(icon?.customPath || icon?.customUploadName);
 
   useEffect(() => {
@@ -191,42 +181,16 @@ export function ProjectSettings() {
     }
   };
 
-  const remove = async () => {
-    if (!selected || !canRemove || removing) return;
-    const removed = selected;
-    loadRequestSeq.current += 1;
-    setRemoving(true);
-    try {
-      await rpc.call("removeProject", {
-        projectId: removed.id,
-        confirmation: removed.name,
-      });
-      setIconSettings((current) => current.filter((p) => p.id !== removed.id));
-      setRemovable((current) => current.filter((p) => p.id !== removed.id));
-      setSelectedProjectId("");
-      setConfirmingRemoval(false);
-      toast.success(`${removed.name} removed from BB`);
-    } catch (error) {
-      toast.error("Could not remove the project", {
-        description: error instanceof Error ? error.message : undefined,
-      });
-    } finally {
-      setRemoving(false);
-    }
-  };
-
   if (loading || choices.length === 0) {
     return (
-      <SettingsSection title="Projects">
-        <p className="px-4 py-6 text-center text-sm text-muted-foreground">
-          {loading ? "Loading projects..." : "No projects yet."}
-        </p>
-      </SettingsSection>
+      <p className="px-4 py-6 text-center text-sm text-muted-foreground">
+        {loading ? "Loading projects..." : "No projects yet."}
+      </p>
     );
   }
 
   return (
-    <SettingsSection title="Projects">
+    <>
       <SettingRow
         title="Project"
         description="The project the settings below apply to."
@@ -234,10 +198,8 @@ export function ProjectSettings() {
           <SettingsSelect
             aria-label="Project"
             value={selectedId}
-            disabled={removing}
             onChange={(event) => {
               setSelectedProjectId(event.target.value);
-              setConfirmingRemoval(false);
             }}
             className="w-48"
           >
@@ -310,56 +272,6 @@ export function ProjectSettings() {
           </button>
         </div>
       ) : null}
-      {canRemove && selected ? (
-        confirmingRemoval ? (
-          <div
-            role="group"
-            aria-label={`Confirm removal of ${selected.name}`}
-            className="mx-1.5 my-1 flex items-center justify-between gap-4 rounded-md bg-destructive/5 px-2.5 py-2.5"
-          >
-            <div className="min-w-0">
-              <p className="break-words text-sm text-foreground">
-                Remove {selected.name}?
-              </p>
-              <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
-                Its threads are removed from BB too. This cannot be undone.
-              </p>
-            </div>
-            <div className="flex shrink-0 gap-2">
-              <button
-                type="button"
-                disabled={removing}
-                onClick={() => setConfirmingRemoval(false)}
-                className={secondaryButtonClass}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={removing}
-                onClick={() => void remove()}
-                className="h-8 rounded-md bg-destructive px-3 text-xs font-medium text-destructive-foreground hover:bg-destructive/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {removing ? "Removing..." : "Remove from BB"}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <SettingRow
-            title="Remove from BB"
-            description="Removes the project and its threads from BB."
-            control={
-              <button
-                type="button"
-                onClick={() => setConfirmingRemoval(true)}
-                className={cn(secondaryButtonClass, "text-destructive-text hover:bg-destructive/10")}
-              >
-                Remove…
-              </button>
-            }
-          />
-        )
-      ) : null}
-    </SettingsSection>
+    </>
   );
 }

@@ -6,13 +6,14 @@
 
 - Archive settled threads from Settings > Archiving, across all projects or a selected project, after reviewing a confirmation list.
 - Each Settled row has an Archive button on hover.
-- Optional Archived shelf, disabled by default. Enable it in Settings > Shelves to browse archived threads and restore them.
-- Optional project colors, disabled by default. Each project gets an automatic color based on its ID, with a custom color picker and reset control in Settings > Projects. Project groups share one continuous stripe; ungrouped rows have their own stripe.
+- Optional Archived shelf, disabled by default. Enable it in Settings > Archiving to browse archived threads and restore them.
+- Optional project colors, disabled by default. Each project gets an automatic color based on its ID, with a custom color picker and reset control in Settings > Project appearance. Project groups share one continuous stripe; ungrouped rows have their own stripe.
 - While project colors are enabled, all project names stay colored. Show stripes in full and collapsed mode, full mode only, or grouped projects only when sorting by Project.
 - The Archived shelf has a filter field (title or project name), laid out like a row with a search icon in the icon column, a clear button and Escape to clear, and shows how long ago each thread was archived; hovering a row shows when it started and when it was archived.
 
 ### Changed
 
+- Grouped settings by sidebar layout, project appearance, thread behavior, child threads, archiving, and device. Section links jump to each group; project removal has its own management section at the bottom.
 - The Settled Clean button is now labelled "Close terminals and ports of settled threads": it never archived anything.
 
 ### Fixed
