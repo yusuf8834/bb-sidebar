@@ -30,6 +30,7 @@ import {
 } from "./components/Select";
 import { ProjectScopeSelect } from "./ProjectScopeSelect";
 import { ProjectFavicon } from "./ProjectFavicon";
+import { projectColorClass } from "./project-monogram";
 import { ThreadCard, type ThreadReorderControls } from "./ThreadCard";
 import { SlimRow } from "./SlimRow";
 import { CleanSettledDialog } from "./CleanSettledDialog";
@@ -1796,6 +1797,7 @@ export function ThreadInbox({
                         projectNameById={projectNameById}
                         projectIconRevision={projectIconRevision}
                         activeThreadId={activeThreadId}
+                        now={now}
                         onNavigate={onNavigate}
                       />
                     ) : null}
@@ -2267,7 +2269,7 @@ function ActiveProjectGroup({
           )}
         >
           <ProjectFavicon src={projectIconUrl} name={projectName} className="size-3" />
-          <span className="min-w-0 truncate text-2xs font-medium text-muted-foreground">
+          <span className={cn("bb-sidebar-project-name min-w-0 truncate text-2xs font-medium", projectColorClass(projectName))}>
             {projectName}
           </span>
           <span className="shrink-0 text-2xs text-muted-foreground/50">

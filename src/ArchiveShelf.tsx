@@ -12,7 +12,9 @@ import { Tooltip } from "./components/Tooltip";
 import { cn } from "./lib/utils";
 import { usePortalScopeProps } from "./lib/portal-scope";
 import { filterByProject, hideChildrenOfVisibleParents, threadDisplayTitle } from "./inbox";
-import { ProjectFavicon } from "./ProjectFavicon";
+import { ProjectFavicon, ProjectStripe } from "./ProjectFavicon";
+import { projectColorClass } from "./project-monogram";
+import { relativeTimeLabel } from "./relative-time";
 import { projectIconUrl } from "./project-icons";
 import type { bbSidebarRpcContract } from "./server";
 
@@ -95,23 +97,27 @@ export function ArchiveSettledDialog({ threads }: { threads: readonly PluginSide
 /**
  * Archived threads in the current project scope, newest first. Mounted only
  * while the Archived shelf is open, so a closed shelf never pages the archive.
+ * The filter matches title and project name over the pages loaded so far.
  */
 export function ArchivedThreadList({
   scope,
   projectNameById,
   projectIconRevision,
   activeThreadId,
+  now,
   onNavigate,
 }: {
   scope: string | null;
   projectNameById: ReadonlyMap<string, string>;
   projectIconRevision: number;
   activeThreadId: string | null;
+  now: number;
   onNavigate: () => void;
 }) {
   const { status, threads, experimental_archived: archive } = useSidebarThreads({
     experimental_lifecycles: ["archived"],
   });
+  const [query, setQuery] = useState("");
   const archived = useMemo(
     () =>
       hideChildrenOfVisibleParents(
@@ -119,6 +125,14 @@ export function ArchivedThreadList({
       ).sort((a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0)),
     [threads, scope],
   );
+  const needle = query.trim().toLocaleLowerCase();
+  const shown = needle
+    ? archived.filter((thread) =>
+        `${threadDisplayTitle(thread)} ${projectNameById.get(thread.projectId) ?? ""}`
+          .toLocaleLowerCase()
+          .includes(needle),
+      )
+    : archived;
 
   if (status === "loading") {
     return <p className="px-2.5 py-1 text-2xs text-muted-foreground">Loading archived threads…</p>;
@@ -128,17 +142,30 @@ export function ArchivedThreadList({
   }
   return (
     <>
+      {archived.length > 0 ? (
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Filter archive"
+          aria-label="Filter archived threads"
+          className="mx-2.5 mb-1 h-6 w-[calc(100%-1.25rem)] rounded-md border border-sidebar-border bg-transparent px-2 text-2xs text-foreground placeholder:text-muted-foreground/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        />
+      ) : null}
       {archived.length === 0 ? (
         <p className="px-2.5 py-1 text-2xs text-muted-foreground">No archived threads{scope ? " in this project" : ""}.</p>
+      ) : shown.length === 0 ? (
+        <p className="px-2.5 py-1 text-2xs text-muted-foreground">No archived threads match.</p>
       ) : (
         <ul className="flex flex-col gap-px">
-          {archived.map((thread) => (
+          {shown.map((thread) => (
             <ArchivedRow
               key={thread.id}
               thread={thread}
               projectName={projectNameById.get(thread.projectId) ?? null}
               projectIconUrl={projectIconUrl(thread.projectId, projectIconRevision)}
               isActive={thread.id === activeThreadId}
+              now={now}
               onNavigate={onNavigate}
             />
           ))}
@@ -163,18 +190,23 @@ function ArchivedRow({
   projectName,
   projectIconUrl,
   isActive,
+  now,
   onNavigate,
 }: {
   thread: PluginSidebarThread;
   projectName: string | null;
   projectIconUrl: string | null;
   isActive: boolean;
+  now: number;
   onNavigate: () => void;
 }) {
   const actions = useSidebarThreadActions();
   const rpc = useRpc<typeof bbSidebarRpcContract>();
   const [busy, setBusy] = useState(false);
   const title = threadDisplayTitle(thread);
+  const dates = `Started ${new Date(thread.createdAt).toLocaleDateString()}${
+    thread.archivedAt ? ` · Archived ${new Date(thread.archivedAt).toLocaleDateString()}` : ""
+  }`;
 
   const unarchive = async () => {
     if (busy) return;
@@ -199,8 +231,10 @@ function ArchivedRow({
           isActive ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60",
         )}
       >
+        {projectName ? <ProjectStripe name={projectName} className="opacity-60" /> : null}
         <a
           href="#"
+          title={dates}
           aria-label={projectName ? `${projectName} · ${title}` : title}
           onClick={(event) => {
             event.preventDefault();
@@ -213,12 +247,22 @@ function ArchivedRow({
           {projectName ? (
             <>
               <ProjectFavicon src={projectIconUrl} name={projectName} className="size-3" />
-              <span className="max-w-[40%] shrink truncate text-muted-foreground/50">{projectName}</span>
+              <span className={cn("bb-sidebar-project-name max-w-[40%] shrink truncate opacity-70", projectColorClass(projectName))}>
+                {projectName}
+              </span>
               <span aria-hidden="true" className="shrink-0 text-sm leading-none text-muted-foreground/45">·</span>
             </>
           ) : null}
           <span className="min-w-0 flex-1 truncate">{title}</span>
         </span>
+        {thread.archivedAt ? (
+          <span
+            aria-label={`Archived ${relativeTimeLabel(thread.archivedAt, now)} ago`}
+            className="pointer-events-none relative shrink-0 tabular-nums text-2xs text-muted-foreground/60 group-hover/slim:hidden"
+          >
+            {relativeTimeLabel(thread.archivedAt, now)}
+          </span>
+        ) : null}
         <Tooltip label="Restore from archive">
           <button
             type="button"

@@ -33,7 +33,8 @@ import { threadDisplayTitle } from "./inbox";
 import { InlineThreadTitle } from "./InlineThreadTitle";
 import type { ConfiguredSnoozePreset } from "./lifecycle";
 import { isWorkingTree } from "./working-tree";
-import { ProjectFavicon } from "./ProjectFavicon";
+import { ProjectFavicon, ProjectStripe } from "./ProjectFavicon";
+import { projectColorClass } from "./project-monogram";
 import { OpenPortsIndicator } from "./OpenPorts";
 import { JumpHint, useJumpHint } from "./JumpHints";
 import "./settle-button.css";
@@ -311,6 +312,7 @@ export function ThreadCard({
             {isSettling ? (
               <span aria-hidden="true" className="bb-sidebar-settle-sweep" />
             ) : null}
+            {projectName ? <ProjectStripe name={projectName} /> : null}
             <ThreadDetailsTooltip thread={thread} disabled={isRenaming || !!reorder?.isDragging}>
               <a
                 // Both attributes, or bb's nine thread shortcuts stop finding rows.
@@ -362,7 +364,7 @@ export function ThreadCard({
                   {showProject && projectName && !isRenaming ? (
                     <>
                       <ProjectFavicon src={projectIconUrl} name={projectName} className="size-3" />
-                      <span className="max-w-[40%] shrink truncate text-muted-foreground/70">
+                      <span className={cn("bb-sidebar-project-name max-w-[40%] shrink truncate", projectColorClass(projectName))}>
                         {projectName}
                       </span>
                       <span aria-hidden="true" className="shrink-0 text-sm leading-none text-muted-foreground/60">
@@ -419,7 +421,11 @@ export function ThreadCard({
                   {projectName ? (
                     <ProjectFavicon src={projectIconUrl} name={projectName} className="size-3" />
                   ) : null}
-                  <span className="min-w-0 truncate">{projectName ?? " "}</span>
+                  <span
+                    className={cn("min-w-0 truncate", projectName && ["bb-sidebar-project-name", projectColorClass(projectName)])}
+                  >
+                    {projectName ?? " "}
+                  </span>
                 </span>
               ) : (
                 titleLine
