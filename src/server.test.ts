@@ -1564,6 +1564,66 @@ describe("project management", () => {
 });
 
 describe("automatic settle evaluation", () => {
+  it.each((["autoSettleInactive", "autoSettleOnMerge"] as const).flatMap(setting =>
+    (["settled", "parked", "snoozed"] as const).map(shelf => ({ setting, shelf })),
+  ))(
+    "preserves a manually $shelf parent after trying $setting on and off",
+    async ({ setting, shelf }) => {
+      const old = Date.now() - 4 * 86400000;
+      const quiet = { createdAt: old, updatedAt: old, latestAttentionAt: old };
+      const { bb, harness } = createFakePluginHost({
+        pluginId: "bb-sidebar",
+        sdk: {
+          plugins: { getSettings: async () => ({ ok: true as const, schema: {}, values: {
+            inactiveThreadsEnabled: false, autoSettleInactive: false, autoSettleOnMerge: false,
+          } }) },
+          projects: { list: async () => projectsWith([
+            projectThread({ id: "parent", ...quiet }),
+            projectThread({ id: "child", parentThreadId: "parent", environmentId: "env_child", ...quiet }),
+          ]) },
+          threads: { get: async ({ threadId }) => makeThreadResponse({ id: threadId }) },
+          environments: { pullRequest: async () => setting === "autoSettleOnMerge"
+            ? availablePullRequest("merged") : { outcome: "absent" as const } },
+        },
+      });
+      await plugin(bb);
+      disposers.push(() => harness.lifecycle.dispose());
+      // Existing manual shelves can have quiet children without lifecycle
+      // rows, including settles made before settling applied to whole trees.
+      bb.storage.database().prepare(`INSERT INTO thread_lifecycle
+        (thread_id, settled_at, settled_override, parked_at, snoozed_until, snoozed_at)
+        VALUES (?, ?, ?, ?, ?, ?)`).run(
+        "parent", shelf === "settled" ? old + 1000 : null, shelf === "settled" ? "settled" : null,
+        shelf === "parked" ? old + 1000 : null,
+        shelf === "snoozed" ? Date.now() + 86400000 : null, shelf === "snoozed" ? old + 1000 : null,
+      );
+      const before = await harness.behavior.callRpc("listLifecycle", {});
+      const settings = await harness.behavior.callRpc("getSidebarSettings", {}) as Record<string, unknown>;
+      await harness.behavior.callRpc("updateSidebarSettings", { ...settings, [setting]: true });
+      await harness.behavior.callRpc("evaluateAutoSettle", {});
+      expect((await harness.behavior.callRpc("listLifecycle", {}) as LifecycleListResult).rows)
+        .toEqual(expect.arrayContaining([expect.objectContaining({ threadId: "child", settledAt: expect.any(Number), settledOverride: null })]));
+      await harness.behavior.callRpc("updateSidebarSettings", settings);
+      await harness.behavior.callRpc("evaluateAutoSettle", {});
+      await expect(harness.behavior.callRpc("listLifecycle", {})).resolves.toEqual(before);
+      // Real child activity must still reopen the parent.
+      await harness.behavior.emitThreadEvent("thread.active", {
+        thread: makeThreadResponse({ id: "child", parentThreadId: "parent", status: "active" }),
+      });
+      await expect(harness.behavior.callRpc("listLifecycle", {})).resolves.toEqual({ rows: [] });
+    },
+  );
+
+  it("does not run settling when only appearance or layout settings change", async () => {
+    const harness = await loadPlugin();
+    const settings = await harness.behavior.callRpc("getSidebarSettings", {}) as Record<string, unknown>;
+    await harness.behavior.callRpc("updateSidebarSettings", {
+      ...settings, projectColorsEnabled: true, workingShelf: true, archivedShelfEnabled: true,
+    });
+    expect(harness.inspection.sdk.callsTo("projects.list")).toHaveLength(0);
+    expect(harness.inspection.sdk.callsTo("threads.stop")).toHaveLength(0);
+  });
+
   it.each(["thread.created", "thread.active"] as const)(
     "rechecks descendants after %s during an automatic settle lookup",
     async (event) => {
@@ -1918,7 +1978,7 @@ describe("automatic settle evaluation", () => {
     ).toHaveLength(1);
   });
 
-  it("queues one policy pass when settings change during evaluation", async () => {
+  it("discards an outdated policy pass when settings change during evaluation", async () => {
     const old = Date.now() - 60_000;
     const environmentId = "env_queued";
     const thread = projectThread({
@@ -1976,7 +2036,7 @@ describe("automatic settle evaluation", () => {
 
     resolveFirstPullRequest(availablePullRequest("merged"));
     await expect(firstEvaluation).resolves.toEqual({
-      changedThreadIds: ["thr_queued"],
+      changedThreadIds: [],
     });
     for (let attempt = 0; attempt < 10 && pullRequestCalls < 2; attempt += 1) {
       await Promise.resolve();
@@ -1994,6 +2054,7 @@ describe("automatic settle evaluation", () => {
       )) as LifecycleListResult;
     }
     expect(lifecycle).toEqual({ rows: [] });
+    expect(harness.inspection.sdk.callsTo("threads.stop")).toHaveLength(0);
   });
 
   it("returns a policy-settled thread when its PR reopens", async () => {

@@ -1069,7 +1069,10 @@ export default async function plugin(bb: BbPluginApi) {
     return true;
   };
 
-  const wakeAncestors = async (thread: { id: string; parentThreadId: string | null }) => {
+  const wakeAncestors = async (
+    thread: { id: string; parentThreadId: string | null },
+    { automaticOnly = false }: { automaticOnly?: boolean } = {},
+  ) => {
     const visited = new Set([thread.id]);
     const ancestors: string[] = [];
     let parentId = thread.parentThreadId;
@@ -1088,6 +1091,9 @@ export default async function plugin(bb: BbPluginApi) {
       for (const id of ancestors) {
         const row = readOne(id);
         if (!row || (row.settledAt === null && row.parkedAt == null && row.snoozedUntil === null)) continue;
+        // Reversing an automatic rule is not new child activity. Keep the
+        // user's manual shelf choice, including older parent-only settles.
+        if (automaticOnly && (row.settledOverride != null || row.parkedAt != null || row.snoozedUntil != null)) break;
         db.prepare(`DELETE FROM thread_lifecycle WHERE thread_id = ?`).run(id);
         ids.push(id);
       }
@@ -1377,12 +1383,14 @@ export default async function plugin(bb: BbPluginApi) {
 
   let policyEvaluation: Promise<string[]> | null = null;
   let policyEvaluationQueued = false;
+  let policySettingsRevision = 0;
   const evaluatePolicies = (): Promise<string[]> => {
     if (policyEvaluation !== null) {
       policyEvaluationQueued = true;
       return policyEvaluation;
     }
     const evaluation = (async () => {
+      const settingsRevision = policySettingsRevision;
       const configured = readSidebarSettings();
       let threads = await loadPolicyThreads();
       const lifecycleByThreadId = new Map(
@@ -1469,13 +1477,15 @@ export default async function plugin(bb: BbPluginApi) {
           return resolveShelf(readOne(id) ?? undefined, threadSignals(thread), now) === "settled";
         }),
       );
-      if (changes.length === 0) return [];
+      // Settings can change while PRs or ports are loading. The queued pass
+      // uses the latest rules; this older pass must not move or stop threads.
+      if (settingsRevision !== policySettingsRevision || changes.length === 0) return [];
       applyPolicyChanges(changes, now);
       const changedThreadIds = new Set(changes.map((change) => change.threadId));
       publishLifecycleChanges([...changedThreadIds]);
       for (const change of changes) {
         if (change.decision === "unsettle") {
-          for (const id of await wakeAncestors(byId.get(change.threadId)!)) changedThreadIds.add(id);
+          for (const id of await wakeAncestors(byId.get(change.threadId)!, { automaticOnly: true })) changedThreadIds.add(id);
         }
       }
       // Outside the transaction, because releasing a runtime is a network call
@@ -1485,6 +1495,7 @@ export default async function plugin(bb: BbPluginApi) {
           change.decision === "settle" ? [change.threadId] : [],
         ),
         async (threadId) => {
+          if (settingsRevision !== policySettingsRevision) return;
           await reclaimThreadResources(threadId);
         },
         4,
@@ -1761,11 +1772,18 @@ export default async function plugin(bb: BbPluginApi) {
         archivedShelfEnabled: values.archivedShelfEnabled ?? stored.archivedShelfEnabled,
       });
       bb.realtime.publish(SIDEBAR_SETTINGS_CHANNEL, {});
-      void evaluatePolicies().catch((error) => {
-        bb.log.error(
-          `Automatic settle evaluation failed after a settings change: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      });
+      if (
+        values.autoSettleInactive !== stored.autoSettleInactive ||
+        values.autoSettleAfterDays !== stored.autoSettleAfterDays ||
+        values.autoSettleOnMerge !== stored.autoSettleOnMerge
+      ) {
+        policySettingsRevision += 1;
+        void evaluatePolicies().catch((error) => {
+          bb.log.error(
+            `Automatic settle evaluation failed after a settings change: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        });
+      }
       return readSidebarSettings();
     },
     async listLifecycle() {

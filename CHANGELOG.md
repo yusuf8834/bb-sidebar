@@ -18,6 +18,7 @@
 
 ### Fixed
 
+- Trying automatic-settle options no longer reopens manually settled, parked, or snoozed parents when an old child returns from automatic settling. Appearance changes do not trigger settling, and evaluations discard outdated settings before changing threads.
 - Retained automatic title recovery for threads BB leaves unnamed, including first prompts shorter than five words. BB's [Codex stream fix](https://github.com/get-bb/bb/pull/4830) fixes completion handling but does not change that naming threshold. Successful BB titles, manual titles, and the selected AI title service are preserved.
 
 ## [0.2.34] - 2026-10-04
