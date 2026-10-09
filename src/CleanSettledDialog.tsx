@@ -62,8 +62,8 @@ export function CleanSettledDialog({ threadIds, onNavigate }: { threadIds: strin
     <Dialog.Root open={open} onOpenChange={(next) => { if (!next && busy && result === null) return; setOpen(next); }}>
       <button
         type="button"
-        aria-label="Clean settled resources"
-        title="Clean settled resources"
+        aria-label="Close terminals and ports of settled threads"
+        title="Close terminals and ports of settled threads (threads stay in Settled)"
         onClick={(event) => { event.stopPropagation(); setOpen(true); }}
         className="absolute bottom-1 right-[1.875rem] z-10 flex size-4 items-center justify-center rounded text-muted-foreground/40 hover:bg-sidebar-accent hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
       >

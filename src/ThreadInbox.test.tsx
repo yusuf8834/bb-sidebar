@@ -4885,7 +4885,7 @@ describe("parking threads", () => {
       },
     });
     const shelf = await screen.findByRole("region", { name: "Settled" });
-    fireEvent.click(within(shelf).getByRole("button", { name: "Clean settled resources" }));
+    fireEvent.click(within(shelf).getByRole("button", { name: "Close terminals and ports of settled threads" }));
     const dialog = await screen.findByRole("dialog", { name: "Clean settled resources?" });
     await waitFor(() => expect(previewSettledCleanup).toHaveBeenCalledTimes(1));
     expect(new Set((previewSettledCleanup.mock.calls[0]![0] as { threadIds: string[] }).threadIds)).toEqual(new Set(settledThreads.map((item) => item.id)));
@@ -4897,6 +4897,74 @@ describe("parking threads", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Clean resources" }));
     await waitFor(() => expect(cleanSettled).toHaveBeenCalledWith({ token: "98bb67b5-b58b-4fc4-9a55-34e557dc8f55" }));
     expect(dialog.textContent).toContain("1 terminal closed · 1 port shutdown request sent");
+  });
+
+  it("archives every Settled thread after one confirmation", async () => {
+    const settledThreads = [
+      thread({ id: "thr_a", title: "Done A" }),
+      thread({ id: "thr_b", title: "Done B" }),
+    ];
+    const archiveThreads = vi.fn(() => ({ archived: 2, failures: [] }));
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: settledThreads,
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: settledThreads.map((item) => ({
+          threadId: item.id, settledAt: 200, snoozedUntil: null, snoozedAt: null,
+        })) }),
+        archiveThreads,
+      },
+    });
+    const shelf = await screen.findByRole("region", { name: "Settled" });
+    fireEvent.click(within(shelf).getByRole("button", { name: "Archive all settled threads" }));
+    const dialog = await screen.findByRole("dialog", { name: "Archive 2 settled threads?" });
+    expect(archiveThreads).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Archive all" }));
+    await waitFor(() => expect(archiveThreads).toHaveBeenCalledTimes(1));
+    expect(new Set((archiveThreads.mock.calls[0] as unknown as [{ threadIds: string[] }])[0].threadIds)).toEqual(new Set(["thr_a", "thr_b"]));
+  });
+
+  it("archives one Settled thread from its row", async () => {
+    const settledThreads = [thread({ id: "thr_a", title: "Done A" })];
+    const archiveThreads = vi.fn(() => ({ archived: 1, failures: [] }));
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: settledThreads,
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: [{ threadId: "thr_a", settledAt: 200, snoozedUntil: null, snoozedAt: null }] }),
+        archiveThreads,
+      },
+    });
+    const shelf = await screen.findByRole("region", { name: "Settled" });
+    fireEvent.click(within(shelf).getByRole("button", { name: /Settled/ }));
+    fireEvent.click(await within(shelf).findByRole("button", { name: "Archive thread" }));
+    await waitFor(() => expect(archiveThreads).toHaveBeenCalledWith({ threadIds: ["thr_a"] }));
+  });
+
+  it("lists archived threads in the Archived shelf and restores them", async () => {
+    const archivedThread = thread({ id: "thr_old", title: "Old work", isArchived: true, archivedAt: 500 });
+    const unarchiveThread = vi.fn(() => ({ ok: true }));
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ id: "thr_live", title: "Live" }), archivedThread],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
+      },
+      rpc: { listLifecycle: () => ({ rows: [] }), unarchiveThread },
+    });
+    const shelf = await screen.findByRole("region", { name: "Archived" });
+    expect(within(shelf).queryByText("Old work")).toBeNull();
+    fireEvent.click(within(shelf).getByRole("button", { name: "Archived" }));
+    expect(await within(shelf).findByText("Old work")).toBeTruthy();
+    expect(within(shelf).queryByText("Live")).toBeNull();
+    fireEvent.click(within(shelf).getByRole("button", { name: "Restore from archive" }));
+    await waitFor(() => expect(unarchiveThread).toHaveBeenCalledWith({ threadId: "thr_old" }));
   });
 
   it("shows an empty preview without a Clean confirmation button", async () => {
@@ -4912,7 +4980,7 @@ describe("parking threads", () => {
       },
     });
     const shelf = await screen.findByRole("region", { name: "Settled" });
-    fireEvent.click(within(shelf).getByRole("button", { name: "Clean settled resources" }));
+    fireEvent.click(within(shelf).getByRole("button", { name: "Close terminals and ports of settled threads" }));
     const dialog = await screen.findByRole("dialog", { name: "Clean settled resources?" });
     await waitFor(() => expect(dialog.textContent).toContain("No live terminals or thread-owned listening ports found."));
     expect(within(dialog).queryByRole("button", { name: "Clean resources" })).toBeNull();
@@ -4936,7 +5004,7 @@ describe("parking threads", () => {
       },
     });
     const shelf = await screen.findByRole("region", { name: "Settled" });
-    fireEvent.click(within(shelf).getByRole("button", { name: "Clean settled resources" }));
+    fireEvent.click(within(shelf).getByRole("button", { name: "Close terminals and ports of settled threads" }));
     const dialog = await screen.findByRole("dialog", { name: "Clean settled resources?" });
     fireEvent.click(await within(dialog).findByRole("button", { name: "Open thread: Check this terminal" }));
     expect(rendered.sidebarActionCalls).toContainEqual({ method: "open", threadId: "thr_terminal" });
@@ -4963,7 +5031,7 @@ describe("parking threads", () => {
       },
     });
     const shelf = await screen.findByRole("region", { name: "Settled" });
-    fireEvent.click(within(shelf).getByRole("button", { name: "Clean settled resources" }));
+    fireEvent.click(within(shelf).getByRole("button", { name: "Close terminals and ports of settled threads" }));
     const dialog = await screen.findByRole("dialog", { name: "Clean settled resources?" });
     const cleanButton = await within(dialog).findByRole("button", { name: "Clean resources" });
     fireEvent.click(cleanButton);
@@ -4996,7 +5064,7 @@ describe("parking threads", () => {
       },
     });
     const shelf = await screen.findByRole("region", { name: "Settled" });
-    fireEvent.click(within(shelf).getByRole("button", { name: "Clean settled resources" }));
+    fireEvent.click(within(shelf).getByRole("button", { name: "Close terminals and ports of settled threads" }));
     const dialog = await screen.findByRole("dialog", { name: "Clean settled resources?" });
     fireEvent.click(await within(dialog).findByRole("button", { name: "Clean resources" }));
     await within(dialog).findByRole("button", { name: "Cleaning..." });
