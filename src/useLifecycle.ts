@@ -333,10 +333,10 @@ export function useLifecycle(
           } : undefined,
         });
       } else if (method === "unsettle") {
-        // Undo re-settles, which re-runs the reclaim a settle always does:
-        // restoring the previous shelf means releasing what a wake restored.
+        // A snapshot Undo is final: a generic redo would overwrite children
+        // deliberately preserved by the selective restore.
         toast.success(request.undoToken ? "Settling undone" : SUCCESS_MESSAGE.unsettle, {
-          action: {
+          action: request.undoToken ? undefined : {
             label: "Undo",
             onClick: () => void mutate({ method: "settle", threadId }),
           },

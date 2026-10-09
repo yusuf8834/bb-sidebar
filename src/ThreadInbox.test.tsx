@@ -691,7 +691,7 @@ describe("sidebar settings", () => {
     renderSlot(sidebarSettings, {}, {
       rpc: {
         getSidebarSettings: () => saved,
-        updateSidebarSettings: (input) => { saved = input as typeof saved; return saved; },
+        updateSidebarSettings: (input) => { saved = { ...saved, ...input as Partial<typeof saved> }; return saved; },
         listProjects: () => ({ projects: [] }),
         listProjectIconSettings: () => ({ projects: [{ id: "proj_1", name: "add_on", customPath: null, customUploadName: null }] }),
         getProjectColors: () => ({ colors }),
@@ -743,7 +743,7 @@ describe("sidebar settings", () => {
       rpc: {
         getSidebarSettings: () => defaultSidebarSettings,
         updateSidebarSettings: (input) => {
-          saved = input as typeof defaultSidebarSettings;
+          saved = { ...defaultSidebarSettings, ...input as Partial<typeof defaultSidebarSettings> };
           return saved;
         },
         listProjectIconSettings: () => ({
@@ -836,7 +836,7 @@ describe("sidebar settings", () => {
         getSidebarSettings: () => defaultSidebarSettings,
         updateSidebarSettings: (input) => {
           saves.push(input);
-          return input as typeof defaultSidebarSettings;
+          return { ...defaultSidebarSettings, ...input as Partial<typeof defaultSidebarSettings> };
         },
         listProjectIconSettings: () => ({ projects: [] }),
       },
@@ -7064,7 +7064,7 @@ describe("row context menu", () => {
     expect(close).toHaveBeenCalledWith({ threadId: "thr_ports", ports });
   });
 
-  it("supports Undo after settling and un-settling a thread", async () => {
+  it("ends snapshot Undo without offering an unrestricted tree redo", async () => {
     const undoToken = "cfb8bb71-7a2a-4d81-a3ab-c497bbd3a154";
     const rendered = renderSlot(inbox, listProps, {
       sidebarThreads: {
@@ -7102,18 +7102,8 @@ describe("row context menu", () => {
     const unsettleToast = toastMocks.success.mock.calls.find(
       ([message]) => message === "Settling undone",
     )![1] as { action: { label: string; onClick: () => void } };
-    expect(unsettleToast.action.label).toBe("Undo");
-    unsettleToast.action.onClick();
-
-    await waitFor(() =>
-      expect(
-        rendered.rpcCalls.filter(
-          (call) =>
-            call.method === "settle" &&
-            (call.input as { threadId: string }).threadId === "round-trip",
-        ),
-      ).toHaveLength(2),
-    );
+    expect(unsettleToast.action).toBeUndefined();
+    expect(rendered.rpcCalls.filter((call) => call.method === "settle")).toHaveLength(1);
   });
 
   it("restores the original wake time when undoing an unsnooze", async () => {

@@ -16,6 +16,7 @@ import {
 } from "./auto-settle";
 import { runThreadTasks } from "./thread-tasks";
 import { threadTreeIds } from "./thread-tree";
+import { sortPinnedThreads } from "./pinned-order";
 import {
   EMPTY_RECLAIM,
   planTerminalReclaim,
@@ -316,14 +317,8 @@ export const bbSidebarRpcContract = defineRpcContract({
     output: sidebarSettingsSchema,
   },
   updateSidebarSettings: {
-    // A client built before a setting existed leaves it out; keep what is stored.
-    input: sidebarSettingsSchema.partial({
-      compactWorkingThreads: true,
-      workingShelf: true,
-      dockShelves: true,
-      projectColorsEnabled: true,
-      projectColorDisplay: true,
-    }),
+    // Save only edited fields. Full payloads from older clients remain valid.
+    input: sidebarSettingsSchema.partial(),
     output: sidebarSettingsSchema,
   },
   listLifecycle: {
@@ -1089,19 +1084,21 @@ export default async function plugin(bb: BbPluginApi) {
     return changed;
   };
 
-  // Pin and reparent must not both validate the same old root state.
+  // Pin, reparent and tree Settle must not validate the same old state.
   const pinParentChanges = new Set<string>();
-  const withPinParentChange = async <T>(threadId: string, change: () => Promise<T>): Promise<T> => {
-    if (pinParentChanges.has(threadId)) {
+  const withThreadChanges = async <T>(threadIds: string[], change: () => Promise<T>): Promise<T> => {
+    if (threadIds.some((id) => pinParentChanges.has(id))) {
       throw new Error("Thread update already in progress. Try again.");
     }
-    pinParentChanges.add(threadId);
+    threadIds.forEach((id) => pinParentChanges.add(id));
     try {
       return await change();
     } finally {
-      pinParentChanges.delete(threadId);
+      threadIds.forEach((id) => pinParentChanges.delete(id));
     }
   };
+  const withPinParentChange = <T>(threadId: string, change: () => Promise<T>) =>
+    withThreadChanges([threadId], change);
 
   const readInboxOrder = (): string[] =>
     (
@@ -1122,25 +1119,28 @@ export default async function plugin(bb: BbPluginApi) {
     inboxThreadIds.forEach((threadId, index) => insert.run(threadId, index));
   });
 
-  // Project rows, not plain thread rows: only they carry every kind of live
-  // work the sidebar checks (workflows, background commands, plan mode, goals,
-  // a pending interaction, queued messages). One unpaged request covers the
-  // same unarchived, visible threads the old paged thread list did.
+  // Both endpoints supply complete activity summaries. Project groups provide
+  // visible rows in one call; only the paged thread endpoint includes helpers.
+  // Use one source per read so an older project row cannot resurrect an archived
+  // or deleted thread omitted from the newer thread list.
   const loadPolicyThreads = async (includeHidden = false) => {
-    const projects = await bb.sdk.projects.list({
-      include: "threads",
-      includePersonal: true,
-    });
-    return projects.flatMap((project) =>
-      "threads" in project
-        ? project.threads.filter(
-            (thread) =>
-              thread.archivedAt === null &&
-              thread.deletedAt === null &&
-              (includeHidden || thread.visibility === "visible"),
-          )
-        : [],
-    );
+    if (!includeHidden) {
+      const projects = await bb.sdk.projects.list({ include: "threads", includePersonal: true });
+      return projects.flatMap((project) => "threads" in project
+        ? project.threads.filter((thread) => thread.archivedAt === null && thread.deletedAt === null && thread.visibility === "visible")
+        : []);
+    }
+    const byId = new Map<string, Awaited<ReturnType<typeof bb.sdk.threads.list>>[number]>();
+    const limit = 100;
+    for (let offset = 0; ; offset += limit) {
+      const page = await bb.sdk.threads.list({ archived: false, includeHidden: true, limit, offset });
+      for (const thread of page) {
+        if (thread.archivedAt === null && thread.deletedAt === null) byId.set(thread.id, { ...thread });
+        else byId.delete(thread.id);
+      }
+      if (page.length < limit) break;
+    }
+    return [...byId.values()];
   };
 
   type CleanupThread = Awaited<ReturnType<typeof loadPolicyThreads>>[number];
@@ -1299,20 +1299,31 @@ export default async function plugin(bb: BbPluginApi) {
     return results;
   };
 
-  /**
-   * Release what a settled thread was still holding.
-   *
-   * Both settle paths refuse to park live work — the manual one through
-   * `canPark`, the policy one through `cannotAutoSettle` — so stopping the
-   * thread here can never interrupt a turn in flight. Every failure is
-   * swallowed: the lifecycle row is already written by the time this runs, and
-   * a host that cannot be reached is a missed reclaim, not a broken settle.
-   */
+  const sameLifecycle = (left: StoredLifecycleRow | null, right: StoredLifecycleRow | null) =>
+    JSON.stringify(left) === JSON.stringify(right);
+
+  // Queued cleanup belongs to the shelf action that scheduled it. Revalidate
+  // after network waits; activity, a new shelf choice, a pin or reparent cancels
+  // the remaining work. The SDK has no atomic "stop only if idle" operation.
   const reclaimThreadResources = async (
     threadId: string,
+    snapshot?: CleanupThread,
+    expectedRow = readOne(threadId),
+    owner?: { threadId: string; row: StoredLifecycleRow | null },
+    stillEligible?: (thread: CleanupThread) => boolean,
   ): Promise<ReclaimSummary> => {
+    const ownsRow = () => expectedRow !== null && sameLifecycle(readOne(threadId), expectedRow) &&
+      (!owner || sameLifecycle(readOne(owner.threadId), owner.row));
+    const canReclaim = async () => {
+      if (!ownsRow()) return false;
+      const thread = (await loadPolicyThreads(snapshot?.visibility === "hidden")).find((item) => item.id === threadId);
+      return ownsRow() && thread !== undefined && thread.pinnedAt === null &&
+        canPark(threadSignals(thread)) && (!stillEligible || stillEligible(thread)) && (!snapshot ||
+          (thread.parentThreadId === snapshot.parentThreadId && thread.latestAttentionAt <= snapshot.latestAttentionAt));
+    };
     let stoppedRuntime = false;
     try {
+      if (!await canReclaim()) return { ...EMPTY_RECLAIM };
       await bb.sdk.threads.stop({ threadId });
       stoppedRuntime = true;
     } catch {
@@ -1329,6 +1340,7 @@ export default async function plugin(bb: BbPluginApi) {
       keptTerminals = plan.keep;
       for (const terminalId of plan.close) {
         try {
+          if (!await canReclaim()) break;
           await bb.sdk.terminals.close({ terminalId, mode: "if-clean" });
           closedTerminals += 1;
         } catch {
@@ -1392,7 +1404,7 @@ export default async function plugin(bb: BbPluginApi) {
     const evaluation = (async () => {
       const settingsRevision = policySettingsRevision;
       const configured = readSidebarSettings();
-      let threads = await loadPolicyThreads();
+      let threads = await loadPolicyThreads(true);
       const lifecycleByThreadId = new Map(
         readAll().map((row) => [row.threadId, row]),
       );
@@ -1423,7 +1435,7 @@ export default async function plugin(bb: BbPluginApi) {
       };
       const decide = (keepThreadIds: ReadonlySet<string>) =>
         threads.flatMap((thread) => {
-          if (keepThreadIds.has(thread.id)) return [];
+          if (keepThreadIds.has(thread.id) || (thread.visibility === "hidden" && thread.parentThreadId === null)) return [];
           // Re-read after every lookup so a concurrent Park action wins.
           const row = readOne(thread.id);
           const decision = decideAutoSettle({
@@ -1459,7 +1471,7 @@ export default async function plugin(bb: BbPluginApi) {
         );
         // A child may have been created or restarted during the lookups.
         // Recheck the tree before settling, using only scanned candidates.
-        threads = await loadPolicyThreads();
+        threads = await loadPolicyThreads(true);
         changes = decide(servingPorts).filter((change) =>
           change.decision !== "settle" || settling.has(change.threadId),
         );
@@ -1481,6 +1493,7 @@ export default async function plugin(bb: BbPluginApi) {
       // uses the latest rules; this older pass must not move or stop threads.
       if (settingsRevision !== policySettingsRevision || changes.length === 0) return [];
       applyPolicyChanges(changes, now);
+      const cleanupRows = new Map(changes.map((change) => [change.threadId, readOne(change.threadId)]));
       const changedThreadIds = new Set(changes.map((change) => change.threadId));
       publishLifecycleChanges([...changedThreadIds]);
       for (const change of changes) {
@@ -1495,8 +1508,23 @@ export default async function plugin(bb: BbPluginApi) {
           change.decision === "settle" ? [change.threadId] : [],
         ),
         async (threadId) => {
-          if (settingsRevision !== policySettingsRevision) return;
-          await reclaimThreadResources(threadId);
+          await reclaimThreadResources(threadId, byId.get(threadId), cleanupRows.get(threadId), undefined, (thread) => {
+            if (settingsRevision === policySettingsRevision) return true;
+            const current = readSidebarSettings();
+            // A changed rule may return this thread to Active. Only finish its
+            // reclaim if it still qualifies under the new rules.
+            return decideAutoSettle({
+              lifecycle: null,
+              now: Date.now(),
+              pullRequest: thread.environmentId === null ? { outcome: "absent" }
+                : pullRequests.get(thread.environmentId) ?? { outcome: "unknown" },
+              settings: {
+                afterDays: parseAutoSettleAfterDays(current.autoSettleInactive, String(current.autoSettleAfterDays)),
+                onMerge: current.autoSettleOnMerge,
+              },
+              thread,
+            }) === "settle";
+          });
         },
         4,
       );
@@ -1746,20 +1774,13 @@ export default async function plugin(bb: BbPluginApi) {
     },
     async updateSidebarSettings(values) {
       const stored = readSidebarSettings();
-      writeSidebarSettings({
-        ...values,
-        compactWorkingThreads:
-          values.compactWorkingThreads ?? stored.compactWorkingThreads,
-        workingShelf: values.workingShelf ?? stored.workingShelf,
-        dockShelves: values.dockShelves ?? stored.dockShelves,
-        projectColorsEnabled: values.projectColorsEnabled ?? stored.projectColorsEnabled,
-        projectColorDisplay: values.projectColorDisplay ?? stored.projectColorDisplay,
-      });
+      const next = { ...stored, ...values };
+      writeSidebarSettings(next);
       bb.realtime.publish(SIDEBAR_SETTINGS_CHANNEL, {});
       if (
-        values.autoSettleInactive !== stored.autoSettleInactive ||
-        values.autoSettleAfterDays !== stored.autoSettleAfterDays ||
-        values.autoSettleOnMerge !== stored.autoSettleOnMerge
+        next.autoSettleInactive !== stored.autoSettleInactive ||
+        next.autoSettleAfterDays !== stored.autoSettleAfterDays ||
+        next.autoSettleOnMerge !== stored.autoSettleOnMerge
       ) {
         policySettingsRevision += 1;
         void evaluatePolicies().catch((error) => {
@@ -1815,43 +1836,74 @@ export default async function plugin(bb: BbPluginApi) {
       return { ok: true };
     },
     async settle({ threadId }) {
-      const tree = await loadSettleTree(threadId);
-      const busy = tree.find((thread) => !canPark(threadSignals(thread)));
-      if (busy) {
-        throw new Error(`Cannot settle while ${busy.title ?? "a thread"} is working or waiting for input`);
-      }
-      // Native pinning and this plugin's settled shelf are competing ways to
-      // keep a thread out of the ordinary inbox. Settling wins, and a failed
-      // unpin leaves the lifecycle row untouched instead of half-applying it.
-      for (const thread of tree) await bb.sdk.threads.unpin({ threadId: thread.id });
-      // Re-read after unpinning before writing or releasing any runtimes.
-      const currentTree = await loadSettleTree(threadId);
-      const originalIds = new Set(tree.map((thread) => thread.id));
-      if (currentTree.length !== tree.length || currentTree.some((thread) =>
-        !originalIds.has(thread.id) || !canPark(threadSignals(thread)))) {
-        throw new Error("Thread tree changed while settling. Try again.");
-      }
-      // Settling clears any snooze: they are two answers to the same
-      // question, and holding both would make the shelf order ambiguous.
-      // Distinguish actions in the same millisecond when checking stale Undo.
-      const now = Math.max(Date.now(), lastManualSettleAt + 1);
-      lastManualSettleAt = now;
-      const previous = currentTree.map((thread) => ({
-        threadId: thread.id, parentThreadId: thread.parentThreadId, row: readOne(thread.id),
-      }));
-      writeMany(currentTree.map((thread) => ({
-        threadId: thread.id,
-        settledAt: now,
-        settledOverride: "settled" as const,
-        snoozedUntil: null,
-        snoozedAt: null,
-      })));
-      publishLifecycleChanges(currentTree.map((thread) => thread.id));
+      const allThreads = await loadPolicyThreads(true);
+      const ids = new Set(threadTreeIds(allThreads, threadId));
+      const tree = allThreads.filter((thread) => ids.has(thread.id));
+      if (!tree.some((thread) => thread.id === threadId)) throw new Error("Thread is no longer available");
+      const { currentTree, now, previous, cleanupRows, cleanupOwner } = await withThreadChanges([...ids], async () => {
+        const busy = tree.find((thread) => !canPark(threadSignals(thread)));
+        if (busy) throw new Error(`Cannot settle while ${busy.title ?? "a thread"} is working or waiting for input`);
+        const beforeRows = new Map(tree.map((thread) => [thread.id, readOne(thread.id)]));
+        const pins = sortPinnedThreads(allThreads.filter((thread) => thread.pinnedAt !== null && thread.parentThreadId === null));
+        const unpinned: CleanupThread[] = [];
+        try {
+          for (const thread of tree) {
+            if (thread.pinnedAt === null) continue;
+            await bb.sdk.threads.unpin({ threadId: thread.id });
+            unpinned.push(thread);
+          }
+          const currentTree = await loadSettleTree(threadId);
+          const beforeById = new Map(tree.map((thread) => [thread.id, thread]));
+          if (currentTree.length !== tree.length || currentTree.some((thread) => {
+            const before = beforeById.get(thread.id);
+            return !before || thread.parentThreadId !== before.parentThreadId ||
+              thread.pinnedAt !== null || thread.latestAttentionAt > before.latestAttentionAt ||
+              !canPark(threadSignals(thread)) || !sameLifecycle(readOne(thread.id), beforeRows.get(thread.id)!);
+          })) throw new Error("Thread tree changed while settling. Try again.");
+          // Distinguish actions in the same millisecond when checking stale Undo.
+          const now = Math.max(Date.now(), lastManualSettleAt + 1);
+          lastManualSettleAt = now;
+          const previous = currentTree.map((thread) => ({
+            threadId: thread.id, parentThreadId: thread.parentThreadId, row: readOne(thread.id),
+          }));
+          writeMany(currentTree.map((thread) => ({
+            threadId: thread.id,
+            settledAt: now,
+            settledOverride: "settled" as const,
+            snoozedUntil: null,
+            snoozedAt: null,
+          })));
+          publishLifecycleChanges(currentTree.map((thread) => thread.id));
+          // Capture ownership before yielding back to another shelf action.
+          const cleanupRows = new Map(currentTree.map((thread) => [thread.id, readOne(thread.id)]));
+          const cleanupOwner = { threadId, row: readOne(threadId) };
+          return { currentTree, now, previous, cleanupRows, cleanupOwner };
+        } catch (error) {
+          const failed: string[] = [];
+          for (const original of unpinned.reverse()) {
+            try {
+              const current = await bb.sdk.threads.get({ threadId: original.id });
+              // Preserve subsequent native pins, parent changes and shelf choices.
+              if (current.pinnedAt !== null || current.parentThreadId !== original.parentThreadId ||
+                  !sameLifecycle(readOne(original.id), beforeRows.get(original.id)!)) continue;
+              await bb.sdk.threads.pin({ threadId: original.id });
+              const index = pins.findIndex((thread) => thread.id === original.id);
+              await bb.sdk.threads.reorderPinned({
+                threadId: original.id,
+                previousThreadId: pins[index - 1]?.id ?? null,
+                nextThreadId: pins[index + 1]?.id ?? null,
+              });
+            } catch { failed.push(original.title ?? original.id); }
+          }
+          if (failed.length) throw new Error(`${cleanupError(error)}. Could not restore pins for: ${failed.join(", ")}`);
+          throw error;
+        }
+      });
       // The shelf move is durable before anything is released, so a slow or
       // unreachable host delays the reminder without holding up the settle.
       const reclaim = { ...EMPTY_RECLAIM };
       await runThreadTasks(currentTree.map((thread) => thread.id), async (id) => {
-        const released = await reclaimThreadResources(id);
+        const released = await reclaimThreadResources(id, currentTree.find((thread) => thread.id === id), cleanupRows.get(id), cleanupOwner);
         reclaim.closedTerminals += released.closedTerminals;
         reclaim.keptTerminals += released.keptTerminals;
         reclaim.stoppedRuntime ||= released.stoppedRuntime;
@@ -1891,13 +1943,17 @@ export default async function plugin(bb: BbPluginApi) {
       }
       const tree = await loadSettleTree(threadId);
       const restoring = tree.filter((thread) => thread.id === threadId || readOne(thread.id)?.settledAt != null);
-      writeMany(restoring.map((thread) => ({
-        threadId: thread.id,
-        settledAt: null,
-        settledOverride: "active" as const,
-        snoozedUntil: readOne(thread.id)?.snoozedUntil ?? null,
-        snoozedAt: readOne(thread.id)?.snoozedAt ?? null,
-      })));
+      db.transaction(() => {
+        for (const thread of restoring) {
+          if (thread.id === threadId) {
+            write({ threadId, settledAt: null, settledOverride: "active", snoozedUntil: null, snoozedAt: null }, false);
+          } else {
+            // Returning the parent is not an independent permanent Active choice
+            // for every descendant. They resume their ordinary automatic rules.
+            db.prepare("DELETE FROM thread_lifecycle WHERE thread_id = ?").run(thread.id);
+          }
+        }
+      })();
       publishLifecycleChanges(restoring.map((thread) => thread.id));
       await wakeAncestors(tree.find((thread) => thread.id === threadId)!);
       return { ok: true };
@@ -2026,6 +2082,7 @@ export default async function plugin(bb: BbPluginApi) {
 
       await bb.sdk.projects.delete({ projectId });
       db.transaction(() => {
+        db.prepare("DELETE FROM project_colors WHERE project_id = ?").run(projectId);
         db.prepare(`DELETE FROM project_icons WHERE project_id = ?`).run(
           projectId,
         );
@@ -2036,6 +2093,7 @@ export default async function plugin(bb: BbPluginApi) {
       defaultProjectHostIds.delete(projectId);
       clearProjectIconCache(projectId);
       bb.realtime.publish(PROJECT_ICONS_CHANNEL, { projectId });
+      bb.realtime.publish(PROJECT_COLORS_CHANNEL, { projectId });
       return { ok: true as const };
     },
     async searchProjectIconFiles({ projectId, query }) {

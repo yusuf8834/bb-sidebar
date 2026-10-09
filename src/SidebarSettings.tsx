@@ -91,6 +91,9 @@ const SECTION_BY_SETTING: Record<keyof SidebarSettingsValues, string> = {
   projectColorDisplay: "Project appearance",
 };
 
+const validHours = (value: number) => Number.isInteger(value) && value >= MIN_INACTIVE_AFTER_HOURS && value <= MAX_INACTIVE_AFTER_HOURS;
+const validDays = (value: number) => Number.isInteger(value) && value >= MIN_AUTO_SETTLE_AFTER_DAYS && value <= MAX_AUTO_SETTLE_AFTER_DAYS;
+
 /**
  * The plugin's settings page. Every change saves on its own, as bb's own
  * settings do; a value that fails validation shows why and is not sent.
@@ -110,6 +113,14 @@ export function SidebarSettings() {
   savedRef.current = saved;
   draftRef.current = draft;
   const savingRef = useRef(false);
+  const mounted = useRef(true);
+  const dirtyFields = useRef(new Map<keyof SidebarSettingsValues, number>());
+  const editVersion = useRef(0);
+  const refreshAfterSave = useRef(false);
+  const mergeUnedited = (incoming: SidebarSettingsValues) => {
+    const local = Object.fromEntries([...dirtyFields.current.keys()].map((key) => [key, draftRef.current[key]]));
+    return { ...incoming, ...local };
+  };
   const [loading, setLoading] = useState(initialSettings === null);
   const changedSectionRef = useRef<string | null>(null);
   const [saveFeedback, setSaveFeedback] = useState<{
@@ -129,19 +140,16 @@ export function SidebarSettings() {
   }, [saveFeedback]);
 
   const load = useCallback(async () => {
+    if (savingRef.current) { refreshAfterSave.current = true; return; }
     const seq = ++loadRequestSeq.current;
     try {
       const result = await rpc.call("getSidebarSettings", {});
       if (seq !== loadRequestSeq.current) return;
       const cached = cacheSidebarSettings(rpc, result);
-      const hasLocalEdits =
-        JSON.stringify(draftRef.current) !== JSON.stringify(savedRef.current);
       savedRef.current = cached;
+      draftRef.current = mergeUnedited(cached);
       setSaved(cached);
-      if (!hasLocalEdits) {
-        draftRef.current = cached;
-        setDraft(cached);
-      }
+      setDraft(draftRef.current);
     } catch (error) {
       if (seq !== loadRequestSeq.current) return;
       toast.error("Could not load sidebar settings", {
@@ -159,7 +167,7 @@ export function SidebarSettings() {
     void load();
   });
 
-  const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
+  const dirty = dirtyFields.current.size > 0;
   const inactiveHoursValid =
     Number.isInteger(draft.inactiveAfterHours) &&
     draft.inactiveAfterHours >= MIN_INACTIVE_AFTER_HOURS &&
@@ -183,6 +191,7 @@ export function SidebarSettings() {
     value: SidebarSettingsValues[Key],
   ) => {
     changedSectionRef.current = SECTION_BY_SETTING[key];
+    dirtyFields.current.set(key, ++editVersion.current);
     setDraft((current) => {
       const next = { ...current, [key]: value };
       draftRef.current = next;
@@ -190,42 +199,55 @@ export function SidebarSettings() {
     });
   };
 
+  const validDraft = (value: SidebarSettingsValues) =>
+    configuredSnoozePresetError(value.snoozePresets) === null &&
+    (!value.inactiveThreadsEnabled || validHours(value.inactiveAfterHours)) &&
+    (!value.autoSettleInactive || validDays(value.autoSettleAfterDays));
+
   const save = async () => {
-    // One write at a time. When it lands, `saved` changes and the effect
-    // below schedules the next one if the draft moved on meanwhile.
     if (savingRef.current) return;
-    const sent = draftRef.current;
-    // A load started before this write cannot overwrite its result.
-    loadRequestSeq.current += 1;
     savingRef.current = true;
-    const section = changedSectionRef.current;
-    if (section) setSaveFeedback({ section, status: "saving" });
     try {
-      const result = await rpc.call("updateSidebarSettings", {
-        ...sent,
-        // A disabled rule may hold a half-typed number; send a valid one.
-        inactiveAfterHours: inactiveHoursValid
-          ? sent.inactiveAfterHours
-          : DEFAULT_SIDEBAR_SETTINGS.inactiveAfterHours,
-        autoSettleAfterDays: autoSettleDaysValid
-          ? sent.autoSettleAfterDays
-          : DEFAULT_SIDEBAR_SETTINGS.autoSettleAfterDays,
-      });
-      const cached = cacheSidebarSettings(rpc, result);
-      savedRef.current = cached;
-      setSaved(cached);
-      if (draftRef.current === sent) {
-        draftRef.current = cached;
-        setDraft(cached);
+      // Mounted edits keep the ordinary debounce after each reply. Once the
+      // page unmounts, drain queued edits here: its effects can no longer save them.
+      // Patch only dirty fields so other clients' edits survive.
+      while (dirtyFields.current.size && validDraft(draftRef.current)) {
+        const sentVersions = new Map(dirtyFields.current);
+        const sent = { ...draftRef.current };
+        if (!validHours(sent.inactiveAfterHours)) sent.inactiveAfterHours = DEFAULT_SIDEBAR_SETTINGS.inactiveAfterHours;
+        if (!validDays(sent.autoSettleAfterDays)) sent.autoSettleAfterDays = DEFAULT_SIDEBAR_SETTINGS.autoSettleAfterDays;
+        const patch = Object.fromEntries([...sentVersions.keys()].map((key) => [key, sent[key]]));
+        loadRequestSeq.current += 1;
+        const section = changedSectionRef.current;
+        if (section && mounted.current) setSaveFeedback({ section, status: "saving" });
+        try {
+          const result = await rpc.call("updateSidebarSettings", patch);
+          const cached = cacheSidebarSettings(rpc, result);
+          for (const [key, version] of sentVersions) {
+            if (dirtyFields.current.get(key) === version) dirtyFields.current.delete(key);
+          }
+          savedRef.current = cached;
+          draftRef.current = mergeUnedited(cached);
+          if (mounted.current) {
+            setSaved(cached);
+            setDraft(draftRef.current);
+            if (section) setSaveFeedback({ section, status: "saved" });
+            break;
+          }
+        } catch (error) {
+          if (section && mounted.current) setSaveFeedback({ section, status: "error" });
+          toast.error("Could not save sidebar settings", {
+            description: error instanceof Error ? error.message : undefined,
+          });
+          break;
+        }
       }
-      if (section) setSaveFeedback({ section, status: "saved" });
-    } catch (error) {
-      if (section) setSaveFeedback({ section, status: "error" });
-      toast.error("Could not save sidebar settings", {
-        description: error instanceof Error ? error.message : undefined,
-      });
     } finally {
       savingRef.current = false;
+      if (refreshAfterSave.current && mounted.current) {
+        refreshAfterSave.current = false;
+        void load();
+      }
     }
   };
   const saveRef = useRef(save);
@@ -239,13 +261,14 @@ export function SidebarSettings() {
     const timer = setTimeout(() => void saveRef.current(), SAVE_DELAY_MS);
     return () => clearTimeout(timer);
   }, [draft, saved, pendingSave]);
-  // Leaving the page inside the delay still keeps the last change.
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      loadRequestSeq.current += 1;
       if (pendingSaveRef.current) void saveRef.current();
-    },
-    [],
-  );
+    };
+  }, []);
 
   if (loading) {
     return (

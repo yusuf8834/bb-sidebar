@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
+import { useRealtime, useRealtimeConnectionState, useRpc } from "@get-bb/plugin-sdk/app";
 import type { bbSidebarRpcContract } from "./server";
 import { automaticProjectColor, projectColorsById, projectColorStyle, PROJECT_COLORS_CHANNEL } from "./project-colors";
 import type { ProjectColorDisplay } from "./sidebar-settings";
@@ -8,6 +8,8 @@ export type ProjectStripeView = "full" | "collapsed" | "group-full" | "group-col
 
 export function useProjectColorOverrides(enabled = true) {
   const rpc = useRpc<typeof bbSidebarRpcContract>();
+  const connection = useRealtimeConnectionState();
+  const previousConnection = useRef(connection);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   const request = useRef(0);
   const load = useCallback(async () => {
@@ -25,6 +27,10 @@ export function useProjectColorOverrides(enabled = true) {
     return () => { request.current += 1; };
   }, [load]);
   useRealtime(PROJECT_COLORS_CHANNEL, () => { void load(); });
+  useEffect(() => {
+    if (connection === "connected" && previousConnection.current !== "connected") void load();
+    previousConnection.current = connection;
+  }, [connection, load]);
   return { overrides, reload: load };
 }
 

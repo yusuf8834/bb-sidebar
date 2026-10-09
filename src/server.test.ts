@@ -1,10 +1,25 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  createFakePluginHost,
+  createFakePluginHost as createHost,
   makeThreadResponse,
 } from "@get-bb/plugin-sdk/testing";
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import plugin, { type StoredLifecycleRow } from "./server";
+
+// Default both SDK listings to the test's thread fixture. Host-boundary tests
+// override them separately to reproduce visibility, paging and stale replies.
+const createFakePluginHost = (options: Parameters<typeof createHost>[0]) => {
+  const result = createHost(options);
+  if (!options?.sdk?.threads?.list) {
+    result.harness.inspection.sdk.stub("threads.list", async (args: Parameters<BbPluginApi["sdk"]["threads"]["list"]>[0]) => {
+      const projects = await result.bb.sdk.projects.list({ include: "threads", includePersonal: true });
+      const threads = projects.flatMap(p => "threads" in p ? p.threads : []);
+      const offset = args?.offset ?? 0;
+      return threads.slice(offset, offset + (args?.limit ?? 100));
+    });
+  }
+  return result;
+};
 
 interface LifecycleListResult {
   rows: StoredLifecycleRow[];
@@ -169,7 +184,6 @@ async function loadPlugin(
     sdk: {
       projects: { list: async () => projectsWith([projectThread({ id: "thr_1" })]) },
       threads: {
-        list: async () => [],
         get: async ({ threadId }) => makeThreadResponse({ id: threadId }),
         pin: async ({ threadId }) =>
           makeThreadResponse({ id: threadId, pinnedAt: Date.now() }),
@@ -245,8 +259,7 @@ describe("lifecycle RPC", () => {
       sdk: {
         projects: { list: async () => projectsWith([settled, active, safe, empty, later()]) },
         threads: {
-          list: async () => [],
-          get: async ({ threadId }) => makeThreadResponse({ id: threadId }),
+            get: async ({ threadId }) => makeThreadResponse({ id: threadId }),
           unpin: async ({ threadId }) => makeThreadResponse({ id: threadId }),
           stop: async () => ({ ok: true as const }),
         },
@@ -309,8 +322,7 @@ describe("lifecycle RPC", () => {
       sdk: {
         projects: { list: async () => projectsWith(activeSibling ? [owner, sibling] : [owner]) },
         threads: {
-          list: async () => [],
-          get: async () => makeThreadResponse({ id: "thr_owner", environmentId: "env_one" }),
+            get: async () => makeThreadResponse({ id: "thr_owner", environmentId: "env_one" }),
           unpin: async () => makeThreadResponse({ id: "thr_owner" }),
           stop: async () => ({ ok: true as const }),
         },
@@ -359,7 +371,7 @@ describe("lifecycle RPC", () => {
       pluginId: "bb-sidebar",
       sdk: {
         projects: { list: async () => projectsWith([projectThread({ id: "thr_race", status: working ? "active" : "idle" })]) },
-        threads: { list: async () => [], get: async () => makeThreadResponse({ id: "thr_race" }), unpin: async () => makeThreadResponse({ id: "thr_race" }), stop: async () => ({ ok: true as const }) },
+        threads: { get: async () => makeThreadResponse({ id: "thr_race" }), unpin: async () => makeThreadResponse({ id: "thr_race" }), stop: async () => ({ ok: true as const }) },
         terminals: {
           list: async () => {
             terminalLists += 1;
@@ -391,7 +403,7 @@ describe("lifecycle RPC", () => {
       },
       sdk: {
         projects: { list: async () => projectsWith([owner, active]) },
-        threads: { list: async () => [], get: async () => makeThreadResponse({ id: "thr_owner", environmentId: "env_one" }), unpin: async () => makeThreadResponse({ id: "thr_owner" }), stop: async () => ({ ok: true as const }) },
+        threads: { get: async () => makeThreadResponse({ id: "thr_owner", environmentId: "env_one" }), unpin: async () => makeThreadResponse({ id: "thr_owner" }), stop: async () => ({ ok: true as const }) },
         terminals: { list: async () => ({ sessions: [{ ...terminalSession({ id: "term_shared", lastUserInputAt: 5 }), threadId: "thr_owner" }] }) },
       },
     });
@@ -421,8 +433,7 @@ describe("lifecycle RPC", () => {
       sdk: {
         projects: { list: async () => projectsWith([owner()]) },
         threads: {
-          list: async () => [],
-          get: async () => makeThreadResponse({ id: "thr_owner", environmentId: "env_one" }),
+            get: async () => makeThreadResponse({ id: "thr_owner", environmentId: "env_one" }),
           unpin: async () => makeThreadResponse({ id: "thr_owner" }),
           stop: async () => ({ ok: true as const }),
         },
@@ -459,7 +470,7 @@ describe("lifecycle RPC", () => {
       },
       sdk: {
         projects: { list: async () => projectsWith([owner]) },
-        threads: { list: async () => [], get: async () => makeThreadResponse({ id: "thr_owner", environmentId: "env_one" }), unpin: async () => makeThreadResponse({ id: "thr_owner" }), stop: async () => ({ ok: true as const }) },
+        threads: { get: async () => makeThreadResponse({ id: "thr_owner", environmentId: "env_one" }), unpin: async () => makeThreadResponse({ id: "thr_owner" }), stop: async () => ({ ok: true as const }) },
         environments: { get: async () => ({ id: "env_one", hostId: "host_1", path: "/workspace/one", status: "ready" }) as Environment },
         terminals: {
           list: async () => ({ sessions: [{ ...terminalSession({ id: "term_owner", environmentId: "env_one", lastUserInputAt: 5 }), threadId: "thr_owner" }] }),
@@ -488,7 +499,7 @@ describe("lifecycle RPC", () => {
       },
       sdk: {
         projects: { list: async () => projectsWith([owner, sibling]) },
-        threads: { list: async () => [], get: async () => makeThreadResponse({ id: "thr_owner", environmentId: "env_private" }), unpin: async () => makeThreadResponse({ id: "thr_owner" }), stop: async () => ({ ok: true as const }) },
+        threads: { get: async () => makeThreadResponse({ id: "thr_owner", environmentId: "env_private" }), unpin: async () => makeThreadResponse({ id: "thr_owner" }), stop: async () => ({ ok: true as const }) },
         environments: { get: async () => ({ id: "env_private", hostId: "host_1", path: "/workspace/private", status: "ready" }) as Environment },
         terminals: {
           list: async () => ({ sessions: [
@@ -710,9 +721,7 @@ describe("lifecycle RPC", () => {
     const harness = await loadPlugin();
 
     await harness.behavior.callRpc("settle", { threadId: "thr_1" });
-    expect(harness.inspection.sdk.callsTo("threads.unpin")).toEqual([
-      [{ threadId: "thr_1" }],
-    ]);
+    expect(harness.inspection.sdk.callsTo("threads.unpin")).toEqual([]);
     const settled = (await harness.behavior.callRpc(
       "listLifecycle",
       {},
@@ -744,6 +753,7 @@ describe("lifecycle RPC", () => {
     async (method) => {
       const harness = await loadPlugin();
       let pinned = false;
+      harness.inspection.sdk.stub("projects.list", async () => projectsWith([projectThread({ id: "thr_1", pinnedAt: pinned ? 1 : null })]));
       harness.inspection.sdk.stub("threads.pin", async ({ threadId }) => {
         pinned = true;
         return makeThreadResponse({ id: threadId, pinnedAt: Date.now() });
@@ -811,8 +821,7 @@ describe("lifecycle RPC", () => {
       sdk: {
         projects: { list: async () => projectsWith([projectThread({ id: "thr_1" })]) },
         threads: {
-          list: async () => [],
-          unpin: async ({ threadId }: { threadId: string }) =>
+            unpin: async ({ threadId }: { threadId: string }) =>
             makeThreadResponse({ id: threadId }),
           stop: async () => ({ ok: true as const }),
         },
@@ -853,8 +862,7 @@ describe("lifecycle RPC", () => {
       sdk: {
         projects: { list: async () => projectsWith([projectThread({ id: "thr_1" })]) },
         threads: {
-          list: async () => [],
-          unpin: async ({ threadId }: { threadId: string }) =>
+            unpin: async ({ threadId }: { threadId: string }) =>
             makeThreadResponse({ id: threadId }),
           stop: async () => {
             throw new Error("host offline");
@@ -891,8 +899,7 @@ describe("lifecycle RPC", () => {
       pluginId: "bb-sidebar",
       sdk: {
         threads: {
-          list: async () => [],
-          stop: async ({ threadId }: { threadId: string }) => {
+            stop: async ({ threadId }: { threadId: string }) => {
             if (threadId === "thr_offline") throw new Error("host offline");
             return { ok: true as const };
           },
@@ -1045,7 +1052,7 @@ describe("lifecycle RPC", () => {
     const { bb, harness } = createFakePluginHost({
       pluginId: "bb-sidebar",
       sdk: {
-        projects: { list: async () => projectsWith([projectThread({ id: "thr_1" })]) },
+        projects: { list: async () => projectsWith([projectThread({ id: "thr_1", pinnedAt: 1 })]) },
         threads: {
           unpin: async () => {
             throw new Error("pin update failed");
@@ -1072,7 +1079,7 @@ describe("lifecycle RPC", () => {
 describe("settling thread trees", () => {
   const tree = () => [
     projectThread({ id: "parent" }),
-    projectThread({ id: "child", parentThreadId: "parent", projectId: "other", pinnedAt: 1 }),
+    projectThread({ id: "child", parentThreadId: "parent", projectId: "other" }),
     projectThread({ id: "grandchild", parentThreadId: "child" }),
     projectThread({ id: "hidden", parentThreadId: "parent", visibility: "hidden" }),
     projectThread({ id: "archived", parentThreadId: "parent", archivedAt: 1 }),
@@ -1155,8 +1162,7 @@ describe("settling thread trees", () => {
     expect(harness.inspection.realtimeSignals.filter(signal => signal.channel === "lifecycle")).toHaveLength(1);
     await harness.behavior.callRpc("unsettle", { threadId: "parent" });
     const restored = await harness.behavior.callRpc("listLifecycle", {}) as LifecycleListResult;
-    expect(restored.rows).toHaveLength(4);
-    expect(restored.rows.every(row => row.settledAt === null && row.settledOverride === "active")).toBe(true);
+    expect(restored.rows).toEqual([expect.objectContaining({ threadId: "parent", settledAt: null, settledOverride: "active" })]);
   });
 
   it("Undo restores children's previous shelves without adding Active overrides", async () => {
@@ -1263,7 +1269,7 @@ describe("settling thread trees", () => {
 
   it("does not settle any rows if a descendant cannot be unpinned", async () => {
     const harness = await loadPlugin();
-    harness.inspection.sdk.stub("projects.list", async () => projectsWith(tree()));
+    harness.inspection.sdk.stub("projects.list", async () => projectsWith(tree().map(thread => thread.id === "child" ? { ...thread, pinnedAt: 1 } : thread)));
     harness.inspection.sdk.stub("threads.unpin", async ({ threadId }) => {
       if (threadId === "child") throw new Error("unpin failed");
       return makeThreadResponse({ id: threadId });
@@ -1277,7 +1283,8 @@ describe("settling thread trees", () => {
     const harness = await loadPlugin();
     let active = false;
     harness.inspection.sdk.stub("projects.list", async () => projectsWith(tree().map(thread =>
-      thread.id === "grandchild" && active ? { ...thread, status: "active" as const } : thread,
+      thread.id === "grandchild" && active ? { ...thread, status: "active" as const } :
+      thread.id === "child" && !active ? { ...thread, pinnedAt: 1 } : thread,
     )));
     harness.inspection.sdk.stub("threads.unpin", async ({ threadId }) => {
       active = true;
@@ -1647,6 +1654,7 @@ describe("project management", () => {
       mimeType: "image/svg+xml",
       contentBase64: "PHN2Zy8+",
     });
+    await harness.behavior.callRpc("setProjectColor", { projectId: "proj_1", color: "#123456" });
     await expect(
       harness.behavior.callRpc("removeProject", {
         projectId: "proj_1",
@@ -1656,6 +1664,8 @@ describe("project management", () => {
     expect(harness.inspection.sdk.callsTo("projects.delete")).toEqual([
       [{ projectId: "proj_1" }],
     ]);
+    expect(await harness.behavior.callRpc("getProjectColors", {})).toEqual({ colors: {} });
+    expect(harness.inspection.realtimeSignals.at(-1)).toEqual({ channel: "project-colors", payload: { projectId: "proj_1" } });
     await expect(
       harness.behavior.callRpc("listProjectIconSettings", {}),
     ).resolves.toEqual({
@@ -1931,6 +1941,7 @@ describe("automatic settle evaluation", () => {
       harness.behavior.callRpc("evaluateAutoSettle", {}),
     ).resolves.toEqual({ changedThreadIds: ["thr_quiet"] });
     expect(harness.inspection.sdk.callsTo("projects.list")).toEqual([
+      [{ include: "threads", includePersonal: true }],
       [{ include: "threads", includePersonal: true }],
       [{ include: "threads", includePersonal: true }],
     ]);
@@ -2499,5 +2510,180 @@ describe("parent auto-unpin partial result", () => {
     expect(harness.inspection.sdk.callsTo("threads.get")).toHaveLength(2);
     expect(calls).toEqual(["update", "unpin"]); // no rollback or repeat unpin
     await expect(harness.behavior.callRpc("listLifecycle", {})).resolves.toEqual(before);
+  });
+});
+
+describe("release lifecycle safety", () => {
+  async function host(threads: ProjectThread[]) {
+    const harness = await loadPlugin();
+    // Match the real host: projects hide helpers; the paged thread list does not.
+    harness.inspection.sdk.stub("projects.list", async () => projectsWith(threads.filter(t => t.visibility === "visible")));
+    harness.inspection.sdk.stub("threads.list", async (args: Parameters<BbPluginApi["sdk"]["threads"]["list"]>[0]) => { const { offset = 0, limit = 100 } = args ?? {}; return threads.slice(offset, offset + limit); });
+    harness.inspection.sdk.stub("threads.get", async ({ threadId }) => makeThreadResponse(threads.find(t => t.id === threadId)!));
+    harness.inspection.sdk.stub("threads.unpin", async ({ threadId }) => {
+      const thread = threads.find(t => t.id === threadId)!;
+      thread.pinnedAt = null;
+      return makeThreadResponse(thread);
+    });
+    harness.inspection.sdk.stub("threads.pin", async ({ threadId }) => {
+      const thread = threads.find(t => t.id === threadId)!;
+      thread.pinnedAt = Date.now();
+      return makeThreadResponse(thread);
+    });
+    harness.inspection.sdk.stub("threads.stop", async () => ({ ok: true }));
+    harness.inspection.sdk.stub("terminals.list", async () => ({ sessions: [] }));
+    return harness;
+  }
+
+  it.each(["activity", "return", "pin", "reparent"])("cancels queued reclaim after newer %s", async (change) => {
+    const threads = [projectThread({ id: "root" }), ...Array.from({ length: 5 }, (_, i) => projectThread({ id: `child${i}`, parentThreadId: "root" }))];
+    const h = await host(threads);
+    const gate = deferred<void>();
+    const started = deferred<void>();
+    const stopped: string[] = [];
+    h.inspection.sdk.stub("threads.stop", async ({ threadId }) => {
+      stopped.push(threadId);
+      if (stopped.length === 4) started.resolve();
+      await gate.promise;
+      return { ok: true };
+    });
+    const settling = h.behavior.callRpc("settle", { threadId: "root" });
+    await started.promise;
+    const late = threads.at(-1)!;
+    if (change === "activity") {
+      late.status = "active";
+      await h.behavior.emitThreadEvent("thread.active", { thread: makeThreadResponse(late) });
+    } else if (change === "return") {
+      await h.behavior.callRpc("unsettle", { threadId: late.id });
+    } else if (change === "pin") {
+      late.pinnedAt = Date.now();
+    } else late.parentThreadId = null;
+    gate.resolve();
+    await settling;
+    expect(stopped).not.toContain(late.id);
+  });
+
+  it("rechecks activity after terminal lookup before closing anything", async () => {
+    const threads = [projectThread({ id: "root" })];
+    const h = await host(threads);
+    const gate = deferred<void>();
+    const started = deferred<void>();
+    h.inspection.sdk.stub("terminals.list", async () => {
+      started.resolve();
+      await gate.promise;
+      return { sessions: [{ ...terminalSession({ id: "terminal" }), threadId: "root" }] };
+    });
+    h.inspection.sdk.stub("terminals.close", async () => ({ ok: true }));
+    const settling = h.behavior.callRpc("settle", { threadId: "root" });
+    await started.promise;
+    threads[0]!.status = "active";
+    await h.behavior.emitThreadEvent("thread.active", { thread: makeThreadResponse(threads[0]!) });
+    gate.resolve();
+    await settling;
+    expect(h.inspection.sdk.callsTo("terminals.close")).toEqual([]);
+  });
+
+  it("automatically settles finished descendants after a returned parent runs again", async () => {
+    const old = Date.now() - 8 * 86400000;
+    const threads = [projectThread({ id: "root", createdAt: old, latestAttentionAt: old, updatedAt: old }), projectThread({ id: "child", parentThreadId: "root", createdAt: old, latestAttentionAt: old, updatedAt: old })];
+    const h = await host(threads);
+    await h.behavior.callRpc("settle", { threadId: "root" });
+    await h.behavior.callRpc("unsettle", { threadId: "root" });
+    expect(await h.behavior.callRpc("listLifecycle", {})).toMatchObject({ rows: [{ threadId: "root", settledOverride: "active" }] });
+    await h.behavior.emitThreadEvent("thread.active", { thread: makeThreadResponse({ ...threads[0]!, status: "active" }) });
+    expect(await h.behavior.callRpc("evaluateAutoSettle", {})).toEqual({ changedThreadIds: ["root", "child"] });
+  });
+
+  it.each(["unpin fails", "child starts"])("restores native pins when Settle fails: %s", async (reason) => {
+    const threads = [projectThread({ id: "root", pinnedAt: 1, pinSortKey: "B" }), projectThread({ id: "child", parentThreadId: "root", pinnedAt: 2 }), projectThread({ id: "other", pinnedAt: 1, pinSortKey: "A" })];
+    const h = await host(threads);
+    h.inspection.sdk.stub("threads.unpin", async ({ threadId }) => {
+      if (threadId === "child" && reason === "unpin fails") throw new Error("unpin failed");
+      threads.find(t => t.id === threadId)!.pinnedAt = null;
+      if (reason === "child starts") threads[1]!.status = "active";
+      return makeThreadResponse({ id: threadId });
+    });
+    await expect(h.behavior.callRpc("settle", { threadId: "root" })).rejects.toThrow();
+    expect(threads[0]!.pinnedAt).not.toBeNull();
+    expect(await h.behavior.callRpc("listLifecycle", {})).toEqual({ rows: [] });
+    expect(h.inspection.sdk.callsTo("threads.stop")).toEqual([]);
+    expect(h.inspection.sdk.callsTo("threads.reorderPinned")).toContainEqual([{ threadId: "root", previousThreadId: "other", nextThreadId: null }]);
+  });
+
+  it.each(["pin", "setThreadParent"])("serializes %s against a Settle waiting on native unpin", async (method) => {
+    const threads = [projectThread({ id: "root", pinnedAt: 1 })];
+    const h = await host(threads);
+    const gate = deferred<void>();
+    const entered = deferred<void>();
+    h.inspection.sdk.stub("threads.unpin", async () => {
+      entered.resolve();
+      await gate.promise;
+      threads[0]!.pinnedAt = null;
+      return makeThreadResponse(threads[0]!);
+    });
+    const settling = h.behavior.callRpc("settle", { threadId: "root" });
+    await entered.promise;
+    await expect(h.behavior.callRpc(method, {
+      threadId: "root", ...(method === "setThreadParent" ? { parentThreadId: "other" } : {}),
+    })).rejects.toThrow("already in progress");
+    gate.resolve();
+    await settling;
+    expect(threads[0]!.pinnedAt).toBeNull();
+    expect(await h.behavior.callRpc("listLifecycle", {})).toMatchObject({ rows: [{ threadId: "root", settledOverride: "settled" }] });
+  });
+
+  it("loads hidden nodes beyond the first page and refuses busy subtrees", async () => {
+    const threads = [projectThread({ id: "root" }), ...Array.from({ length: 100 }, (_, i) => projectThread({ id: `other${i}` })), projectThread({ id: "hidden", parentThreadId: "root", visibility: "hidden", queuedWork: "failed" }), projectThread({ id: "grandchild", parentThreadId: "hidden", status: "active" })];
+    const h = await host(threads);
+    await expect(h.behavior.callRpc("settle", { threadId: "root" })).rejects.toThrow("Cannot settle");
+    expect(await h.behavior.callRpc("listLifecycle", {})).toEqual({ rows: [] });
+    expect(h.inspection.sdk.callsTo("threads.stop")).toEqual([]);
+    threads[101]!.queuedWork = "none";
+    await expect(h.behavior.callRpc("settle", { threadId: "root" })).rejects.toThrow("Cannot settle");
+    threads[102]!.status = "idle";
+    await h.behavior.callRpc("settle", { threadId: "root" });
+    const result = await h.behavior.callRpc("listLifecycle", {}) as LifecycleListResult;
+    expect(result.rows.map(r => r.threadId).sort()).toEqual(["grandchild", "hidden", "root"]);
+  });
+
+  it.each([false, true])("rechecks queued automatic cleanup under changed rules, still eligible=%s", async (eligible) => {
+    const old = Date.now() - 8 * 86400000;
+    const threads = Array.from({ length: 6 }, (_, i) => projectThread({ id: `root${i}`, createdAt: old, updatedAt: old, latestAttentionAt: old }));
+    const h = await host(threads);
+    const gate = deferred<void>();
+    const entered = deferred<void>();
+    const stopped: string[] = [];
+    h.inspection.sdk.stub("threads.stop", async ({ threadId }) => {
+      stopped.push(threadId);
+      if (stopped.length === 4) entered.resolve();
+      await gate.promise;
+      return { ok: true };
+    });
+    const settling = h.behavior.callRpc("evaluateAutoSettle", {});
+    await entered.promise;
+    await h.behavior.callRpc("updateSidebarSettings", eligible
+      ? { autoSettleAfterDays: 4 }
+      : { autoSettleInactive: false, autoSettleOnMerge: false });
+    gate.resolve();
+    await settling;
+    expect(stopped.includes("root5")).toBe(eligible);
+    if (!eligible) await vi.waitFor(async () => expect(await h.behavior.callRpc("listLifecycle", {})).toEqual({ rows: [] }));
+  });
+
+  it("does not resurrect an archived child from an older project response", async () => {
+    const root = projectThread({ id: "root" });
+    const staleChild = projectThread({ id: "archived", parentThreadId: "root" });
+    const h = await host([root]);
+    h.inspection.sdk.stub("projects.list", async () => projectsWith([root, staleChild]));
+    await h.behavior.callRpc("settle", { threadId: "root" });
+    expect(await h.behavior.callRpc("listLifecycle", {})).toMatchObject({ rows: [{ threadId: "root" }] });
+    expect(h.inspection.sdk.callsTo("threads.stop")).toEqual([[{ threadId: "root" }]]);
+  });
+
+  it("preserves unrelated settings across partial writes and rejects removed keys", async () => {
+    const h = await host([]);
+    await h.behavior.callRpc("updateSidebarSettings", { workingShelf: true });
+    expect(await h.behavior.callRpc("updateSidebarSettings", { childSortDirection: "descending" })).toMatchObject({ workingShelf: true, childSortDirection: "descending" });
+    await expect(h.behavior.callRpc("updateSidebarSettings", { archivedShelfEnabled: true })).rejects.toThrow("validation");
   });
 });

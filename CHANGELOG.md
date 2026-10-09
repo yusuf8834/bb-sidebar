@@ -15,6 +15,10 @@
 
 ### Fixed
 
+- Queued Settle cleanup rechecks activity, shelf state, pins and parentage before releasing resources, including after terminal lookups. Hidden descendants are included in tree checks.
+- Returning a parent to Active no longer adds permanent Active overrides to its descendants. Snapshot Undo ends after restoring the previous shelves, and failed Settle actions restore pins they removed.
+- Settings save only edited fields and finish queued saves after leaving the page. Removed preview settings are discarded from the local cache.
+- Project colors refresh after reconnecting, and removing a project clears its custom color.
 - Undo after settling restores each child's previous shelf instead of marking every child explicitly Active. It preserves newer shelf choices and activity.
 - Trying automatic-settle options no longer reopens manually settled, parked, or snoozed parents when an old child returns from automatic settling. Appearance changes do not trigger settling, and evaluations discard outdated settings before changing threads.
 - Retained automatic title recovery for threads BB leaves unnamed, including first prompts shorter than five words. BB's [Codex stream fix](https://github.com/get-bb/bb/pull/4830) fixes completion handling but does not change that naming threshold. Successful BB titles, manual titles, and the selected AI title service are preserved.

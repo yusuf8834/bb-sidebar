@@ -32,7 +32,7 @@ export function projectColorsById(
   projectIds: readonly string[],
   overrides: Readonly<Record<string, string>>,
 ): ReadonlyMap<string, string> {
-  const used = new Set(Object.values(overrides).map((color) => color.toLowerCase()));
+  const used = new Set(projectIds.flatMap((id) => overrides[id] ? [overrides[id]!.toLowerCase()] : []));
   const colors = new Map<string, string>();
   for (const id of [...new Set(projectIds)].sort()) {
     if (overrides[id]) {
