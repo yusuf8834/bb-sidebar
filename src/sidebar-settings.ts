@@ -37,7 +37,6 @@ export interface SidebarSettingsValues {
   projectColorsEnabled: boolean;
   /** Where project stripes appear; enabled project names are always colored. */
   projectColorDisplay: ProjectColorDisplay;
-  archivedShelfEnabled: boolean;
 }
 
 import { safeSetItem } from "./lib/safe-storage";
@@ -59,7 +58,6 @@ export const DEFAULT_SIDEBAR_SETTINGS: SidebarSettingsValues = {
   dockShelves: false,
   projectColorsEnabled: false,
   projectColorDisplay: "all",
-  archivedShelfEnabled: false,
 };
 
 export function childThreadSortOf(
@@ -147,7 +145,6 @@ function readStoredSidebarSettings(): SidebarSettingsValues | null {
       dockShelves: value.dockShelves === true,
       projectColorsEnabled: value.projectColorsEnabled === true,
       projectColorDisplay: projectColorDisplayOf(value.projectColorDisplay),
-      archivedShelfEnabled: value.archivedShelfEnabled === true,
     } as SidebarSettingsValues;
   } catch {
     return null;

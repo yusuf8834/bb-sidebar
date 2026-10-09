@@ -1,15 +1,13 @@
 import {
   experimental_useSidebarThreadActions as useSidebarThreadActions,
   experimental_useSidebarThreads as useSidebarThreads,
-  useBbNavigate,
   type PluginThreadHeaderActionProps,
 } from "@get-bb/plugin-sdk/app";
 import { Icon } from "./components/Icon";
 import { Tooltip } from "./components/Tooltip";
 import { cn } from "./lib/utils";
 import { Disc } from "./Disc";
-import { threadDisplayTitle } from "./inbox";
-import { useHeaderThread } from "./useArchivedThreadFamily";
+import { parentOf, threadDisplayTitle } from "./inbox";
 
 /**
  * The way back out of a child thread.
@@ -25,10 +23,8 @@ export function ParentChip({
 }: PluginThreadHeaderActionProps) {
   const { threads } = useSidebarThreads();
   const actions = useSidebarThreadActions();
-  const navigate = useBbNavigate();
 
-  const thread = useHeaderThread(threadId, threads);
-  const parent = useHeaderThread(thread?.parentThreadId ?? null, threads);
+  const parent = parentOf(threads, threadId);
   if (parent === null) return null;
 
   const title = threadDisplayTitle(parent);
@@ -38,7 +34,7 @@ export function ParentChip({
       <button
         type="button"
         aria-label={`Back to parent: ${title}`}
-        onClick={() => parent.isArchived ? navigate.toThread(parent.id) : actions.open(parent.id)}
+        onClick={() => actions.open(parent.id)}
         className={cn(
           "flex h-7 max-w-full items-center gap-1.5 rounded-full border border-border text-2xs text-muted-foreground",
           "hover:bg-accent hover:text-foreground",

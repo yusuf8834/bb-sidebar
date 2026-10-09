@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createFakePluginHost,
   makeThreadResponse,
@@ -154,6 +154,7 @@ function availablePullRequest(
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(disposers.splice(0).map((dispose) => dispose()));
 });
 
@@ -188,6 +189,33 @@ async function loadPlugin(
 }
 
 describe("lifecycle RPC", () => {
+  it("loads archive-preview storage without resetting shelves or project appearance", async () => {
+    const { bb, harness } = createFakePluginHost({ pluginId: "bb-sidebar" });
+    await plugin(bb);
+    disposers.push(() => harness.lifecycle.dispose());
+    const settings = await harness.behavior.callRpc("getSidebarSettings", {}) as Record<string, unknown>;
+    const saved = await harness.behavior.callRpc("updateSidebarSettings", {
+      ...settings, projectColorsEnabled: true, projectColorDisplay: "grouped",
+      autoSettleInactive: false, autoSettleOnMerge: false,
+    });
+    const db = bb.storage.database();
+    db.prepare("UPDATE sidebar_settings SET archived_shelf_enabled = 1 WHERE id = 1").run();
+    db.prepare("INSERT INTO project_colors (project_id, color) VALUES (?, ?)").run("proj_1", "#668899");
+    db.prepare(`INSERT INTO thread_lifecycle
+      (thread_id, settled_at, settled_override, snoozed_until, snoozed_at, parked_at)
+      VALUES (?, ?, ?, ?, ?, ?)`).run("thr_1", 123, "settled", null, null, null);
+    const before = await harness.behavior.callRpc("listLifecycle", {});
+
+    const restored = (await harness.lifecycle.reload(plugin)).harness;
+    disposers.push(() => restored.lifecycle.dispose());
+    await expect(restored.behavior.callRpc("getSidebarSettings", {})).resolves.toEqual(saved);
+    expect(saved).not.toHaveProperty("archivedShelfEnabled");
+    await expect(restored.behavior.callRpc("listLifecycle", {})).resolves.toEqual(before);
+    await expect(restored.behavior.callRpc("getProjectColors", {})).resolves.toEqual({ colors: { proj_1: "#668899" } });
+    expect(restored.inspection.sdk.callsTo("threads.archive")).toHaveLength(0);
+    expect(restored.inspection.sdk.callsTo("threads.unarchive")).toHaveLength(0);
+  });
+
   it("persists per-project colors, validates them, and resets to automatic", async () => {
     const harness = await loadPlugin();
     harness.inspection.sdk.stub("projects.get", async () => standardProject());
@@ -528,7 +556,6 @@ describe("lifecycle RPC", () => {
       dockShelves: false,
       projectColorsEnabled: false,
       projectColorDisplay: "all",
-      archivedShelfEnabled: false,
     });
     await expect(
       harness.behavior.callRpc("updateSidebarSettings", {
@@ -547,7 +574,6 @@ describe("lifecycle RPC", () => {
         dockShelves: true,
         projectColorsEnabled: true,
         projectColorDisplay: "grouped",
-        archivedShelfEnabled: true,
       }),
     ).resolves.toEqual({
       snoozePresets: "10m, 4h",
@@ -565,7 +591,6 @@ describe("lifecycle RPC", () => {
       dockShelves: true,
       projectColorsEnabled: true,
       projectColorDisplay: "grouped",
-      archivedShelfEnabled: true,
     });
     // A client that predates the setting leaves it out and must not reset it.
     await expect(
@@ -581,7 +606,7 @@ describe("lifecycle RPC", () => {
         childSortDirection: "descending",
         childIconStyle: "provider",
       }),
-    ).resolves.toMatchObject({ compactWorkingThreads: true, workingShelf: true, dockShelves: true, projectColorsEnabled: true, projectColorDisplay: "grouped", archivedShelfEnabled: true });
+    ).resolves.toMatchObject({ compactWorkingThreads: true, workingShelf: true, dockShelves: true, projectColorsEnabled: true, projectColorDisplay: "grouped" });
     expect(harness.inspection.realtimeSignals).toContainEqual({
       channel: "sidebar-settings",
       payload: {},
@@ -678,7 +703,6 @@ describe("lifecycle RPC", () => {
       dockShelves: false,
       projectColorsEnabled: false,
       projectColorDisplay: "all",
-      archivedShelfEnabled: false,
     });
   });
 
@@ -813,6 +837,7 @@ describe("lifecycle RPC", () => {
     ).resolves.toEqual({
       ok: true,
       reclaim: { closedTerminals: 1, keptTerminals: 1, stoppedRuntime: true },
+      undoToken: expect.any(String),
     });
     expect(harness.inspection.sdk.callsTo("threads.stop")).toEqual([
       [{ threadId: "thr_1" }],
@@ -850,6 +875,7 @@ describe("lifecycle RPC", () => {
     ).resolves.toEqual({
       ok: true,
       reclaim: { closedTerminals: 0, keptTerminals: 0, stoppedRuntime: false },
+      undoToken: expect.any(String),
     });
     const settled = (await harness.behavior.callRpc(
       "listLifecycle",
@@ -1115,7 +1141,7 @@ describe("settling thread trees", () => {
     expect(rows).toHaveLength(4);
   });
 
-  it("settles descendants across projects together and restores them on Undo", async () => {
+  it("settles descendants across projects together and explicitly returns the tree to Active", async () => {
     const harness = await loadPlugin();
     harness.inspection.sdk.stub("projects.list", async () => projectsWith(tree()));
     harness.inspection.sdk.stub("threads.stop", async () => ({ ok: true }));
@@ -1131,6 +1157,92 @@ describe("settling thread trees", () => {
     const restored = await harness.behavior.callRpc("listLifecycle", {}) as LifecycleListResult;
     expect(restored.rows).toHaveLength(4);
     expect(restored.rows.every(row => row.settledAt === null && row.settledOverride === "active")).toBe(true);
+  });
+
+  it("Undo restores children's previous shelves without adding Active overrides", async () => {
+    const harness = await loadPlugin();
+    const threads = [
+      projectThread({ id: "parent" }),
+      ...["ordinary", "settled", "parked", "snoozed"].map(id =>
+        projectThread({ id, parentThreadId: "parent" })),
+    ];
+    harness.inspection.sdk.stub("projects.list", async () => projectsWith(threads));
+    await harness.behavior.callRpc("settle", { threadId: "settled" });
+    await harness.behavior.callRpc("park", { threadId: "parked" });
+    await harness.behavior.callRpc("snooze", { threadId: "snoozed", snoozedUntil: Date.now() + 86400000 });
+    const before = await harness.behavior.callRpc("listLifecycle", {});
+
+    const { undoToken } = await harness.behavior.callRpc("settle", { threadId: "parent" }) as { undoToken: string };
+    await harness.behavior.callRpc("unsettle", { threadId: "parent", undoToken });
+    await expect(harness.behavior.callRpc("listLifecycle", {})).resolves.toEqual(before);
+    await expect(harness.behavior.callRpc("unsettle", { threadId: "parent", undoToken })).rejects.toThrow("can no longer be undone");
+    await expect(harness.behavior.callRpc("listLifecycle", {})).resolves.toEqual(before);
+  });
+
+  it("a quiet tree can automatically settle again after Undo", async () => {
+    const harness = await loadPlugin();
+    const old = Date.now() - 4 * 86400000;
+    const quiet = { createdAt: old, updatedAt: old, latestAttentionAt: old };
+    harness.inspection.sdk.stub("projects.list", async () => projectsWith([
+      projectThread({ id: "parent", ...quiet }),
+      projectThread({ id: "child", parentThreadId: "parent", ...quiet }),
+    ]));
+    const { undoToken } = await harness.behavior.callRpc("settle", { threadId: "parent" }) as { undoToken: string };
+    await harness.behavior.callRpc("unsettle", { threadId: "parent", undoToken });
+    await expect(harness.behavior.callRpc("listLifecycle", {})).resolves.toEqual({ rows: [] });
+    await expect(harness.behavior.callRpc("evaluateAutoSettle", {}))
+      .resolves.toEqual({ changedThreadIds: ["parent", "child"] });
+  });
+
+  it("Undo preserves newer shelf choices and children that have resumed work", async () => {
+    const harness = await loadPlugin();
+    const threads = [
+      projectThread({ id: "parent" }),
+      ...["ordinary", "parked", "snoozed", "working"].map(id =>
+        projectThread({ id, parentThreadId: "parent" })),
+    ];
+    harness.inspection.sdk.stub("projects.list", async () => projectsWith(threads));
+    harness.inspection.sdk.stub("threads.get", async ({ threadId }) => makeThreadResponse({
+      id: threadId, parentThreadId: threads.find(thread => thread.id === threadId)!.parentThreadId,
+    }));
+    await harness.behavior.callRpc("park", { threadId: "working" });
+    const { undoToken } = await harness.behavior.callRpc("settle", { threadId: "parent" }) as { undoToken: string };
+    await harness.behavior.callRpc("park", { threadId: "parked" });
+    await harness.behavior.callRpc("snooze", { threadId: "snoozed", snoozedUntil: Date.now() + 86400000 });
+    await harness.behavior.emitThreadEvent("thread.active", {
+      thread: makeThreadResponse({ id: "working", parentThreadId: "parent", status: "active" }),
+    });
+    const before = await harness.behavior.callRpc("listLifecycle", {}) as LifecycleListResult;
+    await harness.behavior.callRpc("unsettle", { threadId: "parent", undoToken });
+    await expect(harness.behavior.callRpc("listLifecycle", {})).resolves.toEqual({
+      rows: before.rows.filter(row => row.threadId !== "ordinary"),
+    });
+  });
+
+  it("an earlier Undo cannot erase a newer settle, even within the same millisecond", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(Date.now());
+    const harness = await loadPlugin();
+    const first = await harness.behavior.callRpc("settle", { threadId: "thr_1" }) as { undoToken: string };
+    const before = await harness.behavior.callRpc("listLifecycle", {});
+    const second = await harness.behavior.callRpc("settle", { threadId: "thr_1" }) as { undoToken: string };
+    const newer = await harness.behavior.callRpc("listLifecycle", {});
+    await harness.behavior.callRpc("unsettle", { threadId: "thr_1", undoToken: first.undoToken });
+    await expect(harness.behavior.callRpc("listLifecycle", {})).resolves.toEqual(newer);
+    await harness.behavior.callRpc("unsettle", { threadId: "thr_1", undoToken: second.undoToken });
+    await expect(harness.behavior.callRpc("listLifecycle", {})).resolves.toEqual(before);
+  });
+
+  it.each(["expired", "reloaded"])("rejects an %s Undo without changing lifecycle state", async reason => {
+    let harness = await loadPlugin();
+    const { undoToken } = await harness.behavior.callRpc("settle", { threadId: "thr_1" }) as { undoToken: string };
+    const before = await harness.behavior.callRpc("listLifecycle", {});
+    if (reason === "expired") vi.spyOn(Date, "now").mockReturnValue(Date.now() + 6 * 60_000);
+    else {
+      harness = (await harness.lifecycle.reload(plugin)).harness;
+      disposers.push(() => harness.lifecycle.dispose());
+    }
+    await expect(harness.behavior.callRpc("unsettle", { threadId: "thr_1", undoToken })).rejects.toThrow("can no longer be undone");
+    await expect(harness.behavior.callRpc("listLifecycle", {})).resolves.toEqual(before);
   });
 
   it.each([
@@ -1618,7 +1730,7 @@ describe("automatic settle evaluation", () => {
     const harness = await loadPlugin();
     const settings = await harness.behavior.callRpc("getSidebarSettings", {}) as Record<string, unknown>;
     await harness.behavior.callRpc("updateSidebarSettings", {
-      ...settings, projectColorsEnabled: true, workingShelf: true, archivedShelfEnabled: true,
+      ...settings, projectColorsEnabled: true, workingShelf: true,
     });
     expect(harness.inspection.sdk.callsTo("projects.list")).toHaveLength(0);
     expect(harness.inspection.sdk.callsTo("threads.stop")).toHaveLength(0);

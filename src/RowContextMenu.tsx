@@ -68,18 +68,6 @@ export function RowContextMenu({
   const renameAfterClose = useRef(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [pickingSnooze, setPickingSnooze] = useState(false);
-  const [restoring, setRestoring] = useState(false);
-  const restore = async () => {
-    if (restoring) return;
-    setRestoring(true);
-    try {
-      await rpc.call("unarchiveThread", { threadId: thread.id });
-    } catch (error) {
-      toast.error("Could not restore thread", { description: error instanceof Error ? error.message : undefined });
-    } finally {
-      setRestoring(false);
-    }
-  };
   // Archive takes the children with it, and bb leaves every idle one's agent
   // session loaded. Release them alongside the archive. Working children are
   // skipped, so this never interrupts a turn archive itself would not.
@@ -207,16 +195,12 @@ export function RowContextMenu({
           <Separator />
           <CopySubmenu thread={thread} />
           <Separator />
-          {thread.isArchived ? (
-            <Item disabled={restoring} onSelect={() => void restore()}>
-              Restore from archive
-            </Item>
-          ) : <Item
+          <Item
             disabled={!canArchive}
             onSelect={archive}
           >
             Archive
-          </Item>}
+          </Item>
           <Item destructive onSelect={() => setConfirmingDelete(true)}>
             Delete
           </Item>

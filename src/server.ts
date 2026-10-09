@@ -107,6 +107,7 @@ const migrations = [
      ADD COLUMN dock_shelves INTEGER NOT NULL DEFAULT 0`,
   AUTO_TITLE_RECOVERY_MIGRATION,
   `ALTER TABLE sidebar_settings ADD COLUMN project_colors_enabled INTEGER NOT NULL DEFAULT 0`,
+  // Retained to preserve migration indices for installations of the archive preview.
   `ALTER TABLE sidebar_settings ADD COLUMN archived_shelf_enabled INTEGER NOT NULL DEFAULT 0`,
   `CREATE TABLE IF NOT EXISTS project_colors (
      project_id TEXT PRIMARY KEY,
@@ -149,7 +150,6 @@ interface SidebarSettingsDbRow {
   dock_shelves: number;
   project_colors_enabled: number;
   project_color_display: string;
-  archived_shelf_enabled: number;
 }
 
 const threadIdSchema = z.object({ threadId: z.string().trim().min(1) });
@@ -233,7 +233,6 @@ const sidebarSettingsSchema = z
     dockShelves: z.boolean(),
     projectColorsEnabled: z.boolean(),
     projectColorDisplay: z.enum(PROJECT_COLOR_DISPLAYS),
-    archivedShelfEnabled: z.boolean(),
   })
   .strict();
 const uploadFilenameSchema = z
@@ -297,17 +296,6 @@ export const bbSidebarRpcContract = defineRpcContract({
     input: threadIdSchema.extend({ childThreadsConfirmed: z.boolean() }).strict(),
     output: z.object({ ok: z.boolean() }),
   },
-  archiveThreads: {
-    input: z.object({ threadIds: threadIdsSchema }).strict(),
-    output: z.object({
-      archived: z.number(),
-      failures: z.array(z.object({ threadId: z.string(), error: z.string() })),
-    }),
-  },
-  unarchiveThread: {
-    input: threadIdSchema.strict(),
-    output: z.object({ ok: z.boolean() }),
-  },
   regenerateTitle: {
     input: threadIdSchema.strict(),
     output: z.object({ title: z.string().min(1).max(100) }).strict(),
@@ -335,7 +323,6 @@ export const bbSidebarRpcContract = defineRpcContract({
       dockShelves: true,
       projectColorsEnabled: true,
       projectColorDisplay: true,
-      archivedShelfEnabled: true,
     }),
     output: sidebarSettingsSchema,
   },
@@ -357,14 +344,17 @@ export const bbSidebarRpcContract = defineRpcContract({
   pin: { input: threadIdSchema, output: z.object({ ok: z.boolean() }) },
   settle: {
     input: threadIdSchema,
-    output: z.object({ ok: z.boolean(), reclaim: reclaimSchema }),
+    output: z.object({ ok: z.boolean(), reclaim: reclaimSchema, undoToken: z.string().uuid() }),
   },
   park: {
     input: threadIdSchema,
     output: z.object({ ok: z.boolean(), reclaim: reclaimSchema }),
   },
   resume: { input: threadIdSchema, output: z.object({ ok: z.boolean() }) },
-  unsettle: { input: threadIdSchema, output: z.object({ ok: z.boolean() }) },
+  unsettle: {
+    input: threadIdSchema.extend({ undoToken: z.string().uuid().optional() }),
+    output: z.object({ ok: z.boolean() }),
+  },
   snooze: {
     input: z.object({
       threadId: z.string().trim().min(1),
@@ -588,7 +578,7 @@ export default async function plugin(bb: BbPluginApi) {
                 auto_settle_after_days, auto_settle_on_merge,
                 child_sort_field, child_sort_direction, child_icon_style,
                 compact_working_threads, working_shelf, dock_shelves,
-                project_colors_enabled, archived_shelf_enabled, project_color_display
+                project_colors_enabled, project_color_display
            FROM sidebar_settings
           WHERE id = 1`,
       )
@@ -613,7 +603,6 @@ export default async function plugin(bb: BbPluginApi) {
           dockShelves: row.dock_shelves === 1,
           projectColorsEnabled: row.project_colors_enabled === 1,
           projectColorDisplay: projectColorDisplayOf(row.project_color_display),
-          archivedShelfEnabled: row.archived_shelf_enabled === 1,
         }
       : { ...DEFAULT_SIDEBAR_SETTINGS };
   };
@@ -626,8 +615,8 @@ export default async function plugin(bb: BbPluginApi) {
          auto_settle_after_days, auto_settle_on_merge,
          child_sort_field, child_sort_direction, child_icon_style,
          compact_working_threads, working_shelf, dock_shelves,
-         project_colors_enabled, archived_shelf_enabled, project_color_display
-       ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         project_colors_enabled, project_color_display
+       ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          snooze_presets = excluded.snooze_presets,
          inactive_threads_enabled = excluded.inactive_threads_enabled,
@@ -644,7 +633,6 @@ export default async function plugin(bb: BbPluginApi) {
          working_shelf = excluded.working_shelf,
          dock_shelves = excluded.dock_shelves,
          project_colors_enabled = excluded.project_colors_enabled,
-         archived_shelf_enabled = excluded.archived_shelf_enabled,
          project_color_display = excluded.project_color_display`,
     ).run(
       values.snoozePresets,
@@ -661,7 +649,6 @@ export default async function plugin(bb: BbPluginApi) {
       values.workingShelf ? 1 : 0,
       values.dockShelves ? 1 : 0,
       values.projectColorsEnabled ? 1 : 0,
-      values.archivedShelfEnabled ? 1 : 0,
       values.projectColorDisplay,
     );
   };
@@ -721,7 +708,6 @@ export default async function plugin(bb: BbPluginApi) {
         dockShelves: DEFAULT_SIDEBAR_SETTINGS.dockShelves,
         projectColorsEnabled: false,
         projectColorDisplay: DEFAULT_SIDEBAR_SETTINGS.projectColorDisplay,
-        archivedShelfEnabled: false,
       });
       if (hasLegacyValues && migrated.success) {
         writeSidebarSettings(migrated.data);
@@ -1180,6 +1166,20 @@ export default async function plugin(bb: BbPluginApi) {
     }
     return tree;
   };
+  // Undo belongs to one completed action, not to a later Return to Active.
+  // Toasts are short-lived; bound snapshots and expire them after five minutes.
+  const settleUndos = new Map<string, {
+    threadId: string;
+    settledAt: number;
+    expiresAt: number;
+    previous: Array<{ threadId: string; parentThreadId: string | null; row: StoredLifecycleRow | null }>;
+  }>();
+  bb.onDispose(() => settleUndos.clear());
+  let lastManualSettleAt = 0;
+  const matchesSettle = (row: StoredLifecycleRow | null, settledAt: number) =>
+    row?.settledAt === settledAt && row.settledOverride === "settled" &&
+    row.parkedAt == null && row.snoozedUntil === null && row.snoozedAt === null;
+
   type CleanupIssue = z.infer<typeof cleanupIssueSchema>;
   type CleanupPlanThread = {
     threadId: string;
@@ -1726,21 +1726,6 @@ export default async function plugin(bb: BbPluginApi) {
       await bb.sdk.threads.delete({ threadId, childThreadsConfirmed });
       return { ok: true };
     },
-    async archiveThreads({ threadIds }) {
-      // Archive Settled in one go. The sidebar shows its own confirmation, so
-      // bb's per-thread dialog is skipped. Archive takes children with it but
-      // leaves an idle agent session loaded, hence the stop (see
-      // releaseRuntimes); a failed stop only misses a reclaim.
-      const result = await runThreadTasks(threadIds, async (threadId) => {
-        await bb.sdk.threads.archive({ threadId });
-        await bb.sdk.threads.stop({ threadId }).catch(() => undefined);
-      });
-      return { archived: result.succeededThreadIds.length, failures: result.failures };
-    },
-    async unarchiveThread({ threadId }) {
-      await bb.sdk.threads.unarchive({ threadId });
-      return { ok: true };
-    },
     regenerateTitle: ({ threadId }) => regenerateTitle(threadId),
     async getProjectColors() {
       const rows = db.prepare("SELECT project_id, color FROM project_colors").all() as Array<{ project_id: string; color: string }>;
@@ -1769,7 +1754,6 @@ export default async function plugin(bb: BbPluginApi) {
         dockShelves: values.dockShelves ?? stored.dockShelves,
         projectColorsEnabled: values.projectColorsEnabled ?? stored.projectColorsEnabled,
         projectColorDisplay: values.projectColorDisplay ?? stored.projectColorDisplay,
-        archivedShelfEnabled: values.archivedShelfEnabled ?? stored.archivedShelfEnabled,
       });
       bb.realtime.publish(SIDEBAR_SETTINGS_CHANNEL, {});
       if (
@@ -1849,7 +1833,12 @@ export default async function plugin(bb: BbPluginApi) {
       }
       // Settling clears any snooze: they are two answers to the same
       // question, and holding both would make the shelf order ambiguous.
-      const now = Date.now();
+      // Distinguish actions in the same millisecond when checking stale Undo.
+      const now = Math.max(Date.now(), lastManualSettleAt + 1);
+      lastManualSettleAt = now;
+      const previous = currentTree.map((thread) => ({
+        threadId: thread.id, parentThreadId: thread.parentThreadId, row: readOne(thread.id),
+      }));
       writeMany(currentTree.map((thread) => ({
         threadId: thread.id,
         settledAt: now,
@@ -1867,9 +1856,39 @@ export default async function plugin(bb: BbPluginApi) {
         reclaim.keptTerminals += released.keptTerminals;
         reclaim.stoppedRuntime ||= released.stoppedRuntime;
       });
-      return { ok: true, reclaim };
+      const undoToken = randomUUID();
+      for (const [token, undo] of settleUndos) {
+        if (undo.expiresAt <= Date.now()) settleUndos.delete(token);
+      }
+      while (settleUndos.size >= 50) settleUndos.delete(settleUndos.keys().next().value!);
+      settleUndos.set(undoToken, { threadId, settledAt: now, expiresAt: Date.now() + 5 * 60_000, previous });
+      return { ok: true, reclaim, undoToken };
     },
-    async unsettle({ threadId }) {
+    async unsettle({ threadId, undoToken }) {
+      if (undoToken !== undefined) {
+        const undo = settleUndos.get(undoToken);
+        if (!undo || undo.threadId !== threadId || undo.expiresAt <= Date.now()) {
+          throw new Error("This Settle can no longer be undone. Use Return to Active instead.");
+        }
+        const tree = new Map((await loadSettleTree(threadId)).map((thread) => [thread.id, thread]));
+        const restored = db.transaction(() => {
+          const ids: string[] = [];
+          for (const previous of undo.previous) {
+            const thread = tree.get(previous.threadId);
+            // Keep newer shelf choices, activity, pinning, and parent changes.
+            if (!thread || thread.parentThreadId !== previous.parentThreadId ||
+                thread.pinnedAt !== null || !canPark(threadSignals(thread)) ||
+                !matchesSettle(readOne(thread.id), undo.settledAt)) continue;
+            if (previous.row) write(previous.row, false);
+            else db.prepare("DELETE FROM thread_lifecycle WHERE thread_id = ?").run(thread.id);
+            ids.push(thread.id);
+          }
+          return ids;
+        })();
+        settleUndos.delete(undoToken);
+        publishLifecycleChanges(restored);
+        return { ok: true };
+      }
       const tree = await loadSettleTree(threadId);
       const restoring = tree.filter((thread) => thread.id === threadId || readOne(thread.id)?.settledAt != null);
       writeMany(restoring.map((thread) => ({

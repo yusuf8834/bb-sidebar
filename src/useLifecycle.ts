@@ -53,8 +53,9 @@ type LifecycleMutation =
   | "acknowledgeWake";
 type LifecycleMutationRequest =
   | { method: "snooze"; threadId: string; snoozedUntil: number }
+  | { method: "unsettle"; threadId: string; undoToken?: string }
   | {
-      method: Exclude<LifecycleMutation, "snooze">;
+      method: Exclude<LifecycleMutation, "snooze" | "unsettle">;
       threadId: string;
     };
 
@@ -251,6 +252,7 @@ export function useLifecycle(
       portPromptVersions.current.set(threadId, portPromptVersion);
       toast.dismiss(`settled-ports:${threadId}`);
       let parkReminder: string | undefined;
+      let settleUndoToken: string | undefined;
       // An unsnooze clears the row server-side, so its wake time has to be
       // captured before the RPC; Undo re-snoozes with this absolute time to
       // restore the exact schedule that was cancelled.
@@ -265,9 +267,15 @@ export function useLifecycle(
             snoozedUntil: request.snoozedUntil,
           });
           parkReminder = describeReclaim(reclaim);
-        } else if (method === "settle" || method === "park") {
-          const { reclaim } = await rpc.call(method, { threadId });
+        } else if (method === "settle") {
+          const { reclaim, undoToken } = await rpc.call("settle", { threadId });
+          settleUndoToken = undoToken;
           parkReminder = describeReclaim(reclaim);
+        } else if (method === "park") {
+          const { reclaim } = await rpc.call("park", { threadId });
+          parkReminder = describeReclaim(reclaim);
+        } else if (method === "unsettle") {
+          await rpc.call("unsettle", { threadId, ...(request.undoToken ? { undoToken: request.undoToken } : {}) });
         } else {
           await rpc.call(method, { threadId });
         }
@@ -313,24 +321,21 @@ export function useLifecycle(
           (ports) => rpc.call("closeThreadPorts", { threadId, ports }),
           () => portPromptVersions.current.get(threadId) === portPromptVersion,
         );
-        // The reminder is the point of this toast: parking releases the agent
-        // session but leaves any terminal the user typed in alone, and that is
-        // only obvious if it is said out loud. Undo returns the thread to the
-        // inbox; it does not re-pin, because settle never records the pin it
-        // removed.
+        // Undo restores lifecycle rows captured by this action, including the
+        // children's previous shelves. Released resources and pins stay released.
         toast.success(SUCCESS_MESSAGE.settle, {
           description: parkReminder,
           duration:
             parkReminder === undefined ? undefined : PARK_REMINDER_TOAST_MS,
-          action: {
+          action: settleUndoToken ? {
             label: "Undo",
-            onClick: () => void mutate({ method: "unsettle", threadId }),
-          },
+            onClick: () => void mutate({ method: "unsettle", threadId, undoToken: settleUndoToken }),
+          } : undefined,
         });
       } else if (method === "unsettle") {
         // Undo re-settles, which re-runs the reclaim a settle always does:
         // restoring the previous shelf means releasing what a wake restored.
-        toast.success(SUCCESS_MESSAGE.unsettle, {
+        toast.success(request.undoToken ? "Settling undone" : SUCCESS_MESSAGE.unsettle, {
           action: {
             label: "Undo",
             onClick: () => void mutate({ method: "settle", threadId }),

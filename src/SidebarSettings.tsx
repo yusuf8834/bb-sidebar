@@ -19,7 +19,6 @@ import {
 } from "./sidebar-settings";
 import { ProjectAppearanceSettings } from "./ProjectSettings";
 import { ProjectManagement } from "./ProjectManagement";
-import { ArchiveSettings } from "./ArchiveShelf";
 import { PortLinkSettings } from "./PortLinkSettings";
 import {
   configuredSnoozePresetError,
@@ -65,7 +64,7 @@ const PROJECT_COLOR_DISPLAY_LABELS: Record<ProjectColorDisplay, string> = {
 
 const SETTINGS_SECTIONS = [
   "Sidebar layout", "Project appearance", "Thread behavior", "Child threads",
-  "Archiving", "This device", "Project management",
+  "This device", "Project management",
 ] as const;
 
 /** Long enough to finish typing a shortcut, short enough to feel instant. */
@@ -88,7 +87,6 @@ const SECTION_BY_SETTING: Record<keyof SidebarSettingsValues, string> = {
   compactWorkingThreads: "Sidebar layout",
   workingShelf: "Sidebar layout",
   dockShelves: "Sidebar layout",
-  archivedShelfEnabled: "Archiving",
   projectColorsEnabled: "Project appearance",
   projectColorDisplay: "Project appearance",
 };
@@ -520,17 +518,6 @@ export function SidebarSettings() {
             </SettingsSelect>
           }
         />
-      </SettingsSection>
-
-      <SettingsSection title="Archiving" status={statusFor("Archiving")}>
-        <SettingRow
-          title="Archived shelf"
-          description="Show archived threads with restore controls and add archive buttons to settled threads."
-          control={<Switch label="Archived shelf" checked={draft.archivedShelfEnabled} onChange={(checked) => update("archivedShelfEnabled", checked)} />}
-        />
-        <SettingsGroup title="Bulk archive">
-          <ArchiveSettings />
-        </SettingsGroup>
       </SettingsSection>
 
       <SettingsSection title="This device" status={statusFor("This device")}>

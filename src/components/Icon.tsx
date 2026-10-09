@@ -1,7 +1,5 @@
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import {
-  ArchiveArrowDownIcon,
-  ArchiveArrowUpIcon,
   ArrowDown01Icon,
   ArrowLeft01Icon,
   ArrowRight01Icon,
@@ -40,8 +38,6 @@ import {
 import { cn } from "../lib/utils";
 
 const ICON_MAP = {
-  Archive: ArchiveArrowDownIcon,
-  Unarchive: ArchiveArrowUpIcon,
   ArrowTurnBackward: ArrowTurnBackwardIcon,
   ArrowUpDown: ArrowUpDownIcon,
   Clean: BrushCleaningIcon,

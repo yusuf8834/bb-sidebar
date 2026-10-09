@@ -3,7 +3,6 @@ import {
   experimental_useProviders as useProviders,
   experimental_useSidebarThreadActions as useSidebarThreadActions,
   experimental_useSidebarThreads as useSidebarThreads,
-  useBbNavigate,
   type PluginThreadHeaderActionProps,
 } from "@get-bb/plugin-sdk/app";
 import { useSidebarSettings } from "./useSidebarSettings";
@@ -21,7 +20,6 @@ import {
 import { cn } from "./lib/utils";
 import { Tooltip } from "./components/Tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "./components/Popover";
-import { useArchivedThreadFamily, useHeaderThread } from "./useArchivedThreadFamily";
 
 /**
  * The home for child threads the flat list hides: a chip in the thread header
@@ -37,12 +35,7 @@ export function SubagentsChip({
 }: PluginThreadHeaderActionProps) {
   const { threads } = useSidebarThreads();
   const actions = useSidebarThreadActions();
-  const navigate = useBbNavigate();
   const [open, setOpen] = useState(false);
-  const parent = useHeaderThread(threadId, threads);
-  const includeArchived = parent?.isArchived === true;
-  const archivedFamily = useArchivedThreadFamily(includeArchived ? threadId : null, threads, open);
-  const family = includeArchived ? archivedFamily.threads : threads;
   const sidebarSettings = useSidebarSettings();
 
   const { providers } = useProviders();
@@ -54,26 +47,26 @@ export function SubagentsChip({
     sidebarSettings,
     providerById,
   );
-  const children = childrenOf(family, threadId, childDisplay.sort, includeArchived);
+  const children = childrenOf(threads, threadId, childDisplay.sort);
   const childrenByParent = useMemo(
-    () => childThreadsByParent(family, childDisplay.sort, includeArchived),
-    [family, childDisplay.sort, includeArchived],
+    () => childThreadsByParent(threads, childDisplay.sort),
+    [threads, childDisplay.sort],
   );
   useEffect(() => {
     setOpen(false);
   }, [threadId]);
   useEffect(() => {
-    if (children.length === 0 && archivedFamily.status === "ready") setOpen(false);
-  }, [children.length, archivedFamily.status]);
-  if (children.length === 0 && archivedFamily.status === "ready") return null;
+    if (children.length === 0) setOpen(false);
+  }, [children.length]);
+  if (children.length === 0) return null;
 
   const needsYou = childNeedsYouCount(children) > 0;
-  const threadCountLabel = children.length === 0 ? "Child threads" : `${children.length} child thread${
+  const threadCountLabel = `${children.length} child thread${
     children.length === 1 ? "" : "s"
   }`;
   const label = needsYou
     ? "Needs you"
-    : children.length === 0 ? "Children" : `${children.length} ${children.length === 1 ? "child" : "children"}`;
+    : `${children.length} ${children.length === 1 ? "child" : "children"}`;
 
   return (
     <ChildThreadDisplayContext.Provider value={childDisplay}>
@@ -89,7 +82,7 @@ export function SubagentsChip({
                 open && "bg-accent text-foreground",
               )}
             >
-              <ChildThreadDots threads={children} includeArchived={includeArchived} />
+              <ChildThreadDots threads={children} />
               {isCompactViewport ? null : (
                 <span className="truncate">{label}</span>
               )}
@@ -114,27 +107,20 @@ export function SubagentsChip({
           <div className="flex shrink-0 items-center gap-2 px-3 pb-1 pt-2.5">
             <span className="text-xs font-semibold">Children</span>
             <span className="ml-auto text-2xs text-muted-foreground">
-              {children.length > 0 ? children.length : null}
+              {children.length}
             </span>
           </div>
           <div className="min-h-0 overflow-y-auto">
-            {archivedFamily.status === "loading" ? <p role="status" className="px-3 py-2 text-xs text-muted-foreground">Loading child threads…</p> : null}
-            {archivedFamily.status === "error" ? (
-              <div className="px-3 py-2 text-xs">
-                <p role="alert">Could not load archived child threads.</p>
-                <button type="button" onClick={archivedFamily.retry} className="mt-1 underline">Retry</button>
-              </div>
-            ) : null}
             <ChildThreadList
               threads={children}
               childrenByParent={childrenByParent}
-              parentProjectId={parent?.projectId}
-              includeArchived={includeArchived}
+              parentProjectId={
+                threads.find((thread) => thread.id === threadId)?.projectId
+              }
               variant="header"
               onOpenThread={(childId) => {
                 setOpen(false);
-                if (family.find((thread) => thread.id === childId)?.isArchived) navigate.toThread(childId);
-                else actions.open(childId);
+                actions.open(childId);
               }}
             />
           </div>
