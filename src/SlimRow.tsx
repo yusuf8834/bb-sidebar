@@ -15,7 +15,8 @@ import { threadDisplayTitle } from "./inbox";
 import { snoozeWakeLabel } from "./lifecycle";
 import type { ConfiguredSnoozePreset } from "./lifecycle";
 import { InlineThreadTitle } from "./InlineThreadTitle";
-import { ProjectFavicon } from "./ProjectFavicon";
+import { ProjectFavicon, ProjectStripe } from "./ProjectFavicon";
+import { projectColorClass } from "./project-monogram";
 import { ThreadDetailsTooltip } from "./ThreadDetailsTooltip";
 import { OpenPortsIndicator } from "./OpenPorts";
 import { JumpHint, useJumpHint } from "./JumpHints";
@@ -96,6 +97,7 @@ export function SlimRow({
             isActive ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60",
           )}
         >
+          {projectName ? <ProjectStripe name={projectName} /> : null}
           <ThreadDetailsTooltip thread={thread} disabled={isRenaming}>
             <a
               data-sidebar-thread-shortcut-target=""
@@ -130,10 +132,9 @@ export function SlimRow({
                 <ProjectFavicon src={projectIconUrl} name={projectName} className="size-3" />
                 <span
                   className={cn(
-                    "max-w-[40%] shrink truncate",
-                    isActive
-                      ? "text-muted-foreground/70"
-                      : "text-muted-foreground/50 group-hover/slim:text-muted-foreground/70",
+                    "bb-sidebar-project-name max-w-[40%] shrink truncate",
+                    projectColorClass(projectName),
+                    !isActive && "opacity-80 group-hover/slim:opacity-100",
                   )}
                 >
                   {projectName}

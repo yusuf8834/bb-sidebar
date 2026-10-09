@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { cn } from "./lib/utils";
 import {
+  projectColorClass,
   projectMonogramColor,
   projectMonogramLetter,
 } from "./project-monogram";
@@ -49,6 +50,25 @@ export function ProjectMonogram({
       className={cn(
         "bb-sidebar-monogram flex size-3.5 shrink-0 items-center justify-center rounded-[3px] text-[8px] font-semibold leading-none",
         `bb-sidebar-monogram-${projectMonogramColor(name)}`,
+        className,
+      )}
+    />
+  );
+}
+
+/**
+ * A thin soft bar on a row's left edge in the project's colour, so threads of
+ * one project read as a group even when the project has its own icon. The row
+ * must be `relative`.
+ */
+export function ProjectStripe({ name, className }: { name: string; className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      data-project-stripe=""
+      className={cn(
+        "bb-sidebar-project-stripe pointer-events-none absolute bottom-1.5 left-0.5 top-1.5 w-0.5 rounded-full",
+        projectColorClass(name),
         className,
       )}
     />

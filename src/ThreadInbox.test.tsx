@@ -13,6 +13,7 @@ import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 import { idleSidebarThreadFields } from "./test-fixtures";
 import { DEFAULT_SNOOZE_PRESET_CONFIG, formatSnoozeWakeTime } from "./lifecycle";
 import { isWorkingTree } from "./working-tree";
+import { projectColorClass } from "./project-monogram";
 import { WORKING_EMPTY_LINES } from "./working-empty-lines";
 import type { SidebarProvider } from "./ProviderGlyph";
 
@@ -4967,6 +4968,75 @@ describe("parking threads", () => {
     await waitFor(() => expect(unarchiveThread).toHaveBeenCalledWith({ threadId: "thr_old" }));
   });
 
+  it("filters the Archived shelf by title or project and shows when each thread started and was archived", async () => {
+    const day = 86_400_000;
+    const now = Date.now();
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "thr_a", title: "Fix login", isArchived: true, archivedAt: now - 20 * day, createdAt: now - 30 * day }),
+          thread({ id: "thr_b", title: "Write report", projectId: "proj_2", isArchived: true, archivedAt: now - day }),
+        ],
+        projects: [
+          { id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" },
+          { id: "proj_2", name: "Git-Local", isPersonal: false, href: "", settingsHref: "" },
+        ],
+      },
+      rpc: { listLifecycle: () => ({ rows: [] }) },
+    });
+    const shelf = await screen.findByRole("region", { name: "Archived" });
+    fireEvent.click(within(shelf).getByRole("button", { name: "Archived" }));
+    const row = (await within(shelf).findByText("Fix login")).closest("li")!;
+    expect(within(row).getByLabelText("Archived 2w ago")).toBeTruthy();
+    expect(row.querySelector("a")!.getAttribute("title")).toBe(
+      `Started ${new Date(now - 30 * day).toLocaleDateString()} · Archived ${new Date(now - 20 * day).toLocaleDateString()}`,
+    );
+    const filter = within(shelf).getByRole("searchbox", { name: "Filter archived threads" });
+    fireEvent.change(filter, { target: { value: "git-local" } });
+    expect(within(shelf).queryByText("Fix login")).toBeNull();
+    expect(within(shelf).getByText("Write report")).toBeTruthy();
+    fireEvent.change(filter, { target: { value: "LOGIN" } });
+    expect(within(shelf).getByText("Fix login")).toBeTruthy();
+    expect(within(shelf).queryByText("Write report")).toBeNull();
+    fireEvent.change(filter, { target: { value: "nothing like this" } });
+    expect(within(shelf).getByText("No archived threads match.")).toBeTruthy();
+  });
+
+  it("marks each project's rows with that project's own soft colour", async () => {
+    const settled = [
+      thread({ id: "thr_a", title: "In bb" }),
+      thread({ id: "thr_b", title: "Also bb" }),
+      thread({ id: "thr_c", title: "In Git-Local", projectId: "proj_2" }),
+    ];
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: settled,
+        projects: [
+          { id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" },
+          { id: "proj_2", name: "Git-Local", isPersonal: false, href: "", settingsHref: "" },
+        ],
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: settled.map((item) => ({
+          threadId: item.id, settledAt: 200, snoozedUntil: null, snoozedAt: null,
+        })) }),
+      },
+    });
+    const shelf = await screen.findByRole("region", { name: "Settled" });
+    fireEvent.click(within(shelf).getByRole("button", { name: /Settled/ }));
+    const stripeOf = async (title: string) =>
+      (await within(shelf).findByText(title)).closest("li")!.querySelector("[data-project-stripe]")!.className;
+    expect(projectColorClass("bb")).not.toBe(projectColorClass("Git-Local"));
+    expect(await stripeOf("In bb")).toContain(projectColorClass("bb"));
+    expect(await stripeOf("Also bb")).toContain(projectColorClass("bb"));
+    expect(await stripeOf("In Git-Local")).toContain(projectColorClass("Git-Local"));
+    const name = within((await within(shelf).findByText("In Git-Local")).closest("li")!).getByText("Git-Local");
+    expect(name.className).toContain("bb-sidebar-project-name");
+    expect(name.className).toContain(projectColorClass("Git-Local"));
+  });
+
   it("shows an empty preview without a Clean confirmation button", async () => {
     renderSlot(inbox, listProps, {
       sidebarThreads: {
@@ -5922,7 +5992,7 @@ describe("parking threads", () => {
     expect(within(shelf).getByText("2h")).toBeDefined();
     expect(within(shelf).getByLabelText("bb · Later")).toBeDefined();
     expect(within(shelf).getByText("bb").className).toContain(
-      "text-muted-foreground/50",
+      "bb-sidebar-project-name",
     );
     expect(within(shelf).getByText("·").className).toContain("text-sm");
     expect(within(shelf).getByText("Later").className).toContain(
