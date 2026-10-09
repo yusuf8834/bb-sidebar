@@ -34,6 +34,7 @@ export function SlimRow({
   projectIconUrl,
   isActive,
   shelf,
+  showArchiveButton = false,
   parkedAt,
   onPark,
   onSettle,
@@ -49,6 +50,7 @@ export function SlimRow({
   projectIconUrl: string | null;
   isActive: boolean;
   shelf: "parked" | "snoozed" | "settled";
+  showArchiveButton?: boolean;
   parkedAt?: number | null;
   onPark?: () => void;
   onSettle?: () => void;
@@ -64,6 +66,7 @@ export function SlimRow({
   const jumpHint = useJumpHint(thread.id);
   const title = threadDisplayTitle(thread);
   const rowLabel = projectName ? `${projectName} · ${title}` : title;
+  const archiveButtonVisible = shelf === "settled" && showArchiveButton;
   const [isRenaming, setIsRenaming] = useState(false);
   const rpc = useRpc<typeof bbSidebarRpcContract>();
   // One click, no dialog: the thread can be restored from the Archived shelf.
@@ -175,7 +178,7 @@ export function SlimRow({
             <span
               className={cn(
                 "pointer-events-none relative flex shrink-0 items-center justify-end tabular-nums text-2xs text-muted-foreground/60 [@media(hover:none)]:gap-2",
-                shelf === "settled" ? "min-w-10" : "min-w-5",
+                archiveButtonVisible ? "min-w-10" : "min-w-5",
               )}
             >
               <span className="flex items-center transition-opacity duration-150 ease-out [@media(hover:hover)]:group-hover/slim:opacity-0 motion-reduce:transition-none">
@@ -216,7 +219,7 @@ export function SlimRow({
                   />
                 </button>
               </Tooltip>
-              {shelf === "settled" ? (
+              {archiveButtonVisible ? (
                 <Tooltip label="Archive thread">
                   <button
                     type="button"

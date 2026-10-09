@@ -47,11 +47,12 @@ export function childrenOf(
   threads: readonly PluginSidebarThread[],
   parentThreadId: string,
   sort: ChildThreadSort = childThreadSortOf(null),
+  includeArchived = false,
 ): PluginSidebarThread[] {
   return threads
     .filter(
       (thread) =>
-        !thread.isArchived && thread.parentThreadId === parentThreadId,
+        (includeArchived || !thread.isArchived) && thread.parentThreadId === parentThreadId,
     )
     .sort(compareChildThreads(sort));
 }
@@ -59,10 +60,11 @@ export function childrenOf(
 export function childThreadsByParent(
   threads: readonly PluginSidebarThread[],
   sort: ChildThreadSort = childThreadSortOf(null),
+  includeArchived = false,
 ): ReadonlyMap<string, readonly PluginSidebarThread[]> {
   const result = new Map<string, PluginSidebarThread[]>();
   for (const thread of threads) {
-    if (thread.isArchived || !thread.parentThreadId) continue;
+    if ((!includeArchived && thread.isArchived) || !thread.parentThreadId) continue;
     const siblings = result.get(thread.parentThreadId) ?? [];
     siblings.push(thread);
     result.set(thread.parentThreadId, siblings);
@@ -112,12 +114,14 @@ export function collapsedChildThreads(
 export function ChildThreadDots({
   threads,
   compact = false,
+  includeArchived = false,
 }: {
   threads: readonly PluginSidebarThread[];
   compact?: boolean;
+  includeArchived?: boolean;
 }) {
   const { iconStyle, providerById } = useChildThreadDisplay();
-  const visibleThreads = threads.filter((thread) => !thread.isArchived);
+  const visibleThreads = threads.filter((thread) => includeArchived || !thread.isArchived);
   if (iconStyle === "provider") {
     // One glyph per agent: three identical logos would say nothing.
     const providerIds = [
@@ -251,6 +255,7 @@ export function ChildThreadList({
   expanded = true,
   showRunningChildrenWhenCollapsed = false,
   parentProjectId,
+  includeArchived = false,
   onOpenThread,
 }: {
   threads: readonly PluginSidebarThread[];
@@ -269,12 +274,14 @@ export function ChildThreadList({
   showRunningChildrenWhenCollapsed?: boolean;
   /** The project of the thread these children hang from. */
   parentProjectId?: string | null;
+  /** Archived family navigation in the thread header only. */
+  includeArchived?: boolean;
   onOpenThread: (threadId: string) => void;
 }) {
   const disclosureId = useId();
   const { projects } = useSidebarThreads();
   const visibleThreads = expanded
-    ? threads.filter((thread) => !thread.isArchived)
+    ? threads.filter((thread) => includeArchived || !thread.isArchived)
     : collapsedChildThreads(
         threads,
         childrenByParent,
@@ -305,7 +312,7 @@ export function ChildThreadList({
     .map((child) => {
       const path = new Set(ancestors).add(child.id);
       const descendants = (childrenByParent.get(child.id) ?? []).filter(
-        (thread) => !thread.isArchived && !path.has(thread.id),
+        (thread) => (includeArchived || !thread.isArchived) && !path.has(thread.id),
       );
       const descendantsExpanded = expandedDescendantParentIds.has(child.id);
       const visibleDescendants = descendantsExpanded
@@ -428,7 +435,7 @@ function ChildThreadRow({
   const effectiveNow = now ?? Date.now();
   const workingSince = useWorkingSinceContext();
   const statusThread = useThreadWithDraft(thread);
-  const visibleStatus = threadStatusLabel(
+  const visibleStatus = thread.isArchived ? "Archived" : threadStatusLabel(
     statusThread,
     workingSince.get(thread.id),
     effectiveNow,
@@ -524,7 +531,7 @@ function ChildThreadRow({
               />
               {variant === "header" ? (
                 <span className="truncate text-2xs text-muted-foreground">
-                  {thread.originKind ?? "thread"}
+                  {thread.isArchived ? "Archived" : thread.originKind ?? "thread"}
                   {foreignProject?.name ? ` · ${foreignProject.name}` : null}
                 </span>
               ) : null}

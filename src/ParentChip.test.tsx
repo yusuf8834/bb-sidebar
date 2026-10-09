@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
+import { makeThreadResponse } from "@get-bb/plugin-sdk/testing";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 import { idleSidebarThreadFields } from "./test-fixtures";
 
@@ -70,6 +71,18 @@ function render(
 afterEach(cleanup);
 
 describe("ParentChip", () => {
+  it("navigates back to an archived parent outside the loaded sidebar pages", async () => {
+    const rendered = renderSlot(parentChip, { threadId: "child", projectId: "proj_1", isCompactViewport: false }, {
+      sidebarThreads: { status: "ready", threads: [] },
+      sdk: { threads: { get: async ({ threadId }) => makeThreadResponse({
+        id: threadId, title: threadId === "parent" ? "Archived parent" : "Child",
+        parentThreadId: threadId === "child" ? "parent" : null, archivedAt: 500,
+      }) } },
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Back to parent: Archived parent" }));
+    expect(rendered.inspection.navigateCalls).toEqual([{ method: "toThread", threadId: "parent" }]);
+    expect(rendered.inspection.sidebarActionCalls).toEqual([]);
+  });
   // The whole reason the chip exists: the list hides the child, so this is its
   // only route back.
   it("opens the parent on click", () => {

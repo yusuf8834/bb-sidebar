@@ -3,7 +3,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
-import { idleSidebarThreadFields } from "./test-fixtures";
+import { archivedListThread, idleSidebarThreadFields } from "./test-fixtures";
+import { makeThreadResponse } from "@get-bb/plugin-sdk/testing";
 import type { SidebarProvider } from "./ProviderGlyph";
 
 const app = await loadPluginApp(() => import("../app"));
@@ -117,6 +118,88 @@ afterEach(() => {
 });
 
 describe("SubagentsChip", () => {
+  it("opens archived descendants outside the sidebar pages without restoring them", async () => {
+    const records = [
+      archivedListThread({ id: "child", title: "Child", parentThreadId: "parent" }),
+      archivedListThread({ id: "grandchild", title: "Grandchild", parentThreadId: "child", projectId: "proj_2" }),
+      archivedListThread({ id: "deep", title: "Deep", parentThreadId: "grandchild", projectId: "proj_2" }),
+    ];
+    const rendered = renderSlot(childrenChip,
+      { threadId: "parent", projectId: "proj_1", isCompactViewport: false }, {
+        sidebarThreads: { status: "ready", threads: [], projects: [
+          { id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" },
+          { id: "proj_2", name: "Other", isPersonal: false, href: "", settingsHref: "" },
+        ] },
+        sdk: { threads: {
+          get: async () => makeThreadResponse({ id: "parent", projectId: "proj_1", archivedAt: 500 }),
+          list: async (args) => records.filter((record) => record.parentThreadId === args?.parentThreadId),
+        } },
+      });
+    fireEvent.click(await screen.findByRole("button", { name: "1 child thread" }));
+    expect(await screen.findByRole("button", { name: "Open child thread: Child, Archived" })).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Show 1 grandchild thread for Child" }));
+    expect(screen.getByRole("button", { name: "Open grandchild thread: Grandchild, in project Other, Archived" })).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Show 1 great-grandchild thread for Grandchild" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open great-grandchild thread: Deep, Archived" }));
+    expect(rendered.inspection.navigateCalls).toEqual([{ method: "toThread", threadId: "deep" }]);
+    expect(rendered.inspection.sidebarActionCalls).toEqual([]);
+    expect(rendered.inspection.rpcCalls.some((call) => ["unarchiveThread", "unsettle", "archiveThreads"].includes(call.method))).toBe(false);
+    expect(rendered.inspection.sdkCalls.every((call) => ["threads.get", "threads.list"].includes(call.method))).toBe(true);
+  });
+
+  it("loads later pages of one archived family and offers restore for only the selected child", async () => {
+    const records = Array.from({ length: 101 }, (_, i) => archivedListThread({
+      id: `child-${i}`, title: `Child ${i}`, parentThreadId: "parent", createdAt: i,
+    }));
+    const rendered = renderSlot(childrenChip,
+      { threadId: "parent", projectId: "proj_1", isCompactViewport: false }, {
+        sidebarThreads: { status: "ready", threads: [thread({ id: "parent", isArchived: true })] },
+        sdk: { threads: { list: async (args) => {
+          expect(args).toMatchObject({ archived: true, includeHidden: true, limit: 100 });
+          const children = records.filter((record) => record.parentThreadId === args?.parentThreadId);
+          return children.slice(args?.offset ?? 0, (args?.offset ?? 0) + 100);
+        } } },
+        rpc: { unarchiveThread: () => ({ ok: true }) },
+      });
+    fireEvent.click(await screen.findByRole("button", { name: "101 child threads" }));
+    const row = await screen.findByRole("button", { name: "Open child thread: Child 100, Archived" });
+    fireEvent.contextMenu(row);
+    const menu = await screen.findByRole("menu", { name: "Thread actions" });
+    expect(within(menu).queryByText("Archive")).toBeNull();
+    fireEvent.click(within(menu).getByText("Restore from archive"));
+    await waitFor(() => expect(rendered.inspection.rpcCalls).toContainEqual({ method: "unarchiveThread", input: { threadId: "child-100" } }));
+    expect(rendered.inspection.rpcCalls.filter((call) => call.method === "unarchiveThread")).toHaveLength(1);
+  });
+
+  it("retries a failed archive lookup without showing an empty family as complete", async () => {
+    let failed = true;
+    renderSlot(childrenChip, { threadId: "parent", projectId: "proj_1", isCompactViewport: false }, {
+      sidebarThreads: { status: "ready", threads: [thread({ id: "parent", isArchived: true })] },
+      sdk: { threads: { list: async (args) => {
+        if (failed) throw new Error("Offline");
+        return args?.parentThreadId === "parent" ? [archivedListThread({ id: "child", parentThreadId: "parent" })] : [];
+      } } },
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Child threads" }));
+    expect(await screen.findByRole("alert")).toHaveProperty("textContent", "Could not load archived child threads.");
+    failed = false;
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByRole("button", { name: "Open child thread: Archived thread, Archived" })).toBeDefined();
+  });
+
+  it("keeps archived children out of a live parent's child menu", () => {
+    const rendered = renderSlot(childrenChip, { threadId: "parent", projectId: "proj_1", isCompactViewport: false }, {
+      sidebarThreads: { status: "ready", threads: [
+        thread({ id: "parent" }),
+        thread({ id: "live", title: "Live child", parentThreadId: "parent" }),
+        thread({ id: "archived", title: "Archived child", parentThreadId: "parent", isArchived: true }),
+      ] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "1 child thread" }));
+    expect(screen.queryByText("Archived child")).toBeNull();
+    expect(rendered.inspection.sdkCalls).toEqual([]);
+  });
+
   it.each([false, true])("loads execution details only on hover and handles failure=%s", async (fail) => {
     let requests = 0;
     renderSlot(
@@ -125,7 +208,7 @@ describe("SubagentsChip", () => {
       {
         sidebarThreads: {
           status: "ready",
-          threads: [thread({ id: "child", title: "Child", parentThreadId: "parent" })],
+          threads: [thread({ id: "parent" }), thread({ id: "child", title: "Child", parentThreadId: "parent" })],
           projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
         rpc: {

@@ -15,7 +15,8 @@ A stable thread list for [bb](https://github.com/get-bb/bb). Threads stay where 
 - Pinned, Active, Inactive, Snoozed, Parked, and Settled shelves
 - Project filtering
 - Optional project colors with per-project color selection. Names stay colored in every mode; show stripes in full and collapsed mode, full mode only, or grouped projects only
-- Optional Archived shelf with filtering and restore controls
+- Optional Archived shelf with restore controls and archive buttons on settled threads
+- Archived families stay compact in the sidebar; browse children and descendants from the parent thread's header
 - Bulk archiving of settled threads from settings
 - Automatic project icons with custom overrides
 - Expandable child-thread indicators with running and attention states

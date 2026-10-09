@@ -117,7 +117,6 @@ export function ArchiveSettledDialog({ threads }: { threads: readonly PluginSide
 /**
  * Archived threads in the current project scope, newest first. Mounted only
  * while the Archived shelf is open, so a closed shelf never pages the archive.
- * The filter matches title and project name over the pages loaded so far.
  */
 export function ArchivedThreadList({
   scope,
@@ -137,7 +136,6 @@ export function ArchivedThreadList({
   const { status, threads, experimental_archived: archive } = useSidebarThreads({
     experimental_lifecycles: ["archived"],
   });
-  const [query, setQuery] = useState("");
   const archived = useMemo(
     () =>
       hideChildrenOfVisibleParents(
@@ -145,14 +143,6 @@ export function ArchivedThreadList({
       ).sort((a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0)),
     [threads, scope],
   );
-  const needle = query.trim().toLocaleLowerCase();
-  const shown = needle
-    ? archived.filter((thread) =>
-        `${threadDisplayTitle(thread)} ${projectNameById.get(thread.projectId) ?? ""}`
-          .toLocaleLowerCase()
-          .includes(needle),
-      )
-    : archived;
 
   if (status === "loading") {
     return <p className="px-2.5 py-1 text-2xs text-muted-foreground">Loading archived threads…</p>;
@@ -162,44 +152,11 @@ export function ArchivedThreadList({
   }
   return (
     <>
-      {archived.length > 0 ? (
-        // Built like a row, so the icon sits in the favicon column and the
-        // text starts where every archived title starts.
-        <label className="flex h-7 cursor-text items-center gap-2 rounded-md px-2.5 text-xs text-muted-foreground transition-colors duration-150 ease-out focus-within:bg-sidebar-accent/60 focus-within:ring-1 focus-within:ring-ring hover:bg-sidebar-accent/40 motion-reduce:transition-none">
-          <Icon name="Search" className="size-3 shrink-0 opacity-60" aria-hidden />
-          <input
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape" && query) {
-                event.stopPropagation();
-                setQuery("");
-              }
-            }}
-            placeholder="Filter archive"
-            aria-label="Filter archived threads"
-            className="min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:hidden"
-          />
-          {query ? (
-            <button
-              type="button"
-              aria-label="Clear filter"
-              onClick={() => setQuery("")}
-              className="-mr-0.5 rounded p-0.5 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            >
-              <Icon name="CircleX" className="size-3" />
-            </button>
-          ) : null}
-        </label>
-      ) : null}
       {archived.length === 0 ? (
         <p className="px-2.5 py-1 text-2xs text-muted-foreground">No archived threads{scope ? " in this project" : ""}.</p>
-      ) : shown.length === 0 ? (
-        <p className="px-2.5 py-1 text-2xs text-muted-foreground">No archived threads match.</p>
       ) : (
         <ul className="flex flex-col gap-px">
-          {shown.map((thread) => (
+          {archived.map((thread) => (
             <ArchivedRow
               key={thread.id}
               thread={thread}

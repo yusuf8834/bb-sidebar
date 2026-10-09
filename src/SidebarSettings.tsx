@@ -525,7 +525,7 @@ export function SidebarSettings() {
       <SettingsSection title="Archiving" status={statusFor("Archiving")}>
         <SettingRow
           title="Archived shelf"
-          description="Show archived threads at the bottom of the sidebar, with filtering and restore controls."
+          description="Show archived threads with restore controls and add archive buttons to settled threads."
           control={<Switch label="Archived shelf" checked={draft.archivedShelfEnabled} onChange={(checked) => update("archivedShelfEnabled", checked)} />}
         />
         <SettingsGroup title="Bulk archive">

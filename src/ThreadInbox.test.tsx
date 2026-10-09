@@ -551,21 +551,28 @@ describe("BB Sidebar registration", () => {
 
 describe("sidebar settings", () => {
   it("keeps the archive shelf and project colors opt-in, including a previously expanded shelf", async () => {
-    localStorage.setItem("bb-sidebar:shelf-expansion:v1", JSON.stringify({ archived: true }));
+    localStorage.setItem("bb-sidebar:shelf-expansion:v1", JSON.stringify({ settled: true, archived: true }));
     let settings = { ...defaultSidebarSettings };
     const rendered = renderSlot(inbox, listProps, {
       sidebarThreads: {
         status: "ready",
         projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
-        threads: [thread({ id: "live", title: "Live work" }), thread({ id: "old", title: "Old work", isArchived: true, archivedAt: 500 })],
+        threads: [
+          thread({ id: "live", title: "Live work" }),
+          thread({ id: "done", title: "Settled work" }),
+          thread({ id: "old", title: "Old work", isArchived: true, archivedAt: 500 }),
+        ],
       },
       rpc: {
         getSidebarSettings: () => settings,
-        listLifecycle: () => ({ rows: [] }),
+        listLifecycle: () => ({ rows: [{ threadId: "done", settledAt: 200, snoozedUntil: null, snoozedAt: null }] }),
         getProjectColors: () => ({ colors: {} }),
       },
     });
     await screen.findByText("Live work");
+    const settledShelf = await screen.findByRole("region", { name: "Settled" });
+    await within(settledShelf).findByText("Settled work");
+    expect(within(settledShelf).queryByRole("button", { name: "Archive thread" })).toBeNull();
     expect(screen.queryByRole("region", { name: "Archived" })).toBeNull();
     expect(document.querySelector("[data-project-stripe]")).toBeNull();
     expect(rendered.rpcCalls.some((call) => call.method === "getProjectColors")).toBe(false);
@@ -573,10 +580,13 @@ describe("sidebar settings", () => {
     settings = { ...settings, archivedShelfEnabled: true, projectColorsEnabled: true };
     await rendered.emitRealtime("sidebar-settings", {});
     await screen.findByText("Old work");
+    expect(within(settledShelf).getByRole("button", { name: "Archive thread" })).toBeDefined();
     await waitFor(() => expect(document.querySelector("[data-project-stripe]")).not.toBeNull());
     settings = { ...settings, archivedShelfEnabled: false, projectColorsEnabled: false };
     await rendered.emitRealtime("sidebar-settings", {});
     await waitFor(() => expect(screen.queryByRole("region", { name: "Archived" })).toBeNull());
+    expect(within(settledShelf).queryByRole("button", { name: "Archive thread" })).toBeNull();
+    expect(within(settledShelf).getByText("Settled work")).toBeDefined();
     expect(document.querySelector("[data-project-stripe]")).toBeNull();
   });
 
@@ -5148,6 +5158,7 @@ describe("parking threads", () => {
         projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: {
+        getSidebarSettings: () => ({ ...defaultSidebarSettings, archivedShelfEnabled: true }),
         listLifecycle: () => ({ rows: [{ threadId: "thr_a", settledAt: 200, snoozedUntil: null, snoozedAt: null }] }),
         archiveThreads,
       },
@@ -5178,7 +5189,7 @@ describe("parking threads", () => {
     await waitFor(() => expect(unarchiveThread).toHaveBeenCalledWith({ threadId: "thr_old" }));
   });
 
-  it("filters the Archived shelf by title or project and shows when each thread started and was archived", async () => {
+  it("shows archived threads newest first with dates and no separate search box", async () => {
     const day = 86_400_000;
     const now = Date.now();
     renderSlot(inbox, listProps, {
@@ -5202,22 +5213,11 @@ describe("parking threads", () => {
     expect(row.querySelector("a")!.getAttribute("title")).toBe(
       `Started ${new Date(now - 30 * day).toLocaleDateString()} · Archived ${new Date(now - 20 * day).toLocaleDateString()}`,
     );
-    const filter = within(shelf).getByRole("searchbox", { name: "Filter archived threads" });
-    fireEvent.change(filter, { target: { value: "git-local" } });
-    expect(within(shelf).queryByText("Fix login")).toBeNull();
-    expect(within(shelf).getByText("Write report")).toBeTruthy();
-    fireEvent.change(filter, { target: { value: "LOGIN" } });
-    expect(within(shelf).getByText("Fix login")).toBeTruthy();
-    expect(within(shelf).queryByText("Write report")).toBeNull();
-    fireEvent.change(filter, { target: { value: "nothing like this" } });
-    expect(within(shelf).getByText("No archived threads match.")).toBeTruthy();
-    fireEvent.click(within(shelf).getByRole("button", { name: "Clear filter" }));
-    expect((filter as HTMLInputElement).value).toBe("");
-    expect(within(shelf).getByText("Fix login")).toBeTruthy();
-    fireEvent.change(filter, { target: { value: "login" } });
-    fireEvent.keyDown(filter, { key: "Escape" });
-    expect((filter as HTMLInputElement).value).toBe("");
-    expect(within(shelf).queryByRole("button", { name: "Clear filter" })).toBeNull();
+    expect(within(shelf).queryByRole("searchbox")).toBeNull();
+    expect(within(shelf).getAllByRole("link").map((link) => link.getAttribute("aria-label"))).toEqual([
+      "Git-Local · Write report",
+      "bb · Fix login",
+    ]);
   });
 
   it("marks each project's rows with that project's own soft colour", async () => {

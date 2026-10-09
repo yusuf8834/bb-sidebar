@@ -1772,6 +1772,7 @@ export function ThreadInbox({
                       }))
                     }
                     shelf="settled"
+                    showArchiveButton={sidebarSettings?.archivedShelfEnabled === true}
                     visibleThreads={visibleSettled}
                     activeThreadId={activeThreadId}
                     lifecycle={lifecycle}
@@ -2019,6 +2020,7 @@ function CompactShelf({
   expanded,
   onToggle,
   shelf,
+  showArchiveButton = false,
   visibleThreads,
   activeThreadId,
   lifecycle,
@@ -2038,6 +2040,7 @@ function CompactShelf({
   expanded: boolean;
   onToggle: () => void;
   shelf: "parked" | "snoozed" | "settled";
+  showArchiveButton?: boolean;
   visibleThreads: readonly PluginSidebarThread[];
   activeThreadId: string | null;
   lifecycle: LifecycleApi;
@@ -2078,6 +2081,7 @@ function CompactShelf({
             )}
             isActive={thread.id === activeThreadId}
             shelf={shelf}
+            showArchiveButton={showArchiveButton}
             parkedAt={lifecycle.parkedAtFor(thread)}
             onPark={() => onPark(thread)}
             onSettle={() => onSettle(thread)}
