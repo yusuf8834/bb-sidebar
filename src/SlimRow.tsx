@@ -16,7 +16,7 @@ import { snoozeWakeLabel } from "./lifecycle";
 import type { ConfiguredSnoozePreset } from "./lifecycle";
 import { InlineThreadTitle } from "./InlineThreadTitle";
 import { ProjectFavicon, ProjectStripe } from "./ProjectFavicon";
-import { projectColorClass } from "./project-monogram";
+import { useProjectColor } from "./ProjectColors";
 import { ThreadDetailsTooltip } from "./ThreadDetailsTooltip";
 import { OpenPortsIndicator } from "./OpenPorts";
 import { JumpHint, useJumpHint } from "./JumpHints";
@@ -60,6 +60,7 @@ export function SlimRow({
   onSnooze: (snoozedUntil: number) => void;
 }) {
   const actions = useSidebarThreadActions();
+  const projectColor = useProjectColor(thread.projectId);
   const jumpHint = useJumpHint(thread.id);
   const title = threadDisplayTitle(thread);
   const rowLabel = projectName ? `${projectName} · ${title}` : title;
@@ -97,7 +98,7 @@ export function SlimRow({
             isActive ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60",
           )}
         >
-          {projectName ? <ProjectStripe name={projectName} /> : null}
+          {projectName ? <ProjectStripe projectId={thread.projectId} /> : null}
           <ThreadDetailsTooltip thread={thread} disabled={isRenaming}>
             <a
               data-sidebar-thread-shortcut-target=""
@@ -129,12 +130,12 @@ export function SlimRow({
           >
             {projectName && !isRenaming ? (
               <>
-                <ProjectFavicon src={projectIconUrl} name={projectName} className="size-3" />
+                <ProjectFavicon projectId={thread.projectId} src={projectIconUrl} name={projectName} className="size-3" />
                 <span
+                  style={projectColor}
                   className={cn(
-                    "bb-sidebar-project-name max-w-[40%] shrink truncate",
-                    projectColorClass(projectName),
-                    !isActive && "opacity-80 group-hover/slim:opacity-100",
+                    "max-w-[40%] shrink truncate",
+                    projectColor ? "bb-sidebar-project-name" : isActive ? "text-muted-foreground/70" : "text-muted-foreground/50 group-hover/slim:text-muted-foreground/70",
                   )}
                 >
                   {projectName}

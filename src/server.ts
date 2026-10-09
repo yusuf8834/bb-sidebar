@@ -47,6 +47,8 @@ import { createThreadPullRequests } from "./thread-pull-requests";
 import { threadPullRequestSchema } from "./pull-requests";
 import { ownedPortTargetSchema, closePortsResultSchema } from "./close-owned-ports";
 
+import { PROJECT_COLORS_CHANNEL } from "./project-colors";
+
 const migrations = [
   `CREATE TABLE IF NOT EXISTS thread_lifecycle (
      thread_id      TEXT PRIMARY KEY,
@@ -102,6 +104,12 @@ const migrations = [
   `ALTER TABLE sidebar_settings
      ADD COLUMN dock_shelves INTEGER NOT NULL DEFAULT 0`,
   AUTO_TITLE_RECOVERY_MIGRATION,
+  `ALTER TABLE sidebar_settings ADD COLUMN project_colors_enabled INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE sidebar_settings ADD COLUMN archived_shelf_enabled INTEGER NOT NULL DEFAULT 0`,
+  `CREATE TABLE IF NOT EXISTS project_colors (
+     project_id TEXT PRIMARY KEY,
+     color TEXT NOT NULL
+   )`,
 ];
 
 export interface StoredLifecycleRow {
@@ -136,6 +144,8 @@ interface SidebarSettingsDbRow {
   compact_working_threads: number;
   working_shelf: number;
   dock_shelves: number;
+  project_colors_enabled: number;
+  archived_shelf_enabled: number;
 }
 
 const threadIdSchema = z.object({ threadId: z.string().trim().min(1) });
@@ -217,6 +227,8 @@ const sidebarSettingsSchema = z
     compactWorkingThreads: z.boolean(),
     workingShelf: z.boolean(),
     dockShelves: z.boolean(),
+    projectColorsEnabled: z.boolean(),
+    archivedShelfEnabled: z.boolean(),
   })
   .strict();
 const uploadFilenameSchema = z
@@ -295,6 +307,17 @@ export const bbSidebarRpcContract = defineRpcContract({
     input: threadIdSchema.strict(),
     output: z.object({ title: z.string().min(1).max(100) }).strict(),
   },
+  getProjectColors: {
+    input: z.object({}).strict(),
+    output: z.object({ colors: z.record(z.string(), z.string()) }),
+  },
+  setProjectColor: {
+    input: z.object({
+      projectId: z.string().trim().min(1),
+      color: z.string().regex(/^#[0-9a-fA-F]{6}$/).transform((value) => value.toLowerCase()).nullable(),
+    }).strict(),
+    output: z.object({ ok: z.boolean() }),
+  },
   getSidebarSettings: {
     input: z.object({}).strict(),
     output: sidebarSettingsSchema,
@@ -305,6 +328,8 @@ export const bbSidebarRpcContract = defineRpcContract({
       compactWorkingThreads: true,
       workingShelf: true,
       dockShelves: true,
+      projectColorsEnabled: true,
+      archivedShelfEnabled: true,
     }),
     output: sidebarSettingsSchema,
   },
@@ -556,7 +581,8 @@ export default async function plugin(bb: BbPluginApi) {
                 auto_settle_inactive,
                 auto_settle_after_days, auto_settle_on_merge,
                 child_sort_field, child_sort_direction, child_icon_style,
-                compact_working_threads, working_shelf, dock_shelves
+                compact_working_threads, working_shelf, dock_shelves,
+                project_colors_enabled, archived_shelf_enabled
            FROM sidebar_settings
           WHERE id = 1`,
       )
@@ -579,6 +605,8 @@ export default async function plugin(bb: BbPluginApi) {
           compactWorkingThreads: row.compact_working_threads === 1,
           workingShelf: row.working_shelf === 1,
           dockShelves: row.dock_shelves === 1,
+          projectColorsEnabled: row.project_colors_enabled === 1,
+          archivedShelfEnabled: row.archived_shelf_enabled === 1,
         }
       : { ...DEFAULT_SIDEBAR_SETTINGS };
   };
@@ -590,8 +618,9 @@ export default async function plugin(bb: BbPluginApi) {
          auto_settle_inactive,
          auto_settle_after_days, auto_settle_on_merge,
          child_sort_field, child_sort_direction, child_icon_style,
-         compact_working_threads, working_shelf, dock_shelves
-       ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         compact_working_threads, working_shelf, dock_shelves,
+         project_colors_enabled, archived_shelf_enabled
+       ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          snooze_presets = excluded.snooze_presets,
          inactive_threads_enabled = excluded.inactive_threads_enabled,
@@ -606,7 +635,9 @@ export default async function plugin(bb: BbPluginApi) {
          child_icon_style = excluded.child_icon_style,
          compact_working_threads = excluded.compact_working_threads,
          working_shelf = excluded.working_shelf,
-         dock_shelves = excluded.dock_shelves`,
+         dock_shelves = excluded.dock_shelves,
+         project_colors_enabled = excluded.project_colors_enabled,
+         archived_shelf_enabled = excluded.archived_shelf_enabled`,
     ).run(
       values.snoozePresets,
       values.inactiveThreadsEnabled ? 1 : 0,
@@ -621,6 +652,8 @@ export default async function plugin(bb: BbPluginApi) {
       values.compactWorkingThreads ? 1 : 0,
       values.workingShelf ? 1 : 0,
       values.dockShelves ? 1 : 0,
+      values.projectColorsEnabled ? 1 : 0,
+      values.archivedShelfEnabled ? 1 : 0,
     );
   };
 
@@ -677,6 +710,8 @@ export default async function plugin(bb: BbPluginApi) {
         compactWorkingThreads: DEFAULT_SIDEBAR_SETTINGS.compactWorkingThreads,
         workingShelf: DEFAULT_SIDEBAR_SETTINGS.workingShelf,
         dockShelves: DEFAULT_SIDEBAR_SETTINGS.dockShelves,
+        projectColorsEnabled: false,
+        archivedShelfEnabled: false,
       });
       if (hasLegacyValues && migrated.success) {
         writeSidebarSettings(migrated.data);
@@ -1686,6 +1721,20 @@ export default async function plugin(bb: BbPluginApi) {
       return { ok: true };
     },
     regenerateTitle: ({ threadId }) => regenerateTitle(threadId),
+    async getProjectColors() {
+      const rows = db.prepare("SELECT project_id, color FROM project_colors").all() as Array<{ project_id: string; color: string }>;
+      return { colors: Object.fromEntries(rows.map((row) => [row.project_id, row.color])) };
+    },
+    async setProjectColor({ projectId, color }) {
+      await bb.sdk.projects.get({ projectId });
+      if (color === null) {
+        db.prepare("DELETE FROM project_colors WHERE project_id = ?").run(projectId);
+      } else {
+        db.prepare("INSERT INTO project_colors (project_id, color) VALUES (?, ?) ON CONFLICT(project_id) DO UPDATE SET color = excluded.color").run(projectId, color);
+      }
+      bb.realtime.publish(PROJECT_COLORS_CHANNEL, { projectId });
+      return { ok: true };
+    },
     async getSidebarSettings() {
       return readSidebarSettings();
     },
@@ -1697,6 +1746,8 @@ export default async function plugin(bb: BbPluginApi) {
           values.compactWorkingThreads ?? stored.compactWorkingThreads,
         workingShelf: values.workingShelf ?? stored.workingShelf,
         dockShelves: values.dockShelves ?? stored.dockShelves,
+        projectColorsEnabled: values.projectColorsEnabled ?? stored.projectColorsEnabled,
+        archivedShelfEnabled: values.archivedShelfEnabled ?? stored.archivedShelfEnabled,
       });
       bb.realtime.publish(SIDEBAR_SETTINGS_CHANNEL, {});
       void evaluatePolicies().catch((error) => {

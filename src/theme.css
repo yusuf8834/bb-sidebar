@@ -112,68 +112,29 @@
   --bb-sidebar-pr-open: var(--bb-sidebar-emerald-600);
 
   /*
-   * Project accents: a soft stripe and a tinted name per project, indexed by
-   * `projectMonogramColor`. Low chroma on purpose — these tell projects apart
-   * and must never read as a status (no red, no warning amber).
-   */
-  --bb-sidebar-project-0: oklch(72% 0.075 145);
-  --bb-sidebar-project-0-text: oklch(50% 0.07 145);
-  --bb-sidebar-project-1: oklch(72% 0.075 190);
-  --bb-sidebar-project-1-text: oklch(50% 0.07 190);
-  --bb-sidebar-project-2: oklch(72% 0.075 230);
-  --bb-sidebar-project-2-text: oklch(50% 0.07 230);
-  --bb-sidebar-project-3: oklch(72% 0.075 265);
-  --bb-sidebar-project-3-text: oklch(50% 0.07 265);
-  --bb-sidebar-project-4: oklch(72% 0.075 300);
-  --bb-sidebar-project-4-text: oklch(50% 0.07 300);
-  --bb-sidebar-project-5: oklch(72% 0.075 350);
-  --bb-sidebar-project-5-text: oklch(50% 0.07 350);
-  --bb-sidebar-project-6: oklch(72% 0.075 75);
-  --bb-sidebar-project-6-text: oklch(50% 0.07 75);
-  --bb-sidebar-project-7: oklch(72% 0.075 110);
-  --bb-sidebar-project-7-text: oklch(50% 0.07 110);
-
-  /*
    * Letter tiles for projects without an icon, styled like the child badges:
    * a pale tint behind a dark letter here, a deep tint behind a light one in
    * dark. Indexed by `projectMonogramColor`.
    */
-  --bb-sidebar-monogram-0-bg: color-mix(in oklab, var(--bb-sidebar-project-0) 25%, transparent);
-  --bb-sidebar-monogram-0-fg: var(--bb-sidebar-project-0-text);
-  --bb-sidebar-monogram-1-bg: color-mix(in oklab, var(--bb-sidebar-project-1) 25%, transparent);
-  --bb-sidebar-monogram-1-fg: var(--bb-sidebar-project-1-text);
-  --bb-sidebar-monogram-2-bg: color-mix(in oklab, var(--bb-sidebar-project-2) 25%, transparent);
-  --bb-sidebar-monogram-2-fg: var(--bb-sidebar-project-2-text);
-  --bb-sidebar-monogram-3-bg: color-mix(in oklab, var(--bb-sidebar-project-3) 25%, transparent);
-  --bb-sidebar-monogram-3-fg: var(--bb-sidebar-project-3-text);
-  --bb-sidebar-monogram-4-bg: color-mix(in oklab, var(--bb-sidebar-project-4) 25%, transparent);
-  --bb-sidebar-monogram-4-fg: var(--bb-sidebar-project-4-text);
-  --bb-sidebar-monogram-5-bg: color-mix(in oklab, var(--bb-sidebar-project-5) 25%, transparent);
-  --bb-sidebar-monogram-5-fg: var(--bb-sidebar-project-5-text);
-  --bb-sidebar-monogram-6-bg: color-mix(in oklab, var(--bb-sidebar-project-6) 25%, transparent);
-  --bb-sidebar-monogram-6-fg: var(--bb-sidebar-project-6-text);
-  --bb-sidebar-monogram-7-bg: color-mix(in oklab, var(--bb-sidebar-project-7) 25%, transparent);
-  --bb-sidebar-monogram-7-fg: var(--bb-sidebar-project-7-text);
+  --bb-sidebar-monogram-0-bg: var(--bb-sidebar-emerald-100);
+  --bb-sidebar-monogram-0-fg: var(--bb-sidebar-emerald-700);
+  --bb-sidebar-monogram-1-bg: var(--bb-sidebar-teal-100);
+  --bb-sidebar-monogram-1-fg: var(--bb-sidebar-teal-700);
+  --bb-sidebar-monogram-2-bg: var(--bb-sidebar-sky-100);
+  --bb-sidebar-monogram-2-fg: var(--bb-sidebar-sky-700);
+  --bb-sidebar-monogram-3-bg: var(--bb-sidebar-indigo-100);
+  --bb-sidebar-monogram-3-fg: var(--bb-sidebar-indigo-700);
+  --bb-sidebar-monogram-4-bg: var(--bb-sidebar-violet-100);
+  --bb-sidebar-monogram-4-fg: var(--bb-sidebar-violet-700);
+  --bb-sidebar-monogram-5-bg: var(--bb-sidebar-pink-100);
+  --bb-sidebar-monogram-5-fg: var(--bb-sidebar-pink-700);
+  --bb-sidebar-monogram-6-bg: var(--bb-sidebar-amber-100);
+  --bb-sidebar-monogram-6-fg: var(--bb-sidebar-amber-700);
+  --bb-sidebar-monogram-7-bg: var(--bb-sidebar-red-100);
+  --bb-sidebar-monogram-7-fg: var(--bb-sidebar-red-700);
 }
 
 .dark {
-  --bb-sidebar-project-0: oklch(68% 0.07 145);
-  --bb-sidebar-project-0-text: oklch(80% 0.06 145);
-  --bb-sidebar-project-1: oklch(68% 0.07 190);
-  --bb-sidebar-project-1-text: oklch(80% 0.06 190);
-  --bb-sidebar-project-2: oklch(68% 0.07 230);
-  --bb-sidebar-project-2-text: oklch(80% 0.06 230);
-  --bb-sidebar-project-3: oklch(68% 0.07 265);
-  --bb-sidebar-project-3-text: oklch(80% 0.06 265);
-  --bb-sidebar-project-4: oklch(68% 0.07 300);
-  --bb-sidebar-project-4-text: oklch(80% 0.06 300);
-  --bb-sidebar-project-5: oklch(68% 0.07 350);
-  --bb-sidebar-project-5-text: oklch(80% 0.06 350);
-  --bb-sidebar-project-6: oklch(68% 0.07 75);
-  --bb-sidebar-project-6-text: oklch(80% 0.06 75);
-  --bb-sidebar-project-7: oklch(68% 0.07 110);
-  --bb-sidebar-project-7-text: oklch(80% 0.06 110);
-
   --bb-sidebar-tone-error: var(--bb-sidebar-red-300);
   --bb-sidebar-tone-pending: var(--bb-sidebar-indigo-300);
   --bb-sidebar-tone-success: var(--bb-sidebar-emerald-300);
@@ -211,22 +172,22 @@
   --bb-sidebar-pr-alert: color-mix(in oklab, var(--bb-sidebar-red-300) 90%, transparent);
   --bb-sidebar-pr-open: color-mix(in oklab, var(--bb-sidebar-emerald-300) 90%, transparent);
 
-  --bb-sidebar-monogram-0-bg: color-mix(in oklab, var(--bb-sidebar-project-0) 25%, transparent);
-  --bb-sidebar-monogram-0-fg: var(--bb-sidebar-project-0-text);
-  --bb-sidebar-monogram-1-bg: color-mix(in oklab, var(--bb-sidebar-project-1) 25%, transparent);
-  --bb-sidebar-monogram-1-fg: var(--bb-sidebar-project-1-text);
-  --bb-sidebar-monogram-2-bg: color-mix(in oklab, var(--bb-sidebar-project-2) 25%, transparent);
-  --bb-sidebar-monogram-2-fg: var(--bb-sidebar-project-2-text);
-  --bb-sidebar-monogram-3-bg: color-mix(in oklab, var(--bb-sidebar-project-3) 25%, transparent);
-  --bb-sidebar-monogram-3-fg: var(--bb-sidebar-project-3-text);
-  --bb-sidebar-monogram-4-bg: color-mix(in oklab, var(--bb-sidebar-project-4) 25%, transparent);
-  --bb-sidebar-monogram-4-fg: var(--bb-sidebar-project-4-text);
-  --bb-sidebar-monogram-5-bg: color-mix(in oklab, var(--bb-sidebar-project-5) 25%, transparent);
-  --bb-sidebar-monogram-5-fg: var(--bb-sidebar-project-5-text);
-  --bb-sidebar-monogram-6-bg: color-mix(in oklab, var(--bb-sidebar-project-6) 25%, transparent);
-  --bb-sidebar-monogram-6-fg: var(--bb-sidebar-project-6-text);
-  --bb-sidebar-monogram-7-bg: color-mix(in oklab, var(--bb-sidebar-project-7) 25%, transparent);
-  --bb-sidebar-monogram-7-fg: var(--bb-sidebar-project-7-text);
+  --bb-sidebar-monogram-0-bg: color-mix(in oklab, var(--bb-sidebar-emerald-950) 80%, transparent);
+  --bb-sidebar-monogram-0-fg: var(--bb-sidebar-emerald-300);
+  --bb-sidebar-monogram-1-bg: color-mix(in oklab, var(--bb-sidebar-teal-950) 80%, transparent);
+  --bb-sidebar-monogram-1-fg: var(--bb-sidebar-teal-300);
+  --bb-sidebar-monogram-2-bg: color-mix(in oklab, var(--bb-sidebar-sky-950) 80%, transparent);
+  --bb-sidebar-monogram-2-fg: var(--bb-sidebar-sky-300);
+  --bb-sidebar-monogram-3-bg: color-mix(in oklab, var(--bb-sidebar-indigo-950) 80%, transparent);
+  --bb-sidebar-monogram-3-fg: var(--bb-sidebar-indigo-300);
+  --bb-sidebar-monogram-4-bg: color-mix(in oklab, var(--bb-sidebar-violet-950) 80%, transparent);
+  --bb-sidebar-monogram-4-fg: var(--bb-sidebar-violet-300);
+  --bb-sidebar-monogram-5-bg: color-mix(in oklab, var(--bb-sidebar-pink-950) 80%, transparent);
+  --bb-sidebar-monogram-5-fg: var(--bb-sidebar-pink-300);
+  --bb-sidebar-monogram-6-bg: color-mix(in oklab, var(--bb-sidebar-amber-950) 80%, transparent);
+  --bb-sidebar-monogram-6-fg: var(--bb-sidebar-amber-300);
+  --bb-sidebar-monogram-7-bg: color-mix(in oklab, var(--bb-sidebar-red-950) 80%, transparent);
+  --bb-sidebar-monogram-7-fg: var(--bb-sidebar-red-300);
 }
 
 /*
@@ -249,55 +210,6 @@
 
 .light .bb-sidebar-theme-dark-only {
   display: none;
-}
-
-/* Project accents; `.bb-sidebar-project-N` picks the hue for the role class. */
-.bb-sidebar-project-stripe {
-  background-color: var(--bb-sidebar-project);
-}
-
-.bb-sidebar-project-name {
-  color: var(--bb-sidebar-project-text);
-}
-
-.bb-sidebar-project-0 {
-  --bb-sidebar-project: var(--bb-sidebar-project-0);
-  --bb-sidebar-project-text: var(--bb-sidebar-project-0-text);
-}
-
-.bb-sidebar-project-1 {
-  --bb-sidebar-project: var(--bb-sidebar-project-1);
-  --bb-sidebar-project-text: var(--bb-sidebar-project-1-text);
-}
-
-.bb-sidebar-project-2 {
-  --bb-sidebar-project: var(--bb-sidebar-project-2);
-  --bb-sidebar-project-text: var(--bb-sidebar-project-2-text);
-}
-
-.bb-sidebar-project-3 {
-  --bb-sidebar-project: var(--bb-sidebar-project-3);
-  --bb-sidebar-project-text: var(--bb-sidebar-project-3-text);
-}
-
-.bb-sidebar-project-4 {
-  --bb-sidebar-project: var(--bb-sidebar-project-4);
-  --bb-sidebar-project-text: var(--bb-sidebar-project-4-text);
-}
-
-.bb-sidebar-project-5 {
-  --bb-sidebar-project: var(--bb-sidebar-project-5);
-  --bb-sidebar-project-text: var(--bb-sidebar-project-5-text);
-}
-
-.bb-sidebar-project-6 {
-  --bb-sidebar-project: var(--bb-sidebar-project-6);
-  --bb-sidebar-project-text: var(--bb-sidebar-project-6-text);
-}
-
-.bb-sidebar-project-7 {
-  --bb-sidebar-project: var(--bb-sidebar-project-7);
-  --bb-sidebar-project-text: var(--bb-sidebar-project-7-text);
 }
 
 /* Project letter tiles; each theme block above sets their colours. */
@@ -349,4 +261,23 @@
 [data-drag-preview] [data-drag-visual],
 [data-drag-preview] [data-drag-visual] * {
   pointer-events: none !important;
+}
+
+/* Optional project accents. Each project supplies its own color. */
+.bb-sidebar-project-stripe {
+  background-color: var(--bb-sidebar-project);
+}
+
+.bb-sidebar-project-name,
+.bb-sidebar-project-monogram {
+  color: var(--bb-sidebar-project-text-light);
+}
+
+.dark .bb-sidebar-project-name,
+.dark .bb-sidebar-project-monogram {
+  color: var(--bb-sidebar-project-text-dark);
+}
+
+.bb-sidebar-project-monogram {
+  background-color: color-mix(in oklab, var(--bb-sidebar-project) 20%, transparent);
 }

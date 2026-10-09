@@ -29,12 +29,12 @@ import {
   SelectTrigger,
 } from "./components/Select";
 import { ProjectScopeSelect } from "./ProjectScopeSelect";
-import { ProjectFavicon } from "./ProjectFavicon";
-import { projectColorClass } from "./project-monogram";
+import { ProjectFavicon, ProjectStripe } from "./ProjectFavicon";
+import { ProjectColorsProvider, useProjectColor } from "./ProjectColors";
 import { ThreadCard, type ThreadReorderControls } from "./ThreadCard";
 import { SlimRow } from "./SlimRow";
 import { CleanSettledDialog } from "./CleanSettledDialog";
-import { ArchiveSettledDialog, ArchivedThreadList } from "./ArchiveShelf";
+import { ArchivedThreadList } from "./ArchiveShelf";
 import { SearchResults } from "./SearchResults";
 import { childThreadsByParent, collapsedChildThreads } from "./ChildThreadList";
 import {
@@ -1502,6 +1502,7 @@ export function ThreadInbox({
   );
 
   return (
+    <ProjectColorsProvider enabled={sidebarSettings?.projectColorsEnabled === true} projectIds={projects.map((project) => project.id)}>
     <WorkingSinceContext.Provider value={workingSince}>
     <ChildThreadDisplayContext.Provider value={childDisplay}>
     <OpenPortsProvider>
@@ -1778,7 +1779,7 @@ export function ThreadInbox({
                       setSettledLimit((limit) => limit + SETTLED_PAGE_SIZE)
                     }
                   />
-                  <CollapsibleShelf
+                  {sidebarSettings?.archivedShelfEnabled ? <CollapsibleShelf
                     label="Archived"
                     icon="Archive"
                     count={0}
@@ -1801,7 +1802,7 @@ export function ThreadInbox({
                         onNavigate={onNavigate}
                       />
                     ) : null}
-                  </CollapsibleShelf>
+                  </CollapsibleShelf> : null}
                 </>
               }
             />
@@ -1812,6 +1813,7 @@ export function ThreadInbox({
     </OpenPortsProvider>
     </ChildThreadDisplayContext.Provider>
     </WorkingSinceContext.Provider>
+    </ProjectColorsProvider>
   );
 }
 
@@ -2058,13 +2060,7 @@ function CompactShelf({
       count={threads.length}
       expanded={expanded}
       onToggle={onToggle}
-      actionSlots={shelf === "settled" ? 2 : 1}
-      action={shelf === "settled" ? (
-        <>
-          <ArchiveSettledDialog threads={threads} />
-          <CleanSettledDialog threadIds={threads.map((thread) => thread.id)} onNavigate={onNavigate} />
-        </>
-      ) : undefined}
+      action={shelf === "settled" ? <CleanSettledDialog threadIds={threads.map((thread) => thread.id)} onNavigate={onNavigate} /> : undefined}
     >
       <ul ref={attachListAutoAnimateRef} className="flex flex-col gap-px">
         {visibleThreads.map((thread) => (
@@ -2161,7 +2157,6 @@ function CollapsibleShelf({
   expanded,
   onToggle,
   action,
-  actionSlots = 1,
   hideCount = false,
   children,
   hidden = false,
@@ -2173,8 +2168,6 @@ function CollapsibleShelf({
   expanded: boolean;
   onToggle: () => void;
   action?: React.ReactNode;
-  /** How many absolutely positioned header buttons `action` renders. */
-  actionSlots?: 1 | 2;
   hideCount?: boolean;
   children: React.ReactNode;
   hidden?: boolean;
@@ -2200,7 +2193,7 @@ function CollapsibleShelf({
           </span>
           <span className="h-px flex-1 bg-sidebar-border" />
           {action ? (
-            <span aria-hidden="true" className={cn("h-4 shrink-0", actionSlots === 2 ? "w-9" : "w-4")} />
+            <span aria-hidden="true" className="size-4 shrink-0" />
           ) : null}
           <span className={TRAILING_GLYPH_BOX_CLASS}>
             <Icon
@@ -2221,6 +2214,7 @@ function CollapsibleShelf({
 
 function ActiveProjectGroup({
   unitKey,
+  projectId,
   projectName,
   projectIconUrl,
   threadCount,
@@ -2230,6 +2224,7 @@ function ActiveProjectGroup({
   children,
 }: {
   unitKey: string;
+  projectId: string;
   projectName: string;
   projectIconUrl: string | null;
   threadCount: number;
@@ -2238,6 +2233,7 @@ function ActiveProjectGroup({
   reorder: ThreadReorderControls;
   children: React.ReactNode;
 }) {
+  const projectColor = useProjectColor(projectId);
   const attachListAutoAnimateRef = useListAutoAnimate<HTMLUListElement>();
   return (
     // One item of the top-level list, so the whole project is a single drop
@@ -2250,7 +2246,8 @@ function ActiveProjectGroup({
           "relative z-20 bg-[linear-gradient(var(--sidebar-accent),var(--sidebar-accent)),linear-gradient(var(--sidebar),var(--sidebar))] shadow-lg ring-1 ring-sidebar-border",
       )}
     >
-      <section data-drag-visual="" aria-label={`${projectName} project`}>
+      <section data-drag-visual="" className="relative" aria-label={`${projectName} project`}>
+        <ProjectStripe projectId={projectId} className="z-10" />
         <button
           type="button"
           data-reorder-key={unitKey}
@@ -2268,8 +2265,8 @@ function ActiveProjectGroup({
             !reorder.disabled && "cursor-grab active:cursor-grabbing",
           )}
         >
-          <ProjectFavicon src={projectIconUrl} name={projectName} className="size-3" />
-          <span className={cn("bb-sidebar-project-name min-w-0 truncate text-2xs font-medium", projectColorClass(projectName))}>
+          <ProjectFavicon projectId={projectId} src={projectIconUrl} name={projectName} className="size-3" />
+          <span style={projectColor} className={cn("min-w-0 truncate text-2xs font-medium", projectColor ? "bb-sidebar-project-name" : "text-muted-foreground")}>
             {projectName}
           </span>
           <span className="shrink-0 text-2xs text-muted-foreground/50">
@@ -2331,6 +2328,7 @@ function ProjectGroups({
           <ActiveProjectGroup
             key={unit.key}
             unitKey={unit.key}
+            projectId={unit.projectId}
             projectName={projectName}
             projectIconUrl={projectIconUrl(unit.projectId, projectIconRevision)}
             threadCount={unit.threadCount}

@@ -188,6 +188,23 @@ async function loadPlugin(
 }
 
 describe("lifecycle RPC", () => {
+  it("persists per-project colors, validates them, and resets to automatic", async () => {
+    const harness = await loadPlugin();
+    harness.inspection.sdk.stub("projects.get", async () => standardProject());
+    await expect(harness.behavior.callRpc("getProjectColors", {})).resolves.toEqual({ colors: {} });
+    await harness.behavior.callRpc("setProjectColor", { projectId: "proj_1", color: "#Ab12CD" });
+    const reloaded = await harness.lifecycle.reload(plugin);
+    const restored = reloaded.harness;
+    disposers.push(() => restored.lifecycle.dispose());
+    restored.inspection.sdk.stub("projects.get", async () => standardProject());
+    await expect(restored.behavior.callRpc("getProjectColors", {})).resolves.toEqual({ colors: { proj_1: "#ab12cd" } });
+    await expect(restored.behavior.callRpc("setProjectColor", { projectId: "proj_1", color: "url(https://example.com)" })).rejects.toThrow();
+    await expect(restored.behavior.callRpc("getProjectColors", {})).resolves.toEqual({ colors: { proj_1: "#ab12cd" } });
+    await restored.behavior.callRpc("setProjectColor", { projectId: "proj_1", color: null });
+    await expect(restored.behavior.callRpc("getProjectColors", {})).resolves.toEqual({ colors: {} });
+    expect(restored.inspection.realtimeSignals).toContainEqual({ channel: "project-colors", payload: { projectId: "proj_1" } });
+  });
+
   it("previews settled resources and skips a thread that becomes active before cleaning", async () => {
     let laterActive = false;
     const settled = projectThread({ id: "thr_settled", environmentId: "env_shared", environmentHostId: "host_1", environmentPath: "/workspace/shared" });
@@ -509,6 +526,8 @@ describe("lifecycle RPC", () => {
       compactWorkingThreads: false,
       workingShelf: false,
       dockShelves: false,
+      projectColorsEnabled: false,
+      archivedShelfEnabled: false,
     });
     await expect(
       harness.behavior.callRpc("updateSidebarSettings", {
@@ -525,6 +544,8 @@ describe("lifecycle RPC", () => {
         compactWorkingThreads: true,
         workingShelf: true,
         dockShelves: true,
+        projectColorsEnabled: true,
+        archivedShelfEnabled: true,
       }),
     ).resolves.toEqual({
       snoozePresets: "10m, 4h",
@@ -540,6 +561,8 @@ describe("lifecycle RPC", () => {
       compactWorkingThreads: true,
       workingShelf: true,
       dockShelves: true,
+      projectColorsEnabled: true,
+      archivedShelfEnabled: true,
     });
     // A client that predates the setting leaves it out and must not reset it.
     await expect(
@@ -555,7 +578,7 @@ describe("lifecycle RPC", () => {
         childSortDirection: "descending",
         childIconStyle: "provider",
       }),
-    ).resolves.toMatchObject({ compactWorkingThreads: true, workingShelf: true, dockShelves: true });
+    ).resolves.toMatchObject({ compactWorkingThreads: true, workingShelf: true, dockShelves: true, projectColorsEnabled: true, archivedShelfEnabled: true });
     expect(harness.inspection.realtimeSignals).toContainEqual({
       channel: "sidebar-settings",
       payload: {},
@@ -637,6 +660,8 @@ describe("lifecycle RPC", () => {
       compactWorkingThreads: false,
       workingShelf: false,
       dockShelves: false,
+      projectColorsEnabled: false,
+      archivedShelfEnabled: false,
     });
   });
 

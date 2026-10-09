@@ -11,12 +11,35 @@ import { Icon } from "./components/Icon";
 import { Tooltip } from "./components/Tooltip";
 import { cn } from "./lib/utils";
 import { usePortalScopeProps } from "./lib/portal-scope";
-import { filterByProject, hideChildrenOfVisibleParents, threadDisplayTitle } from "./inbox";
+import { filterByProject, hideChildrenOfVisibleParents, threadDisplayTitle, visibleInboxThreads } from "./inbox";
 import { ProjectFavicon, ProjectStripe } from "./ProjectFavicon";
-import { projectColorClass } from "./project-monogram";
+import { useProjectColor } from "./ProjectColors";
 import { relativeTimeLabel } from "./relative-time";
 import { projectIconUrl } from "./project-icons";
 import type { bbSidebarRpcContract } from "./server";
+import { SettingRow, SettingsSection, SettingsSelect, secondaryButtonClass } from "./settings-ui";
+import { useLifecycle } from "./useLifecycle";
+
+export function ArchiveSettings() {
+  const { status, threads, projects } = useSidebarThreads();
+  const lifecycle = useLifecycle(threads);
+  const [projectId, setProjectId] = useState("");
+  const scoped = hideChildrenOfVisibleParents(filterByProject(visibleInboxThreads(threads), projectId || null));
+  const settled = status === "ready" ? scoped.filter((thread) => lifecycle.shelfFor(thread) === "settled") : [];
+  return (
+    <SettingsSection title="Archiving">
+      <SettingRow title="Project" description="Choose which project's settled threads to archive." control={
+        <SettingsSelect aria-label="Archive project" value={projectId} onChange={(event) => setProjectId(event.target.value)} className="w-48">
+          <option value="">All projects</option>
+          {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+        </SettingsSelect>
+      } />
+      <SettingRow title="Archive settled threads" description={status === "loading" ? "Loading threads..." : status === "error" ? "Could not load threads." : `${settled.length} settled ${settled.length === 1 ? "thread" : "threads"}. Review the list before archiving.`} control={
+        <ArchiveSettledDialog threads={settled} />
+      } />
+    </SettingsSection>
+  );
+}
 
 /**
  * Archives every thread on the Settled shelf (already narrowed by the project
@@ -56,12 +79,11 @@ export function ArchiveSettledDialog({ threads }: { threads: readonly PluginSide
       <button
         type="button"
         aria-label="Archive all settled threads"
-        title="Archive all settled threads"
         disabled={count === 0}
         onClick={(event) => { event.stopPropagation(); setOpen(true); }}
-        className="absolute bottom-1 right-[3.125rem] z-10 flex size-4 items-center justify-center rounded text-muted-foreground/40 hover:bg-sidebar-accent hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:hidden"
+        className={secondaryButtonClass}
       >
-        <Icon name="Archive" className="size-3" aria-hidden />
+        Archive all…
       </button>
       <Dialog.Portal>
         <Dialog.Overlay {...portalScope} className="fixed inset-0 z-50 bg-black/40" />
@@ -73,7 +95,7 @@ export function ArchiveSettledDialog({ threads }: { threads: readonly PluginSide
             Archive {count} settled {count === 1 ? "thread" : "threads"}?
           </Dialog.Title>
           <Dialog.Description className="mt-2 text-xs leading-5 text-muted-foreground">
-            They move to Archived at the bottom of the sidebar, together with their child threads. Restore any of them from there.
+            This also archives their child threads. Enable the Archived shelf in settings to browse and restore archived threads.
           </Dialog.Description>
           <ul className="mt-4 max-h-48 space-y-1 overflow-y-auto rounded-md border border-border bg-background p-2 text-xs">
             {threads.map((thread) => <li key={thread.id} className="truncate">{threadDisplayTitle(thread)}</li>)}
@@ -222,6 +244,7 @@ function ArchivedRow({
   onNavigate: () => void;
 }) {
   const actions = useSidebarThreadActions();
+  const projectColor = useProjectColor(thread.projectId);
   const rpc = useRpc<typeof bbSidebarRpcContract>();
   const [busy, setBusy] = useState(false);
   const title = threadDisplayTitle(thread);
@@ -252,7 +275,7 @@ function ArchivedRow({
           isActive ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60",
         )}
       >
-        {projectName ? <ProjectStripe name={projectName} className="opacity-60" /> : null}
+        {projectName ? <ProjectStripe projectId={thread.projectId} className="opacity-60" /> : null}
         <a
           href="#"
           title={dates}
@@ -267,8 +290,8 @@ function ArchivedRow({
         <span className="pointer-events-none relative flex min-w-0 flex-1 items-center gap-1 text-muted-foreground/60 group-hover/slim:text-foreground">
           {projectName ? (
             <>
-              <ProjectFavicon src={projectIconUrl} name={projectName} className="size-3" />
-              <span className={cn("bb-sidebar-project-name max-w-[40%] shrink truncate opacity-70", projectColorClass(projectName))}>
+              <ProjectFavicon projectId={thread.projectId} src={projectIconUrl} name={projectName} className="size-3" />
+              <span style={projectColor} className={cn("max-w-[40%] shrink truncate", projectColor && "bb-sidebar-project-name")}>
                 {projectName}
               </span>
               <span aria-hidden="true" className="shrink-0 text-sm leading-none text-muted-foreground/45">·</span>

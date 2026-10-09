@@ -1,10 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { cn } from "./lib/utils";
 import {
-  projectColorClass,
   projectMonogramColor,
   projectMonogramLetter,
 } from "./project-monogram";
+import { useProjectColor } from "./ProjectColors";
 
 // Keyed by the icon route URL. A loaded entry holds the attempt URL that
 // succeeded. A failure is retried with backoff instead of blocking the icon
@@ -39,17 +39,21 @@ function recordFailure(src: string, attempt: number): void {
 export function ProjectMonogram({
   name,
   className,
+  projectId,
 }: {
   name: string;
   className?: string;
+  projectId?: string;
 }) {
+  const color = useProjectColor(projectId);
   return (
     <span
       aria-hidden="true"
       data-letter={projectMonogramLetter(name)}
+      style={color}
       className={cn(
         "bb-sidebar-monogram flex size-3.5 shrink-0 items-center justify-center rounded-[3px] text-[8px] font-semibold leading-none",
-        `bb-sidebar-monogram-${projectMonogramColor(name)}`,
+        color ? "bb-sidebar-project-monogram" : `bb-sidebar-monogram-${projectMonogramColor(name)}`,
         className,
       )}
     />
@@ -61,14 +65,16 @@ export function ProjectMonogram({
  * one project read as a group even when the project has its own icon. The row
  * must be `relative`.
  */
-export function ProjectStripe({ name, className }: { name: string; className?: string }) {
+export function ProjectStripe({ projectId, className }: { projectId: string; className?: string }) {
+  const color = useProjectColor(projectId);
+  if (!color) return null;
   return (
     <span
       aria-hidden="true"
       data-project-stripe=""
+      style={color}
       className={cn(
         "bb-sidebar-project-stripe pointer-events-none absolute bottom-1.5 left-0.5 top-1.5 w-0.5 rounded-full",
-        projectColorClass(name),
         className,
       )}
     />
@@ -80,15 +86,17 @@ export function ProjectFavicon({
   name,
   className,
   fallback,
+  projectId,
 }: {
   src: string | null;
   /** The project's name; without an explicit fallback, draws its letter tile. */
   name?: string | null;
   className?: string;
   fallback?: ReactNode;
+  projectId?: string;
 }) {
   if (fallback === undefined) {
-    fallback = name ? <ProjectMonogram name={name} className={className} /> : null;
+    fallback = name ? <ProjectMonogram name={name} projectId={projectId} className={className} /> : null;
   }
   const [, setRenderCount] = useState(0);
   const rerender = () => setRenderCount((count) => count + 1);

@@ -39,8 +39,3 @@ export function projectMonogramColor(name: string): number {
   }
   return (hash >>> 0) % MONOGRAM_COLOR_COUNT;
 }
-
-/** The accent hue class for a project; pair it with `bb-sidebar-project-stripe` or `-name`. */
-export function projectColorClass(name: string): string {
-  return `bb-sidebar-project-${projectMonogramColor(name)}`;
-}

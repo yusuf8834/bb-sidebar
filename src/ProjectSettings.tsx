@@ -8,6 +8,7 @@ import {
   projectIconUrl,
 } from "./project-icons";
 import { ProjectMonogram } from "./ProjectFavicon";
+import { ProjectColorSetting } from "./ProjectColorSetting";
 import { cn } from "./lib/utils";
 import {
   SettingRow,
@@ -248,6 +249,7 @@ export function ProjectSettings() {
           </SettingsSelect>
         }
       />
+      <ProjectColorSetting key={selectedId} projectId={selectedId} projectIds={choices.map((project) => project.id)} />
       {icon ? (
         <div className="flex items-center gap-3 px-4 py-2.5">
           <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-muted">

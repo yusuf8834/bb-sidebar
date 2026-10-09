@@ -34,7 +34,7 @@ import { InlineThreadTitle } from "./InlineThreadTitle";
 import type { ConfiguredSnoozePreset } from "./lifecycle";
 import { isWorkingTree } from "./working-tree";
 import { ProjectFavicon, ProjectStripe } from "./ProjectFavicon";
-import { projectColorClass } from "./project-monogram";
+import { useProjectColor } from "./ProjectColors";
 import { OpenPortsIndicator } from "./OpenPorts";
 import { JumpHint, useJumpHint } from "./JumpHints";
 import "./settle-button.css";
@@ -126,6 +126,7 @@ export function ThreadCard({
   now: number;
 }) {
   const actions = useSidebarThreadActions();
+  const projectColor = useProjectColor(thread.projectId);
   const jumpHint = useJumpHint(thread.id);
   const { splitProps, layout } = useSidebarThreadSplit(thread.id);
   const rowRef = useRef<HTMLLIElement>(null);
@@ -312,7 +313,7 @@ export function ThreadCard({
             {isSettling ? (
               <span aria-hidden="true" className="bb-sidebar-settle-sweep" />
             ) : null}
-            {projectName ? <ProjectStripe name={projectName} /> : null}
+            {showProject && projectName ? <ProjectStripe projectId={thread.projectId} /> : null}
             <ThreadDetailsTooltip thread={thread} disabled={isRenaming || !!reorder?.isDragging}>
               <a
                 // Both attributes, or bb's nine thread shortcuts stop finding rows.
@@ -363,8 +364,8 @@ export function ThreadCard({
                 >
                   {showProject && projectName && !isRenaming ? (
                     <>
-                      <ProjectFavicon src={projectIconUrl} name={projectName} className="size-3" />
-                      <span className={cn("bb-sidebar-project-name max-w-[40%] shrink truncate", projectColorClass(projectName))}>
+                      <ProjectFavicon projectId={thread.projectId} src={projectIconUrl} name={projectName} className="size-3" />
+                      <span style={projectColor} className={cn("max-w-[40%] shrink truncate", projectColor ? "bb-sidebar-project-name" : "text-muted-foreground/70")}>
                         {projectName}
                       </span>
                       <span aria-hidden="true" className="shrink-0 text-sm leading-none text-muted-foreground/60">
@@ -419,10 +420,11 @@ export function ThreadCard({
                   className="flex min-w-0 flex-1 items-center gap-1.5 text-2xs font-medium text-muted-foreground"
                 >
                   {projectName ? (
-                    <ProjectFavicon src={projectIconUrl} name={projectName} className="size-3" />
+                    <ProjectFavicon projectId={thread.projectId} src={projectIconUrl} name={projectName} className="size-3" />
                   ) : null}
                   <span
-                    className={cn("min-w-0 truncate", projectName && ["bb-sidebar-project-name", projectColorClass(projectName)])}
+                    style={projectColor}
+                    className={cn("min-w-0 truncate", projectColor && "bb-sidebar-project-name")}
                   >
                     {projectName ?? " "}
                   </span>

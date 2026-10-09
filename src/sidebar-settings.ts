@@ -31,6 +31,8 @@ export interface SidebarSettingsValues {
   workingShelf: boolean;
   /** Experimental: keep the shelves below Active docked to the bottom. */
   dockShelves: boolean;
+  projectColorsEnabled: boolean;
+  archivedShelfEnabled: boolean;
 }
 
 import { safeSetItem } from "./lib/safe-storage";
@@ -50,6 +52,8 @@ export const DEFAULT_SIDEBAR_SETTINGS: SidebarSettingsValues = {
   compactWorkingThreads: false,
   workingShelf: false,
   dockShelves: false,
+  projectColorsEnabled: false,
+  archivedShelfEnabled: false,
 };
 
 export function childThreadSortOf(
@@ -131,6 +135,8 @@ function readStoredSidebarSettings(): SidebarSettingsValues | null {
       compactWorkingThreads: value.compactWorkingThreads === true,
       workingShelf: value.workingShelf === true,
       dockShelves: value.dockShelves === true,
+      projectColorsEnabled: value.projectColorsEnabled === true,
+      archivedShelfEnabled: value.archivedShelfEnabled === true,
     } as SidebarSettingsValues;
   } catch {
     return null;

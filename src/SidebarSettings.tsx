@@ -16,6 +16,7 @@ import {
   type SidebarSettingsValues,
 } from "./sidebar-settings";
 import { ProjectSettings } from "./ProjectSettings";
+import { ArchiveSettings } from "./ArchiveShelf";
 import { PortLinkSettings } from "./PortLinkSettings";
 import {
   configuredSnoozePresetError,
@@ -71,6 +72,8 @@ const SECTION_BY_SETTING: Record<keyof SidebarSettingsValues, string> = {
   compactWorkingThreads: "Experimental",
   workingShelf: "Experimental",
   dockShelves: "Experimental",
+  archivedShelfEnabled: "Shelves",
+  projectColorsEnabled: "Appearance",
 };
 
 /**
@@ -240,6 +243,11 @@ export function SidebarSettings() {
   return (
     <div className="max-w-3xl space-y-8 pb-4">
       <SettingsSection title="Shelves" status={statusFor("Shelves")}>
+        <SettingRow
+          title="Archived shelf"
+          description="Show archived threads at the bottom of the sidebar, with filtering and restore controls."
+          control={<Switch label="Archived shelf" checked={draft.archivedShelfEnabled} onChange={(checked) => update("archivedShelfEnabled", checked)} />}
+        />
         <SettingRow
           title="Inactive shelf"
           description="Move quiet, unpinned threads out of Active. New activity brings them back."
@@ -431,7 +439,16 @@ export function SidebarSettings() {
         />
       </SettingsSection>
 
+      <SettingsSection title="Appearance" status={statusFor("Appearance")}>
+        <SettingRow
+          title="Project colors"
+          description="Color project names and add a stripe to each row, or one continuous stripe for a project group. Choose each project's color below."
+          control={<Switch label="Project colors" checked={draft.projectColorsEnabled} onChange={(checked) => update("projectColorsEnabled", checked)} />}
+        />
+      </SettingsSection>
+
       <ProjectSettings />
+      <ArchiveSettings />
 
       <SettingsSection title="This device" status={statusFor("This device")}>
         <PortLinkSettings

@@ -4,10 +4,10 @@
 
 ### Added
 
-- Archive all Settled threads in one click: a new archive button in the Settled header confirms once and archives every thread on the shelf (narrowed by the project picker).
+- Archive settled threads from Settings > Archiving, across all projects or a selected project, after reviewing a confirmation list.
 - Each Settled row has an Archive button on hover.
-- New Archived shelf at the bottom lists archived threads for the selected project, newest first; the button on a row restores the thread.
-- Project colours: every thread row and card carries a thin soft stripe in its project's colour, and the project name is tinted the same, even when the project has its own icon. Eight muted hues (no red, no warning amber); letter tiles use the same hue.
+- Optional Archived shelf, disabled by default. Enable it in Settings > Shelves to browse archived threads and restore them.
+- Optional project colors, disabled by default. Each project gets an automatic color based on its ID, with a custom color picker and reset control in Settings > Projects. Project groups share one continuous stripe; ungrouped rows have their own stripe.
 - The Archived shelf has a filter field (title or project name), laid out like a row with a search icon in the icon column, a clear button and Escape to clear, and shows how long ago each thread was archived; hovering a row shows when it started and when it was archived.
 
 ### Changed
