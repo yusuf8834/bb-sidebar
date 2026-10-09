@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased] - 2026-10-09
+
+### Added
+
+- Archive all Settled threads in one click: a new archive button in the Settled header confirms once and archives every thread on the shelf (narrowed by the project picker).
+- Each Settled row has an Archive button on hover.
+- New Archived shelf at the bottom lists archived threads for the selected project, newest first; the button on a row restores the thread.
+
+### Changed
+
+- The Settled Clean button is now labelled "Close terminals and ports of settled threads": it never archived anything.
+
 ## [0.2.34] - 2026-10-04
 
 ### Fixed

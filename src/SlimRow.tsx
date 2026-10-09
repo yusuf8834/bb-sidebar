@@ -1,8 +1,11 @@
 import { useState } from "react";
 import {
   experimental_useSidebarThreadActions as useSidebarThreadActions,
+  useRpc,
   type PluginSidebarThread,
 } from "@get-bb/plugin-sdk/app";
+import { toast } from "sonner";
+import type { bbSidebarRpcContract } from "./server";
 import { Icon } from "./components/Icon";
 import { Tooltip } from "./components/Tooltip";
 import { cn } from "./lib/utils";
@@ -60,6 +63,18 @@ export function SlimRow({
   const title = threadDisplayTitle(thread);
   const rowLabel = projectName ? `${projectName} · ${title}` : title;
   const [isRenaming, setIsRenaming] = useState(false);
+  const rpc = useRpc<typeof bbSidebarRpcContract>();
+  // One click, no dialog: the thread can be restored from the Archived shelf.
+  const archive = async () => {
+    try {
+      const result = await rpc.call("archiveThreads", { threadIds: [thread.id] });
+      if (result.failures.length > 0) throw new Error(result.failures[0]!.error);
+    } catch (error) {
+      toast.error("Could not archive thread", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    }
+  };
 
   return (
     <RowContextMenu
@@ -156,7 +171,10 @@ export function SlimRow({
             <JumpHint label={jumpHint} />
           ) : (
             <span
-              className="pointer-events-none relative flex min-w-5 shrink-0 items-center justify-end tabular-nums text-2xs text-muted-foreground/60 [@media(hover:none)]:gap-2"
+              className={cn(
+                "pointer-events-none relative flex shrink-0 items-center justify-end tabular-nums text-2xs text-muted-foreground/60 [@media(hover:none)]:gap-2",
+                shelf === "settled" ? "min-w-10" : "min-w-5",
+              )}
             >
               <span className="flex items-center transition-opacity duration-150 ease-out [@media(hover:hover)]:group-hover/slim:opacity-0 motion-reduce:transition-none">
                 {shelf === "parked" && parkedAt != null ? (
@@ -196,6 +214,22 @@ export function SlimRow({
                   />
                 </button>
               </Tooltip>
+              {shelf === "settled" ? (
+                <Tooltip label="Archive thread">
+                  <button
+                    type="button"
+                    aria-label="Archive thread"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      void archive();
+                    }}
+                    className="pointer-events-auto absolute right-4 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity duration-150 ease-out hover:text-foreground focus-visible:opacity-100 group-hover/slim:opacity-100 [@media(hover:none)]:static [@media(hover:none)]:translate-y-0 [@media(hover:none)]:opacity-100 motion-reduce:transition-none"
+                  >
+                    <Icon name="Archive" className="size-3.5" />
+                  </button>
+                </Tooltip>
+              ) : null}
             </span>
           )}
         </div>

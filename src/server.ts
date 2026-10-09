@@ -279,6 +279,17 @@ export const bbSidebarRpcContract = defineRpcContract({
     input: threadIdSchema.extend({ childThreadsConfirmed: z.boolean() }).strict(),
     output: z.object({ ok: z.boolean() }),
   },
+  archiveThreads: {
+    input: z.object({ threadIds: threadIdsSchema }).strict(),
+    output: z.object({
+      archived: z.number(),
+      failures: z.array(z.object({ threadId: z.string(), error: z.string() })),
+    }),
+  },
+  unarchiveThread: {
+    input: threadIdSchema.strict(),
+    output: z.object({ ok: z.boolean() }),
+  },
   regenerateTitle: {
     input: threadIdSchema.strict(),
     output: z.object({ title: z.string().min(1).max(100) }).strict(),
@@ -1584,6 +1595,21 @@ export default async function plugin(bb: BbPluginApi) {
       // so bb's generic one is skipped. Deletion is recursive; bb refuses it
       // unless the caller confirmed the children too.
       await bb.sdk.threads.delete({ threadId, childThreadsConfirmed });
+      return { ok: true };
+    },
+    async archiveThreads({ threadIds }) {
+      // Archive Settled in one go. The sidebar shows its own confirmation, so
+      // bb's per-thread dialog is skipped. Archive takes children with it but
+      // leaves an idle agent session loaded, hence the stop (see
+      // releaseRuntimes); a failed stop only misses a reclaim.
+      const result = await runThreadTasks(threadIds, async (threadId) => {
+        await bb.sdk.threads.archive({ threadId });
+        await bb.sdk.threads.stop({ threadId }).catch(() => undefined);
+      });
+      return { archived: result.succeededThreadIds.length, failures: result.failures };
+    },
+    async unarchiveThread({ threadId }) {
+      await bb.sdk.threads.unarchive({ threadId });
       return { ok: true };
     },
     regenerateTitle: ({ threadId }) => regenerateTitle(threadId),
