@@ -1,7 +1,8 @@
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import type { createTitleRegenerator } from "./regenerate-title";
 
-// Give BB's initial five-second title request time to settle before recovery.
+// Give BB's native title request time to settle before recovery. BB also skips
+// first prompts shorter than five words, which still need a sidebar title.
 const RECOVERY_DELAY_MS = 10_000;
 const MAX_CONCURRENT_RECOVERIES = 2;
 

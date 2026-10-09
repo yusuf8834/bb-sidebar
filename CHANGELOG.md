@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased] - 2026-10-09
+## [Unreleased]
 
 ### Added
 
@@ -13,6 +13,10 @@
 ### Changed
 
 - The Settled Clean button is now labelled "Close terminals and ports of settled threads": it never archived anything.
+
+### Fixed
+
+- Retained automatic title recovery for threads BB leaves unnamed, including first prompts shorter than five words. BB's [Codex stream fix](https://github.com/get-bb/bb/pull/4830) fixes completion handling but does not change that naming threshold. Successful BB titles, manual titles, and the selected AI title service are preserved.
 
 ## [0.2.34] - 2026-10-04
 

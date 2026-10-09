@@ -160,15 +160,18 @@ describe("automatic title recovery", () => {
     expect(state.regenerate).toHaveBeenCalledTimes(3);
   });
 
-  it("uses the selected Codex service without contacting cloud", async () => {
-    const state = setupCodex();
-    await state.active();
-    await vi.advanceTimersByTimeAsync(10_000);
-    expect(state.harness.logEntries).toEqual([]);
-    expect(state.sdk.callsTo("threads.wait")[0]![0]).toMatchObject({ timeoutMs: 45_000 });
-    expect(state.sdk.callsTo("threads.update")[0]![0]).toEqual({ threadId: "target", title: "Review sidebar pull request" });
-    expect(state.sdk.callsTo("plugins.callRpc")).toHaveLength(0);
-  });
+  it.each(["Check this sidebar pull request", "Is this working?"])(
+    "names an untitled thread through selected Codex, including short prompts: %s",
+    async text => {
+      const state = setupCodex(text);
+      await state.active();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(state.harness.logEntries).toEqual([]);
+      expect(state.sdk.callsTo("threads.wait")[0]![0]).toMatchObject({ timeoutMs: 45_000 });
+      expect(state.sdk.callsTo("threads.update")[0]![0]).toEqual({ threadId: "target", title: "Review sidebar pull request" });
+      expect(state.sdk.callsTo("plugins.callRpc")).toHaveLength(0);
+    },
+  );
 
   it.each(["manual title", "titles off", "archived"])(
     "keeps user changes made during generation: %s", async change => {
@@ -188,11 +191,11 @@ describe("automatic title recovery", () => {
   );
 });
 
-function setupCodex() {
+function setupCodex(text = "Check this sidebar pull request") {
   const state = setup(true);
   state.sdk.stub("threads.timeline", async () => ({ rows: [{
     kind: "conversation", role: "user", initiator: "user", id: "message",
-    text: "Check this sidebar pull request", createdAt: 1, sourceSeqStart: 1,
+    text, createdAt: 1, sourceSeqStart: 1,
     turnRequest: { status: "accepted" },
   }], timelinePage: { hasOlderRows: false, olderCursor: null } }));
   state.sdk.stub("providers.list", async () => [{ id: "codex", available: true }]);
