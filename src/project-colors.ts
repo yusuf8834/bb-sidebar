@@ -18,13 +18,13 @@ function hslToHex(hue: number, saturation: number, lightness: number): string {
   return `#${channel(0)}${channel(8)}${channel(4)}`;
 }
 
-/** A stable color from the project's identity, without a fixed palette. */
+/** A stable muted color from the project's identity, without a fixed palette. */
 export function automaticProjectColor(projectId: string, attempt = 0): string {
   const hash = hashId(projectId);
   return hslToHex(
     ((hash / 2 ** 32) * 360 + attempt * 137.507764) % 360,
-    0.48 + ((hash >>> 8) % 20) / 100,
-    0.46 + (hash % 14) / 100,
+    0.26 + ((hash >>> 8) % 12) / 100,
+    0.62 + (hash % 8) / 100,
   );
 }
 
