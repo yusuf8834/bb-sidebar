@@ -5001,6 +5001,13 @@ describe("parking threads", () => {
     expect(within(shelf).queryByText("Write report")).toBeNull();
     fireEvent.change(filter, { target: { value: "nothing like this" } });
     expect(within(shelf).getByText("No archived threads match.")).toBeTruthy();
+    fireEvent.click(within(shelf).getByRole("button", { name: "Clear filter" }));
+    expect((filter as HTMLInputElement).value).toBe("");
+    expect(within(shelf).getByText("Fix login")).toBeTruthy();
+    fireEvent.change(filter, { target: { value: "login" } });
+    fireEvent.keyDown(filter, { key: "Escape" });
+    expect((filter as HTMLInputElement).value).toBe("");
+    expect(within(shelf).queryByRole("button", { name: "Clear filter" })).toBeNull();
   });
 
   it("marks each project's rows with that project's own soft colour", async () => {
