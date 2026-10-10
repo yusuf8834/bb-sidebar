@@ -1148,6 +1148,122 @@ describe("settling thread trees", () => {
     expect(rows).toHaveLength(4);
   });
 
+  it.each([
+    ["thread.active", "park", "child"],
+    ["thread.active", "snooze", "child"],
+    ["thread.created", "park", "child"],
+    ["thread.created", "snooze", "child"],
+    ["thread.active", "park", "parent"],
+    ["thread.active", "snooze", "parent"],
+    ["thread.created", "park", "parent"],
+    ["thread.created", "snooze", "parent"],
+  ] as const)("a delayed %s preserves a newer %s on %s while ancestor lookups are pending", async (event, action, target) => {
+    const harness = await loadPlugin();
+    const threads = tree();
+    harness.inspection.sdk.stub("projects.list", async () => projectsWith(threads));
+    await harness.behavior.callRpc("settle", { threadId: "parent" });
+    const entered = deferred<void>();
+    const lookup = deferred<void>();
+    harness.inspection.sdk.stub("threads.get", async ({ threadId }) => {
+      if (threadId === "child") {
+        entered.resolve();
+        await lookup.promise;
+      }
+      return makeThreadResponse(threads.find(thread => thread.id === threadId)!);
+    });
+    const pending = harness.behavior.emitThreadEvent(event, {
+      thread: makeThreadResponse({
+        id: event === "thread.created" ? "new-child" : "grandchild",
+        parentThreadId: "child", status: "active",
+      }),
+    });
+    await entered.promise;
+    await harness.behavior.callRpc(action, {
+      threadId: target,
+      ...(action === "snooze" ? { snoozedUntil: Date.now() + 86400000 } : {}),
+    });
+    const before = (await harness.behavior.callRpc("listLifecycle", {}) as LifecycleListResult).rows;
+    lookup.resolve();
+    expect((await pending).errors).toEqual([]);
+    const after = (await harness.behavior.callRpc("listLifecycle", {}) as LifecycleListResult).rows;
+    expect(after.find(row => row.threadId === target)).toEqual(before.find(row => row.threadId === target));
+    // A newer choice on the nearest ancestor also protects the shelves above it.
+    if (target === "child") {
+      expect(after.find(row => row.threadId === "parent")).toEqual(before.find(row => row.threadId === "parent"));
+    }
+  });
+
+  it("returns a child and its ancestors to Active without a lookup after the shelf move", async () => {
+    const harness = await loadPlugin();
+    harness.inspection.sdk.stub("projects.list", async () => projectsWith(tree()));
+    await harness.behavior.callRpc("settle", { threadId: "parent" });
+    harness.inspection.sdk.stub("threads.get", async () => { throw new Error("ancestor unavailable"); });
+
+    await expect(harness.behavior.callRpc("unsettle", { threadId: "grandchild" })).resolves.toEqual({ ok: true });
+    const { rows } = await harness.behavior.callRpc("listLifecycle", {}) as LifecycleListResult;
+    expect(rows.some(row => ["parent", "child"].includes(row.threadId))).toBe(false);
+    expect(rows.find(row => row.threadId === "grandchild")?.settledOverride).toBe("active");
+    expect(rows.find(row => row.threadId === "hidden")?.settledOverride).toBe("settled");
+  });
+
+  it("does not change shelves when Return to Active cannot load the tree", async () => {
+    const harness = await loadPlugin();
+    harness.inspection.sdk.stub("projects.list", async () => projectsWith(tree()));
+    await harness.behavior.callRpc("settle", { threadId: "parent" });
+    const before = await harness.behavior.callRpc("listLifecycle", {});
+    harness.inspection.sdk.stub("threads.list", async () => { throw new Error("tree unavailable"); });
+
+    await expect(harness.behavior.callRpc("unsettle", { threadId: "grandchild" })).rejects.toThrow("tree unavailable");
+    await expect(harness.behavior.callRpc("listLifecycle", {})).resolves.toEqual(before);
+  });
+
+  it("finishes policy wakeups and runtime cleanup without ancestor lookups after writing rows", async () => {
+    const harness = await loadPlugin();
+    const old = Date.now() - 8 * 86400000;
+    const quiet = { createdAt: old, updatedAt: old, latestAttentionAt: old };
+    const threads = [
+      projectThread({ id: "parent", ...quiet }),
+      projectThread({ id: "child", parentThreadId: "parent", ...quiet }),
+    ];
+    harness.inspection.sdk.stub("projects.list", async () => projectsWith(threads));
+    harness.inspection.sdk.stub("threads.stop", async () => ({ ok: true }));
+    harness.inspection.sdk.stub("terminals.list", async () => ({ sessions: [] }));
+    await harness.behavior.callRpc("evaluateAutoSettle", {});
+
+    threads[1]!.status = "active";
+    threads.push(projectThread({ id: "quiet-root", ...quiet }));
+    harness.inspection.sdk.stub("threads.get", async () => { throw new Error("ancestor unavailable"); });
+    await expect(harness.behavior.callRpc("evaluateAutoSettle", {})).resolves.toEqual({
+      changedThreadIds: ["child", "quiet-root", "parent"],
+    });
+    const { rows } = await harness.behavior.callRpc("listLifecycle", {}) as LifecycleListResult;
+    expect(rows.map(row => row.threadId)).toEqual(["quiet-root"]);
+    expect(harness.inspection.sdk.callsTo("threads.stop")).toContainEqual([{ threadId: "quiet-root" }]);
+    await expect(harness.behavior.callRpc("evaluateAutoSettle", {})).resolves.toEqual({ changedThreadIds: [] });
+  });
+
+  it("keeps the child event successful when a higher ancestor lookup fails", async () => {
+    const harness = await loadPlugin();
+    const threads = tree();
+    harness.inspection.sdk.stub("projects.list", async () => projectsWith(threads));
+    await harness.behavior.callRpc("settle", { threadId: "parent" });
+    harness.inspection.sdk.stub("threads.get", async ({ threadId }) => {
+      if (threadId === "parent") throw new Error("ancestor unavailable");
+      return makeThreadResponse(threads.find(thread => thread.id === threadId)!);
+    });
+
+    const { errors } = await harness.behavior.emitThreadEvent("thread.active", {
+      thread: makeThreadResponse({ id: "grandchild", parentThreadId: "child", status: "active" }),
+    });
+    expect(errors).toEqual([]);
+    const { rows } = await harness.behavior.callRpc("listLifecycle", {}) as LifecycleListResult;
+    expect(rows.some(row => ["child", "grandchild"].includes(row.threadId))).toBe(false);
+    expect(rows.find(row => row.threadId === "parent")?.settledOverride).toBe("settled");
+    expect(harness.inspection.logEntries).toContainEqual(expect.objectContaining({
+      level: "warn", message: "Could not load ancestor parent: ancestor unavailable",
+    }));
+  });
+
   it("settles descendants across projects together and explicitly returns the tree to Active", async () => {
     const harness = await loadPlugin();
     harness.inspection.sdk.stub("projects.list", async () => projectsWith(tree()));

@@ -15,6 +15,7 @@
 
 ### Fixed
 
+- Delayed child events preserve newer Park and Snooze choices on their ancestors. Ancestor lookup failures no longer turn completed shelf moves into errors or skip automatic-settle cleanup.
 - Queued Settle cleanup rechecks activity, shelf state, pins and parentage before releasing resources, including after terminal lookups. Hidden descendants are included in tree checks.
 - Returning a parent to Active no longer adds permanent Active overrides to its descendants. Snapshot Undo ends after restoring the previous shelves, and failed Settle actions restore pins they removed.
 - Settings save only edited fields and finish queued saves after leaving the page. Removed preview settings are discarded from the local cache.

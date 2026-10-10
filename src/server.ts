@@ -1050,17 +1050,38 @@ export default async function plugin(bb: BbPluginApi) {
     return true;
   };
 
+  const sameLifecycle = (left: StoredLifecycleRow | null, right: StoredLifecycleRow | null) =>
+    JSON.stringify(left) === JSON.stringify(right);
+
+  type AncestorThread = Pick<Awaited<ReturnType<BbPluginApi["sdk"]["threads"]["get"]>>,
+    "id" | "parentThreadId" | "archivedAt" | "deletedAt">;
+
   const wakeAncestors = async (
     thread: { id: string; parentThreadId: string | null },
-    { automaticOnly = false }: { automaticOnly?: boolean } = {},
+    { automaticOnly = false, threadsById }: {
+      automaticOnly?: boolean;
+      threadsById?: ReadonlyMap<string, AncestorThread>;
+    } = {},
   ) => {
+    if (thread.parentThreadId === null) return [];
+    // Capture all shelves before the first lookup, including ancestors whose
+    // IDs we will only learn after an earlier request finishes.
+    const previousRows = new Map(readAll().map(row => [row.threadId, row]));
     const visited = new Set([thread.id]);
     const ancestors: string[] = [];
-    let parentId = thread.parentThreadId;
+    let parentId: string | null = thread.parentThreadId;
     while (parentId !== null && !visited.has(parentId)) {
       visited.add(parentId);
-      const parent = await bb.sdk.threads.get({ threadId: parentId });
-      if (parent.archivedAt !== null || parent.deletedAt !== null) break;
+      let parent: AncestorThread | undefined;
+      try {
+        // RPCs and policy passes already loaded the complete tree. Do not
+        // introduce another network failure after their shelf writes succeed.
+        parent = threadsById ? threadsById.get(parentId) : await bb.sdk.threads.get({ threadId: parentId });
+      } catch (error) {
+        bb.log.warn(`Could not load ancestor ${parentId}: ${error instanceof Error ? error.message : String(error)}`);
+        break;
+      }
+      if (!parent || parent.archivedAt !== null || parent.deletedAt !== null) break;
       ancestors.push(parent.id);
       parentId = parent.parentThreadId;
     }
@@ -1072,6 +1093,9 @@ export default async function plugin(bb: BbPluginApi) {
       for (const id of ancestors) {
         const row = readOne(id);
         if (!row || (row.settledAt === null && row.parkedAt == null && row.snoozedUntil === null)) continue;
+        // A newer manual shelf choice wins over this older child event and
+        // protects the ancestors above it as well.
+        if (!sameLifecycle(row, previousRows.get(id) ?? null)) break;
         // Reversing an automatic rule is not new child activity. Keep the
         // user's manual shelf choice, including older parent-only settles.
         if (automaticOnly && (row.settledOverride != null || row.parkedAt != null || row.snoozedUntil != null)) break;
@@ -1157,8 +1181,7 @@ export default async function plugin(bb: BbPluginApi) {
     isUnread: thread.lastReadAt === null || thread.latestAttentionAt > thread.lastReadAt,
     latestAttentionAt: thread.latestAttentionAt,
   });
-  const loadSettleTree = async (threadId: string) => {
-    const threads = await loadPolicyThreads(true);
+  const settleTree = (threads: readonly CleanupThread[], threadId: string) => {
     const ids = new Set(threadTreeIds(threads, threadId));
     const tree = threads.filter((thread) => ids.has(thread.id));
     if (!tree.some((thread) => thread.id === threadId)) {
@@ -1166,6 +1189,7 @@ export default async function plugin(bb: BbPluginApi) {
     }
     return tree;
   };
+  const loadSettleTree = async (threadId: string) => settleTree(await loadPolicyThreads(true), threadId);
   // Undo belongs to one completed action, not to a later Return to Active.
   // Toasts are short-lived; bound snapshots and expire them after five minutes.
   const settleUndos = new Map<string, {
@@ -1298,9 +1322,6 @@ export default async function plugin(bb: BbPluginApi) {
     await Promise.all(workers);
     return results;
   };
-
-  const sameLifecycle = (left: StoredLifecycleRow | null, right: StoredLifecycleRow | null) =>
-    JSON.stringify(left) === JSON.stringify(right);
 
   // Queued cleanup belongs to the shelf action that scheduled it. Revalidate
   // after network waits; activity, a new shelf choice, a pin or reparent cancels
@@ -1498,7 +1519,7 @@ export default async function plugin(bb: BbPluginApi) {
       publishLifecycleChanges([...changedThreadIds]);
       for (const change of changes) {
         if (change.decision === "unsettle") {
-          for (const id of await wakeAncestors(byId.get(change.threadId)!, { automaticOnly: true })) changedThreadIds.add(id);
+          for (const id of await wakeAncestors(byId.get(change.threadId)!, { automaticOnly: true, threadsById: byId })) changedThreadIds.add(id);
         }
       }
       // Outside the transaction, because releasing a runtime is a network call
@@ -1941,7 +1962,8 @@ export default async function plugin(bb: BbPluginApi) {
         publishLifecycleChanges(restored);
         return { ok: true };
       }
-      const tree = await loadSettleTree(threadId);
+      const threads = await loadPolicyThreads(true);
+      const tree = settleTree(threads, threadId);
       const restoring = tree.filter((thread) => thread.id === threadId || readOne(thread.id)?.settledAt != null);
       db.transaction(() => {
         for (const thread of restoring) {
@@ -1955,7 +1977,9 @@ export default async function plugin(bb: BbPluginApi) {
         }
       })();
       publishLifecycleChanges(restoring.map((thread) => thread.id));
-      await wakeAncestors(tree.find((thread) => thread.id === threadId)!);
+      await wakeAncestors(tree.find((thread) => thread.id === threadId)!, {
+        threadsById: new Map(threads.map(thread => [thread.id, thread])),
+      });
       return { ok: true };
     },
     async snooze({ threadId, snoozedUntil }) {

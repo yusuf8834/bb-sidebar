@@ -39,4 +39,3 @@ it("older color replies cannot overwrite the newest refresh", async () => {
   await act(async () => { older.resolve({ colors: { p1: "#123456" } }); });
   expect(screen.getByTestId("name").style.getPropertyValue("--bb-sidebar-project")).toBe("#abcdef");
 });
-
