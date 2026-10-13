@@ -1,7 +1,7 @@
 import { STORAGE_KEYS } from "./lib/storage-keys";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type PluginSidebarThread, useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
-import { toast } from "sonner";
+import { toast } from "./lib/toast";
 import type { bbSidebarRpcContract } from "./contract";
 import { INBOX_ORDER_CHANNEL } from "./realtime-channels";
 import { orderInboxThreads } from "./pinned-order";

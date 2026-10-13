@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
-import { toast } from "sonner";
+import { toast } from "./lib/toast";
 import type { bbSidebarRpcContract } from "./contract";
 import { PROJECT_ICONS_CHANNEL } from "./realtime-channels";
 import { PROJECT_ICON_EXTENSIONS, projectIconUrl } from "./project-icons";

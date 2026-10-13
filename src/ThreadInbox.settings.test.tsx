@@ -612,6 +612,6 @@ describe("sidebar settings", () => {
     );
     expect(await within(management).findByText("No projects to remove.")).toBeDefined();
     expect(within(appearance).getByRole("combobox", { name: "Project" })).toHaveProperty("value", "personal");
-    expect(toastMocks.success).toHaveBeenCalledWith("Sidebar removed from BB");
+    expect(toastMocks.success).toHaveBeenCalledWith("Sidebar removed from BB", { className: "bb-sidebar-toast" });
   });
 });

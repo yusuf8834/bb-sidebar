@@ -314,6 +314,7 @@ it.each(["Title write unavailable", "HTTP 500: Title write unavailable"])(
     );
     await waitFor(() =>
       expect(toastMocks.error).toHaveBeenCalledWith("Failed to update thread", {
+        className: "bb-sidebar-toast",
         description: "Title write unavailable",
       }),
     );

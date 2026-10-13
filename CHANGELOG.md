@@ -17,6 +17,7 @@
 ### Fixed
 
 - The thread header's parent chip now follows the child icon style setting, showing the parent's provider glyph when selected and its color disc when the provider is unknown.
+- Sidebar notifications use BB's theme surfaces and button colors in dark and light mode.
 - Delayed child events preserve newer Park and Snooze choices on their ancestors. Ancestor lookup failures no longer turn completed shelf moves into errors or skip automatic-settle cleanup.
 - Queued Settle cleanup rechecks activity, shelf state, pins and parentage before releasing resources, including after terminal lookups. Hidden descendants are included in tree checks.
 - Returning a parent to Active no longer adds permanent Active overrides to its descendants. Snapshot Undo ends after restoring the previous shelves, and failed Settle actions restore pins they removed.

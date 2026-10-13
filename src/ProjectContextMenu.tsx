@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useBbContext, useBbNavigate, useRpc, type PluginSidebarProject } from "@get-bb/plugin-sdk/app";
-import { toast } from "sonner";
+import { toast } from "./lib/toast";
 import type { bbSidebarRpcContract } from "./contract";
 import { usePortalScopeProps } from "./lib/portal-scope";
 

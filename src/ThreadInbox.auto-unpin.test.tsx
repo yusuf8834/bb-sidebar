@@ -50,6 +50,7 @@ describe("parent auto-unpin menu UX", () => {
     await act(async () => pending.resolve({ ok: true, unpinFailed: true }));
     await waitFor(() =>
       expect(toastMocks.error).toHaveBeenCalledExactlyOnceWith("Parent updated, but unpinning could not be confirmed", {
+        className: "bb-sidebar-toast",
         description: "If the thread is still pinned, choose Unpin manually.",
       }),
     );

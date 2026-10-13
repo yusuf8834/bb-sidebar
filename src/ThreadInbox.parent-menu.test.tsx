@@ -176,6 +176,7 @@ describe("parent thread menu", () => {
     fireEvent.click(within(menu).getByRole("menuitemradio", { name: "Next parent" }));
     await waitFor(() =>
       expect(toastMocks.error).toHaveBeenCalledWith("Could not update parent", {
+        className: "bb-sidebar-toast",
         description: "Parent is no longer available",
       }),
     );

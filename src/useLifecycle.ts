@@ -2,7 +2,7 @@ import { STORAGE_KEYS } from "./lib/storage-keys";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
-import { toast } from "sonner";
+import { toast } from "./lib/toast";
 import type { bbSidebarRpcContract } from "./contract";
 import { LIFECYCLE_CHANNEL } from "./realtime-channels";
 import { describeReclaim } from "./reclaim";

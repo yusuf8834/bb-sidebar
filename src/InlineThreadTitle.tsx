@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useSdk, type PluginSidebarThread } from "@get-bb/plugin-sdk/app";
-import { toast } from "sonner";
+import { toast } from "./lib/toast";
 import { cn } from "./lib/utils";
 import { threadDisplayTitle } from "./inbox";
 import { ThreadTitle } from "./ThreadTitle";

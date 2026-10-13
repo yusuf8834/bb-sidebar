@@ -133,6 +133,7 @@ describe("ThreadInbox", () => {
     pending.reject(new Error("order conflict"));
     await waitFor(() =>
       expect(toastMocks.error).toHaveBeenCalledWith("Could not reorder pinned thread", {
+        className: "bb-sidebar-toast",
         description: "order conflict",
       }),
     );
@@ -295,7 +296,10 @@ describe("ThreadInbox", () => {
 
     pending.reject(new Error("database busy"));
     await waitFor(() =>
-      expect(toastMocks.error).toHaveBeenCalledWith("Could not reorder inbox thread", { description: "database busy" }),
+      expect(toastMocks.error).toHaveBeenCalledWith("Could not reorder inbox thread", {
+        className: "bb-sidebar-toast",
+        description: "database busy",
+      }),
     );
     expect(screen.getAllByRole("listitem")[0]!.textContent).toContain("Inbox A");
   });

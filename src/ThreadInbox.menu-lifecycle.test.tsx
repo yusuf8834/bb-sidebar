@@ -248,7 +248,10 @@ describe("row context menu", () => {
 
     await parkFromCard((await screen.findByText("Broken settle")).closest("li")!, action);
     await waitFor(() =>
-      expect(toastMocks.error).toHaveBeenCalledWith(`Could not ${action} thread`, { description: "database offline" }),
+      expect(toastMocks.error).toHaveBeenCalledWith(`Could not ${action} thread`, {
+        className: "bb-sidebar-toast",
+        description: "database offline",
+      }),
     );
     expect(rendered.navigateCalls.some((call) => call.method === "toThread" || call.method === "toCompose")).toBe(
       false,

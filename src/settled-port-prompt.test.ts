@@ -51,7 +51,10 @@ describe("settled port prompt", () => {
     const close = vi.fn().mockResolvedValue({ signalled: [], skipped: [], failed: [3000] });
     await promptToCloseSettledPorts("thr_a", getPorts, close, current);
     await toast.message.mock.calls[0][1].action.onClick();
-    expect(toast.error).toHaveBeenCalledWith("Some port processes could not be stopped", { description: ":3000" });
+    expect(toast.error).toHaveBeenCalledWith("Some port processes could not be stopped", {
+      className: "bb-sidebar-toast",
+      description: ":3000",
+    });
     expect(toast.success).not.toHaveBeenCalled();
   });
 });

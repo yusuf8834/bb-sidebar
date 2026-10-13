@@ -2,7 +2,7 @@ import { useSidebarThreads } from "./bb-sdk";
 import { useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useBbContext, useBbNavigate, useRpc, type PluginSidebarThread } from "@get-bb/plugin-sdk/app";
-import { toast } from "sonner";
+import { toast } from "./lib/toast";
 import type { bbSidebarRpcContract } from "./contract";
 import { threadDisplayTitle } from "./inbox";
 import { usePortalScopeProps } from "./lib/portal-scope";

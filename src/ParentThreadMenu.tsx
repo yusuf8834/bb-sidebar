@@ -2,7 +2,7 @@ import { useSidebarThreads } from "./bb-sdk";
 import { useEffect, useRef, useState } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { useRpc, type PluginSidebarThread } from "@get-bb/plugin-sdk/app";
-import { toast } from "sonner";
+import { toast } from "./lib/toast";
 import type { bbSidebarRpcContract } from "./contract";
 import { Icon } from "./components/Icon";
 import { threadDisplayTitle } from "./inbox";

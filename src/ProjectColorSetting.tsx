@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useRpc } from "@get-bb/plugin-sdk/app";
-import { toast } from "sonner";
+import { toast } from "./lib/toast";
 import type { bbSidebarRpcContract } from "./contract";
 import { useProjectColorOverrides } from "./ProjectColors";
 import { automaticProjectColor, projectColorsById } from "./project-colors";

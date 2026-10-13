@@ -281,3 +281,25 @@
 .bb-sidebar-project-monogram {
   background-color: color-mix(in oklab, var(--bb-sidebar-project) 20%, transparent);
 }
+
+/* Only our marked toasts use BB's surfaces; the host owns the Toaster. */
+[data-sonner-toast][data-styled="true"].bb-sidebar-toast {
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border-color: var(--border);
+}
+
+[data-sonner-toast][data-styled="true"].bb-sidebar-toast [data-description] {
+  color: var(--muted-foreground);
+}
+
+[data-sonner-toast][data-styled="true"].bb-sidebar-toast [data-button] {
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+  border: 1px solid var(--border);
+}
+
+[data-sonner-toast][data-styled="true"].bb-sidebar-toast [data-button]:hover {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}

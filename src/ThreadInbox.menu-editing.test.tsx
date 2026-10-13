@@ -37,7 +37,9 @@ describe("row context menu", () => {
     fireEvent.contextMenu(screen.getByText("Original title"));
     expect(screen.getByRole("menuitem", { name: "Regenerating title…" }).getAttribute("aria-disabled")).toBe("true");
     result.resolve({ title: "New title" });
-    await waitFor(() => expect(toastMocks.success).toHaveBeenCalledWith("Thread title regenerated"));
+    await waitFor(() =>
+      expect(toastMocks.success).toHaveBeenCalledWith("Thread title regenerated", { className: "bb-sidebar-toast" }),
+    );
     expect(screen.queryByRole("status", { name: "Generating title" })).toBeNull();
     expect(regenerateTitle).toHaveBeenCalledTimes(1);
   });
@@ -56,6 +58,7 @@ describe("row context menu", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: "Regenerate title" }));
     await waitFor(() =>
       expect(toastMocks.error).toHaveBeenCalledWith("Could not regenerate title", {
+        className: "bb-sidebar-toast",
         description: "Title service unavailable",
       }),
     );
@@ -178,7 +181,9 @@ describe("row context menu", () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/threads/thr_personal`));
     writeText.mockRejectedValueOnce(new Error("Clipboard denied"));
     await copyLink();
-    await waitFor(() => expect(toastMocks.error).toHaveBeenCalledWith("Failed to copy thread link"));
+    await waitFor(() =>
+      expect(toastMocks.error).toHaveBeenCalledWith("Failed to copy thread link", { className: "bb-sidebar-toast" }),
+    );
   });
 
   it("confirms deletion with the thread title and project before deleting", async () => {
