@@ -151,9 +151,9 @@ reset wired into `test-app-setup.ts`. Existing resets:
 - `resetTitleGenerationForTests` in `title-generation-state.ts`;
 - `resetWorkingEmptyLineForTests` in `working-empty-lines.ts`.
 
-Run `npm run test:stress` before test commits: five loaded runs, also
-available as a separate manual CI job. Load defaults to one burner per
-available CPU; override with `npm run test:stress -- --load-workers N`.
+`npm run test:stress` is manual only. Do not run it unless the user asks:
+it pins every CPU core for minutes. `npm run check` once before a commit is
+enough. The stress CI job also runs only when triggered by hand.
 
 A fresh checkout or worktree must run `npm ci` before its first commit
 because the pre-commit hook runs the local Biome binary.
