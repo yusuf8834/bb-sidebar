@@ -717,6 +717,48 @@ describe("SubagentsChip", () => {
       ]);
     });
   });
+
+  it("updates chip and popover icons while mounted and keeps child attention visible", async () => {
+    let childIconStyle = "disc";
+    const rendered = renderSlot(
+      childrenChip,
+      { threadId: "parent", projectId: "proj_1", isCompactViewport: false },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "parent", title: "Parent" }),
+            thread({ id: "child", title: "Child", parentThreadId: "parent", hasPendingInteraction: true }),
+          ],
+          projects: [],
+        },
+        providers: { status: "ready", providers },
+        rpc: { getSidebarSettings: () => ({ ...defaultSidebarSettings, childIconStyle }) },
+      },
+    );
+    const trigger = screen.getByRole("button", { name: "1 child thread" });
+    fireEvent.click(trigger);
+    const row = screen.getByRole("button", { name: /^Open child thread: Child/ });
+    const disc = trigger.querySelector<HTMLElement>("[data-child-thread-dot] span");
+    expect(disc?.style.backgroundColor).toContain("oklch");
+    expect(within(row).queryByRole("img", { name: "Codex" })).toBeNull();
+
+    childIconStyle = "provider";
+    await rendered.emitRealtime("sidebar-settings", {});
+    expect(await within(row).findByRole("img", { name: "Codex" })).toBeDefined();
+    expect(trigger.querySelector('[role="img"]')?.getAttribute("aria-label")).toBe("Codex");
+    expect(trigger.textContent).toBe("Needs you");
+    expect(row.getAttribute("aria-label")).toContain("Needs you");
+
+    childIconStyle = "disc";
+    await rendered.emitRealtime("sidebar-settings", {});
+    await waitFor(() => expect(within(row).queryByRole("img", { name: "Codex" })).toBeNull());
+    expect(trigger.querySelector('[role="img"]')).toBeNull();
+    expect(trigger.querySelector<HTMLElement>("[data-child-thread-dot] span")?.style.backgroundColor).toBe(
+      disc?.style.backgroundColor,
+    );
+    expect(trigger.textContent).toBe("Needs you");
+  });
 });
 
 it("renders header hierarchy relative to the current child thread", () => {
