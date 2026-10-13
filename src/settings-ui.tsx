@@ -2,7 +2,7 @@ import { useEffect, useState, type ComponentProps, type ReactNode } from "react"
 import { Icon } from "./components/Icon";
 import { cn } from "./lib/utils";
 
-export function settingsSectionId(title: string): string {
+function settingsSectionId(title: string): string {
   return `settings-${title.toLowerCase().replaceAll(" ", "-")}`;
 }
 

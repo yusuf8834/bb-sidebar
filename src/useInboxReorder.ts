@@ -10,7 +10,7 @@ import { inboxOrderCodec } from "./lib/inbox-order-codec";
 
 const orderCache = createCachedRpcState(STORAGE_KEYS.inboxOrder.key, inboxOrderCodec);
 
-export interface InboxReorderApi {
+interface InboxReorderApi {
   threads: PluginSidebarThread[];
   ids: string[];
   isReordering: boolean;

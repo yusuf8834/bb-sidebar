@@ -10,7 +10,7 @@ interface OptimisticOrder {
   baseKey: string;
 }
 
-export interface PinnedReorderApi {
+interface PinnedReorderApi {
   threads: PluginSidebarThread[];
   ids: string[];
   isReordering: boolean;

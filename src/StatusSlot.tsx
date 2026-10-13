@@ -103,7 +103,7 @@ export function useThreadWithDraft(thread: PluginSidebarThread): PluginSidebarTh
   );
 }
 
-export interface ShortStatus {
+interface ShortStatus {
   label: string;
   className: string;
   /** Live work gets a running duration; a verdict or a request does not. */
@@ -112,10 +112,7 @@ export interface ShortStatus {
   ariaLabel?: string;
 }
 
-export function shortStatus(
-  indicator: PluginSidebarThreadIndicator,
-  indicatorLabel: string | null,
-): ShortStatus | null {
+function shortStatus(indicator: PluginSidebarThreadIndicator, indicatorLabel: string | null): ShortStatus | null {
   const className = statusToneClass(indicator);
   switch (indicator) {
     case "unread-error":

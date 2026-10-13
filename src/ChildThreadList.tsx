@@ -69,7 +69,7 @@ export function childNeedsYouCount(threads: readonly PluginSidebarThread[]): num
  * ships later, until it is given a kind. This is the same set the collapsed
  * badge counts, so the rows and the badge never disagree.
  */
-export function childNeedsAttention(thread: PluginSidebarThread): boolean {
+function childNeedsAttention(thread: PluginSidebarThread): boolean {
   return childStatusKind(thread) !== null;
 }
 

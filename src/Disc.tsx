@@ -20,7 +20,7 @@ export function Disc({ thread, className }: { thread: PluginSidebarThread | null
   );
 }
 
-export function hashHue(id: string): number {
+function hashHue(id: string): number {
   let hash = 0;
   for (let index = 0; index < id.length; index += 1) {
     hash = (hash * 31 + id.charCodeAt(index)) % 360;

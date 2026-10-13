@@ -20,33 +20,6 @@ import { useWorkingSinceContext } from "./useWorkingSince";
  * plugin built today must not break on a kind shipped tomorrow.
  */
 
-/**
- * Whether this indicator draws a glyph that speaks for the row.
- *
- * The row gives the glyph and the age ONE slot, so this decides which of the
- * two the user sees. Listed kind by kind rather than "anything but none": an
- * indicator bb ships tomorrow must fall through to the age label, not blank
- * the slot.
- */
-export function hasStatusGlyph(indicator: PluginSidebarThreadIndicator): boolean {
-  switch (indicator) {
-    case "unread-error":
-    case "waiting-for-input":
-    case "unread-success":
-    case "runtime":
-    case "workflow":
-    case "background-agent":
-    case "background-command":
-    case "plan-mode":
-    case "goal":
-    case "draft":
-    case "working-draft":
-      return true;
-    default:
-      return false;
-  }
-}
-
 export function StatusGlyph({
   indicator,
   label,

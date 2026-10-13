@@ -20,7 +20,7 @@ import { relativeTimeLabel } from "./relative-time";
  */
 export type WorkingSince = ReadonlyMap<string, number>;
 
-export const WORKING_SINCE_STORAGE_KEY = STORAGE_KEYS.workingSince.key;
+const WORKING_SINCE_STORAGE_KEY = STORAGE_KEYS.workingSince.key;
 
 export const EMPTY_WORKING_SINCE: WorkingSince = new Map();
 

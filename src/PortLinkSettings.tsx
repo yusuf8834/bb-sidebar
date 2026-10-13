@@ -6,7 +6,7 @@ import { usePersistedPreference } from "./lib/use-persisted-preference";
 import type { PreferenceCodec } from "./lib/use-persisted-preference";
 import { SettingRow, SettingsSelect } from "./settings-ui";
 
-export const PORT_LINK_HOST_KEY = STORAGE_KEYS.portLinkHost.key;
+const PORT_LINK_HOST_KEY = STORAGE_KEYS.portLinkHost.key;
 const CHANGE = BROWSER_EVENTS.portLinkHostChanged;
 function subscribe(listener: () => void) {
   window.addEventListener("storage", listener);

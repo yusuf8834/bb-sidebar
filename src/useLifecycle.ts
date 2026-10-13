@@ -10,7 +10,6 @@ import { promptToCloseSettledPorts } from "./settled-port-prompt";
 import {
   canPark,
   formatSnoozeWakeTime,
-  isThreadWorking,
   nextWakeDelayMs,
   resolveShelf,
   resolveWakeReason,
@@ -20,11 +19,6 @@ import {
 } from "./lifecycle";
 import { createCachedRpcState } from "./lib/cached-rpc-state";
 import { lifecycleRowsCodec } from "./lib/lifecycle-cache-codec";
-
-/** Any live work at all, which blocks parking and wakes a parked thread. */
-export function isWorking(thread: PluginSidebarThread): boolean {
-  return isThreadWorking(thread);
-}
 
 export interface LifecycleApi {
   shelfFor(thread: PluginSidebarThread): ThreadShelf;
