@@ -10,5 +10,5 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["app.tsx", "src/**/*.ts", "src/**/*.tsx", "vitest.config.ts", "knip.ts", "knip.report.ts"]
+  "include": ["app.tsx", "src/**/*.ts", "src/**/*.tsx", "vitest.config.ts", "knip.ts"]
 }

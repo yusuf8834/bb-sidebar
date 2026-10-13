@@ -135,8 +135,7 @@ Before releases on macOS: `npm run e2e`; CI: `gh workflow run "Browser e2e"`.
 Run `npm ci`, then `npm run check` before and after changes. CI runs the same
 lint, format check, Knip, typecheck, Vitest suite, BB plugin build, and the
 browser bundle guard against `ZodError`, plus
-`npx --no-install bb plugin types --check`. Typecheck includes both Knip
-configs.
+`npx --no-install bb plugin types --check`. Typecheck includes `knip.ts`.
 
 Test timeouts are centralized: Testing Library gets 5s in `test-setup.ts`;
 Vitest gets 30s in `vitest.config.ts`. App tests retain file isolation.
@@ -166,11 +165,9 @@ checks. Pre-commit runs Biome check and import boundaries on staged files,
 plus the size gate. Pre-push runs `npm run check`. Hooks check files without
 applying fixes.
 If Knip says unused and bb plugin types did not pin it, remove it.
-`npm run knip:report` reports deferred unused exports/types; it currently
-exits 1. `knip.ts` preserves SDK peers.
-Export/type ignores cover only today's 25 debt files and issue types;
-new dead exports in clean files fail. Do not add new unused dependencies to
-that list.
+`npm run knip` checks unused exports and exported types in every file,
+without per-file or issue-type exceptions. `knip.ts` preserves only SDK
+peer dependencies and the `tsc` binary ignore for the TypeScript alias.
 
 `src/test-wired.ts` wires real app/server SDK RPC; `flush()` sends realtime.
 Fixtures in `src/fixtures/` have hashes; release data comes from pinned tags.
