@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.3.0] - 2026-10-13
 
 ### Added
 
@@ -10,6 +10,7 @@
 ### Changed
 
 - Requires bb 0.46.0 or newer for the SDK thread actions API.
+- Settings move to a new storage format the first time the sidebar starts after updating. Existing values carry over automatically.
 - Grouped settings by sidebar layout, project appearance, thread behavior, child threads, and device. Section links jump to each group; project removal has its own management section at the bottom.
 - Settling a parent also settles its descendants, and waits until the whole tree is idle. New or resumed child activity reopens its ancestors.
 - The Settled Clean button is now labelled "Close terminals and ports of settled threads": it never archived anything.
