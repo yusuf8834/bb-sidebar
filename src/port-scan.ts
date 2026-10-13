@@ -4,14 +4,14 @@
 import { sep } from "node:path";
 import type { PortRoot } from "./port-scan-contract";
 
-export interface Listener {
+interface Listener {
   pid: number;
   processName: string;
   address: string;
   port: number;
 }
 
-export interface DockerRow {
+interface DockerRow {
   id: string;
   name: string;
   workingDir: string;

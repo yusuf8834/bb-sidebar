@@ -1,9 +1,9 @@
-export interface ThreadTaskFailure {
+interface ThreadTaskFailure {
   threadId: string;
   error: string;
 }
 
-export interface ThreadTaskResult {
+interface ThreadTaskResult {
   succeededThreadIds: string[];
   failures: ThreadTaskFailure[];
 }

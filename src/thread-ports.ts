@@ -172,7 +172,7 @@ export function createThreadPortActions(bb: BbPluginApi) {
 }
 
 /** The workspace fields of a bb project-thread row. */
-export interface PortThread {
+interface PortThread {
   id: string;
   environmentId: string | null;
   environmentPath: string | null;
