@@ -9,9 +9,9 @@ import type { PluginSidebarThread, PluginSidebarThreadIndicator } from "@get-bb/
  */
 export type ChildStatusKind = "failed" | "needs-you" | "done" | "working";
 
-export const CHILD_STATUS_KINDS: readonly ChildStatusKind[] = ["failed", "needs-you", "done", "working"];
+const CHILD_STATUS_KINDS: readonly ChildStatusKind[] = ["failed", "needs-you", "done", "working"];
 
-export interface ChildStatusSummary {
+interface ChildStatusSummary {
   failed: number;
   needsYou: number;
   done: number;
@@ -74,7 +74,7 @@ export function childStatusSummary(threads: readonly PluginSidebarThread[]): Chi
   return summary;
 }
 
-export function childStatusCount(summary: ChildStatusSummary, kind: ChildStatusKind): number {
+function childStatusCount(summary: ChildStatusSummary, kind: ChildStatusKind): number {
   switch (kind) {
     case "failed":
       return summary.failed;

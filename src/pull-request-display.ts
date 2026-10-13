@@ -6,7 +6,7 @@ import type { ThreadPullRequest } from "./contract";
  * `attention`; PRs found in the thread's history have just a state, and none
  * when `gh` could not look them up.
  */
-export type DisplayPullRequest = {
+type DisplayPullRequest = {
   number: number;
   title: string | null;
   url: string;

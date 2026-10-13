@@ -17,7 +17,7 @@ export interface ReclaimTerminal {
   status: "disconnected" | "exited" | "running" | "starting";
 }
 
-export interface TerminalReclaimPlan {
+interface TerminalReclaimPlan {
   /** Terminals settling may close, in the order they were listed. */
   close: string[];
   /** Live terminals settling refuses to touch, because someone typed in them. */

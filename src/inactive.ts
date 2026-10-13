@@ -4,7 +4,7 @@ export const MAX_INACTIVE_AFTER_HOURS = 720;
 
 const HOUR_MS = 60 * 60 * 1_000;
 
-export interface InactiveThread {
+interface InactiveThread {
   createdAt: number;
   latestAttentionAt: number;
   updatedAt: number;

@@ -1,4 +1,4 @@
-export const PROJECT_ICON_ROUTE = "/api/v1/plugins/bb-sidebar/http/project-icon";
+const PROJECT_ICON_ROUTE = "/api/v1/plugins/bb-sidebar/http/project-icon";
 
 export const PROJECT_ICON_EXTENSIONS = [".svg", ".png", ".ico", ".jpg", ".jpeg", ".gif", ".avif", ".webp"] as const;
 

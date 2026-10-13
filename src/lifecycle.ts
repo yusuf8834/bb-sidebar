@@ -35,7 +35,7 @@ export interface ThreadActivitySignals {
 }
 
 export type ThreadShelf = "active" | "parked" | "snoozed" | "settled";
-export type WakeReason = "timer" | "attention";
+type WakeReason = "timer" | "attention";
 
 /**
  * Why a snoozed thread is back in the active inbox, if it has woken at all.

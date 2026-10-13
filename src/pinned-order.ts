@@ -1,4 +1,4 @@
-export type DropPlacement = "before" | "after";
+type DropPlacement = "before" | "after";
 
 /** Move one pinned id relative to another without mutating the source order. */
 export function movePinnedId(

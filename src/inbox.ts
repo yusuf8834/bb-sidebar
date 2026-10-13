@@ -57,12 +57,6 @@ export function filterProjectsByName<T extends { name: string }>(projects: reado
   return projects.filter((project) => project.name.toLowerCase().includes(normalized));
 }
 
-export interface ProjectScope {
-  /** Project id, or null for "all projects". */
-  id: string | null;
-  name: string;
-}
-
 /** Threads in the chosen scope; every thread when the scope is null. */
 export function filterByProject(
   threads: readonly PluginSidebarThread[],

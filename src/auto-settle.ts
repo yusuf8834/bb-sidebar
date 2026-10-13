@@ -1,6 +1,5 @@
 import { canPark, hasLiveWork, isTurnInFlight } from "./lifecycle";
 
-export const DEFAULT_AUTO_SETTLE_AFTER_DAYS = 3;
 export const MIN_AUTO_SETTLE_AFTER_DAYS = 1;
 export const MAX_AUTO_SETTLE_AFTER_DAYS = 90;
 const DAY_MS = 24 * 60 * 60 * 1_000;
@@ -41,12 +40,12 @@ export type AutoSettlePullRequest =
       updatedAt: string;
     };
 
-export interface AutoSettleSettings {
+interface AutoSettleSettings {
   afterDays: number | null;
   onMerge: boolean;
 }
 
-export type AutoSettleDecision = "keep" | "settle" | "unsettle";
+type AutoSettleDecision = "keep" | "settle" | "unsettle";
 
 /** The same live work that blocks a manual settle in the sidebar. */
 function isWorking(thread: AutoSettleThread): boolean {
