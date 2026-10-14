@@ -264,10 +264,19 @@ describe("title regeneration", () => {
   });
 
   it("rejects malformed or long titles", () => {
-    for (const output of [null, "{}", '{"title":""}', '{"title":"one two three four five six"}', "[]"]) {
+    for (const output of [
+      null,
+      "{}",
+      '{"title":""}',
+      '{"title":"one two three four five six seven eight nine"}',
+      "[]",
+    ]) {
       expect(() => parseTitle(output)).toThrow();
     }
     expect(parseTitle('```json\n{"title":"  Sidebar   titles "}\n```')).toBe("Sidebar titles");
+    expect(parseTitle('{"title":"Fix title regeneration with Example AI"}')).toBe(
+      "Fix title regeneration with Example AI",
+    );
   });
 });
 

@@ -6,6 +6,7 @@ type Timeline = Awaited<ReturnType<BbPluginApi["sdk"]["threads"]["timeline"]>>;
 type Row = Timeline["rows"][number];
 const MESSAGE_LIMIT = 3;
 const MESSAGE_CHAR_LIMIT = 8_000;
+const MAX_TITLE_WORDS = 8;
 
 interface TitleGenerationOptions {
   onlyIfUntitled?: boolean;
@@ -112,8 +113,10 @@ export function parseTitle(output: string | null) {
     throw new Error("The title generator returned an invalid title");
   }
   const title = value.title.trim().replace(/\s+/gu, " ");
-  if (!title || title.length > 100 || title.split(" ").length > 5) {
-    throw new Error("The generated title must be at most five words and 100 characters");
+  // The prompt asks for five words; some models often return six or
+  // seven, so accept a little slack instead of keeping the old title.
+  if (!title || title.length > 100 || title.split(" ").length > MAX_TITLE_WORDS) {
+    throw new Error(`The generated title must be at most ${MAX_TITLE_WORDS} words and 100 characters`);
   }
   return title;
 }
