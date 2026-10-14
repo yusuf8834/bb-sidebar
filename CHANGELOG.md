@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **Regenerate title** and automatic title recovery work with AI services from other plugins instead of failing with "does not support … yet". bb lets plugins register AI services but not call them, so the sidebar asks the service's own plugin through an `ai-services.v1.complete` RPC, with input `{ serviceId, task, prompt }` and output `{ text }`. Services whose plugin lacks the RPC report that it is missing. bb cloud and Codex keep their existing paths. Off still disables titles, an explicit selection never falls back, and Automatic still tries services in BB's order ([#15](https://github.com/yusuf8834/bb-sidebar/pull/15) by [@pascal-de-ladurantaye](https://github.com/pascal-de-ladurantaye)).
+
 ## [0.3.0] - 2026-10-13
 
 ### Added

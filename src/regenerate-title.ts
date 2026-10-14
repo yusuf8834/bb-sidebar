@@ -1,5 +1,6 @@
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import { completeCloudTitle } from "./cloud-title";
+import { completionSchema } from "./cloud-title-schemas";
 
 type Timeline = Awaited<ReturnType<BbPluginApi["sdk"]["threads"]["timeline"]>>;
 type Row = Timeline["rows"][number];
@@ -62,6 +63,42 @@ function titlePrompt(messages: readonly string[]) {
   ].join("\n\n");
 }
 
+/**
+ * bb lets plugins register AI services but not call them, so a service's own
+ * plugin can opt in by also exposing this RPC: input
+ * `{ serviceId, task, prompt }`, output `{ text }`.
+ */
+const AI_SERVICE_COMPLETE_METHOD = "ai-services.v1.complete";
+const SERVICE_TIMEOUT_MS = 30_000;
+
+async function completeWithServicePlugin(
+  bb: BbPluginApi,
+  service: { pluginId: string; id: string; displayName: string },
+  prompt: string,
+  signal: AbortSignal,
+) {
+  const timeout = AbortSignal.any([signal, AbortSignal.timeout(SERVICE_TIMEOUT_MS)]);
+  try {
+    const reply = await bb.sdk.plugins.callRpc({
+      pluginId: service.pluginId,
+      method: AI_SERVICE_COMPLETE_METHOD,
+      input: { serviceId: service.id, task: "thread-title", prompt },
+      outputSchema: completionSchema,
+      signal: timeout,
+    });
+    return reply.text;
+  } catch (error) {
+    signal.throwIfAborted();
+    if (timeout.aborted) throw new Error(`${service.displayName} timed out after ${SERVICE_TIMEOUT_MS / 1000}s`);
+    const message = error instanceof Error ? error.message : String(error);
+    if (/unknown_method|no rpc method/iu.test(message))
+      throw new Error(
+        `Sidebar title regeneration needs ${service.displayName} to expose the ${AI_SERVICE_COMPLETE_METHOD} RPC`,
+      );
+    throw new Error(`${service.displayName}: ${message}`);
+  }
+}
+
 export function parseTitle(output: string | null) {
   if (!output) throw new Error("The title generator returned no title");
   const text = output.trim().replace(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/u, "$1");
@@ -81,7 +118,10 @@ export function parseTitle(output: string | null) {
   return title;
 }
 
-/** bb cloud uses its public account RPC; Codex uses a hidden agent helper. */
+/**
+ * bb cloud uses its public account RPC; Codex uses a hidden agent helper.
+ * Other services are asked through their plugin's completion RPC.
+ */
 export function createTitleRegenerator(bb: BbPluginApi) {
   const pending = new Map<string, Promise<{ title: string }>>();
   const helpers = new Set<string>();
@@ -190,7 +230,7 @@ export function createTitleRegenerator(bb: BbPluginApi) {
         } else if (service.pluginId === "provider-codex" && service.id === "codex") {
           title = await generateCodex(original, messages);
         } else {
-          throw new Error(`Sidebar title regeneration does not support ${service.displayName} yet`);
+          title = parseTitle(await completeWithServicePlugin(bb, service, titlePrompt(messages), controller.signal));
         }
         break;
       } catch (error) {

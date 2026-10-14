@@ -203,6 +203,35 @@ describe("automatic title recovery", () => {
     },
   );
 
+  it("names an untitled thread through a selected plugin AI service's completion RPC", async () => {
+    const state = setupCodex();
+    state.sdk.stub("system.aiServices", async () => ({
+      selections: { "thread-title": { mode: "service", pluginId: "example-ai", serviceId: "example-ai" } },
+      services: [
+        {
+          id: "example-ai",
+          pluginId: "example-ai",
+          displayName: "Example AI",
+          tasks: ["thread-title"],
+          status: { ready: true },
+        },
+      ],
+    }));
+    state.sdk.stub("plugins.callRpc", async () => ({ text: '{"title":"Review sidebar pull request"}' }));
+    await state.active();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(state.harness.logEntries).toEqual([]);
+    expect(state.sdk.callsTo("plugins.callRpc")[0]![0]).toMatchObject({
+      pluginId: "example-ai",
+      method: "ai-services.v1.complete",
+    });
+    expect(state.sdk.callsTo("threads.spawn")).toHaveLength(0);
+    expect(state.sdk.callsTo("threads.update")[0]![0]).toEqual({
+      threadId: "target",
+      title: "Review sidebar pull request",
+    });
+  });
+
   it.each(["manual title", "titles off", "archived"])(
     "keeps user changes made during generation: %s",
     async (change) => {

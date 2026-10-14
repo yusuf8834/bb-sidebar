@@ -383,13 +383,102 @@ describe("bb cloud title regeneration", () => {
     expect(sdk.callsTo("threads.update")).toHaveLength(0);
   });
 
-  it("does not silently replace an unsupported explicit service with the thread's provider", async () => {
+  it("does not silently replace a failing explicit service with the thread's provider", async () => {
     const { sdk, run } = await setup();
     sdk.stub("system.aiServices", async () => ({
       selections: { "thread-title": { mode: "service", pluginId: "custom", serviceId: "custom" } },
       services: [{ ...codexService, pluginId: "custom", id: "custom", displayName: "Custom AI" }],
     }));
-    await expect(run()).rejects.toThrow("does not support Custom AI yet");
+    sdk.stub("plugins.callRpc", async () => {
+      throw new Error('plugin "custom" has no rpc method "ai-services.v1.complete"');
+    });
+    await expect(run()).rejects.toThrow("needs Custom AI to expose the ai-services.v1.complete RPC");
     expect(sdk.callsTo("threads.spawn")).toHaveLength(0);
+    expect(sdk.callsTo("threads.update")).toHaveLength(0);
+  });
+});
+
+describe("plugin AI service title regeneration", () => {
+  const exampleService = {
+    id: "example-ai",
+    pluginId: "example-ai",
+    displayName: "Example AI",
+    tasks: ["thread-title"],
+    automaticRank: 2,
+    status: { ready: true },
+  };
+
+  async function serviceSetup(mode: "service" | "automatic" = "service") {
+    const state = await setup();
+    state.sdk.stub("system.aiServices", async () => ({
+      selections: {
+        "thread-title": mode === "automatic" ? { mode } : { mode, pluginId: "example-ai", serviceId: "example-ai" },
+      },
+      services: [codexService, exampleService],
+    }));
+    state.sdk.stub("plugins.callRpc", async () => ({ text: '{"title":"Regenerate sidebar titles"}' }));
+    return state;
+  }
+
+  it("asks the selected service's plugin through its completion RPC", async () => {
+    const { sdk, run } = await serviceSetup();
+    sdk.stub("threads.get", async () => makeThreadResponse({ id: "target", environmentId: null, title: "Old" }));
+    await expect(run()).resolves.toEqual({ title: "Regenerate sidebar titles" });
+    const [call] = sdk.callsTo("plugins.callRpc");
+    const args = call![0] as { input: { prompt: string } };
+    expect(args).toMatchObject({
+      pluginId: "example-ai",
+      method: "ai-services.v1.complete",
+      input: { serviceId: "example-ai", task: "thread-title" },
+      signal: expect.any(AbortSignal),
+    });
+    expect(JSON.parse(args.input.prompt.split("\n\n").at(-1)!)).toEqual([
+      "Build a sidebar",
+      "Add title regeneration",
+      "Use three user messages",
+    ]);
+    expect(sdk.callsTo("threads.spawn")).toHaveLength(0);
+    expect(sdk.callsTo("threads.update")[0]![0]).toEqual({ threadId: "target", title: "Regenerate sidebar titles" });
+  });
+
+  it("keeps the title and reports the service error when it is explicitly selected", async () => {
+    const { sdk, run } = await serviceSetup();
+    sdk.stub("plugins.callRpc", async () => {
+      throw new Error("AI proxy 500");
+    });
+    await expect(run()).rejects.toThrow("Example AI: AI proxy 500");
+    expect(sdk.callsTo("threads.spawn")).toHaveLength(0);
+    expect(sdk.callsTo("threads.update")).toHaveLength(0);
+  });
+
+  it("rejects malformed service output without renaming", async () => {
+    const { sdk, run } = await serviceSetup();
+    sdk.stub("plugins.callRpc", async () => ({ text: "Sure, here is a title" }));
+    await expect(run()).rejects.toThrow("invalid title");
+    expect(sdk.callsTo("threads.update")).toHaveLength(0);
+  });
+
+  it("follows automaticRank and falls back to the next service in Automatic", async () => {
+    const { sdk, run } = await serviceSetup("automatic");
+    sdk.stub("system.aiServices", async () => ({
+      selections: { "thread-title": { mode: "automatic" } },
+      services: [codexService, { ...exampleService, automaticRank: 0 }],
+    }));
+    sdk.stub("plugins.callRpc", async () => {
+      throw new Error("AI proxy 503");
+    });
+    await expect(run()).resolves.toEqual({ title: "Regenerate sidebar titles" });
+    expect(sdk.callsTo("plugins.callRpc")).toHaveLength(1);
+    expect(sdk.callsTo("threads.spawn")).toHaveLength(1);
+  });
+
+  it("skips a service that is not ready without calling it", async () => {
+    const { sdk, run } = await serviceSetup();
+    sdk.stub("system.aiServices", async () => ({
+      selections: { "thread-title": { mode: "service", pluginId: "example-ai", serviceId: "example-ai" } },
+      services: [{ ...exampleService, status: { ready: false, message: "No proxy token" } }],
+    }));
+    await expect(run()).rejects.toThrow("No proxy token");
+    expect(sdk.callsTo("plugins.callRpc")).toHaveLength(0);
   });
 });

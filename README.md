@@ -26,6 +26,8 @@ A stable thread list for [bb](https://github.com/get-bb/bb). Threads stay where 
 - Regenerate a thread title from its last three accepted user messages
 - Automatically retry missing thread titles once in the background, respecting the selected AI title service and manual edits
 
+Title regeneration supports bb cloud, Codex, and any AI service whose plugin exposes an `ai-services.v1.complete` RPC. The sidebar calls it with `{ serviceId, task: "thread-title", prompt }` and expects `{ text }` back, within 30 seconds. bb has no API for plugins to call another plugin's AI service yet; this convention fills that gap until it does.
+
 ## Install
 
 ```sh
