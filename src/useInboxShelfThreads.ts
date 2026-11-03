@@ -14,6 +14,8 @@ import { isInactiveThread } from "./inactive";
 import { isWorkingTree } from "./working-tree";
 import { threadNeedsAttention } from "./useRenamingShelfLocks";
 import { threadsWithAskingDescendants } from "./child-status";
+import { filterThreads, hostNames, type Shelf } from "./thread-filter";
+import { useThreadFilter } from "./useThreadFilter";
 
 interface InboxShelfThreadsOptions {
   activeThreadId: string | null;
@@ -38,9 +40,19 @@ export function useInboxShelfThreads({
   threads,
   workingShelfEnabled,
 }: InboxShelfThreadsOptions) {
-  return useMemo(() => {
+  // The filter bar's machines, states, shelves, and keyword narrow every shelf.
+  const [filter, onFilterChange] = useThreadFilter();
+  const hosts = useMemo(() => hostNames(threads), [threads]);
+  const threadFilter = useMemo(() => ({ filter, onFilterChange, hosts }), [filter, onFilterChange, hosts]);
+  const shelves = useMemo(() => {
     const allVisible = visibleInboxThreads(threads);
-    const scoped = filterByProjects(allVisible, scope);
+    // A child's question shows only inside its parent's tree, so the tree
+    // answers for it in Active, as it would for the parent's own question.
+    const askingParentIds = threadsWithAskingDescendants(threads);
+    const scoped = filterThreads(filterByProjects(allVisible, scope), filter, (thread) => ({
+      needsYou: threadNeedsAttention(thread) || askingParentIds.has(thread.id),
+      working: isWorkingTree(thread, childrenByParentId.get(thread.id) ?? [], childrenByParentId),
+    }));
     // Children live in their parent's header chip instead of the flat list;
     // an orphan whose parent is not on screen stays here.
     const visible = hideChildrenOfVisibleParents(scoped);
@@ -56,9 +68,6 @@ export function useInboxShelfThreads({
       else active.push(thread);
     }
     const split = partitionPinned(active);
-    // A child's question shows only inside its parent's tree, so the tree
-    // answers for it in Active, as it would for the parent's own question.
-    const askingParentIds = threadsWithAskingDescendants(threads);
     const activeUnpinned: typeof split.inbox = [];
     const working: typeof split.inbox = [];
     const inactive: typeof split.inbox = [];
@@ -93,24 +102,29 @@ export function useInboxShelfThreads({
       }
     }
     const allSplit = partitionPinned(allVisible);
+    // An is:<shelf> filter empties every shelf it does not name.
+    const shelf = <T>(name: Shelf, rows: T[]): T[] =>
+      filter.shelves.length === 0 || filter.shelves.includes(name) ? rows : [];
     return {
       activeListThreadId: activeRepresentativeThreadId(threads, activeThreadId, visible),
       // BB supplies pinned rows in the user's persisted pin order.
-      pinnedBase: split.pinned,
-      inboxBase: sortByCreatedAtDescending(activeUnpinned),
-      workingBase: sortByCreatedAtDescending(working),
-      inactiveBase: sortByCreatedAtDescending(inactive),
+      pinnedBase: shelf("pinned", split.pinned),
+      inboxBase: shelf("active", sortByCreatedAtDescending(activeUnpinned)),
+      // The Working shelf is where Active's running threads wait, so it follows is:active.
+      workingBase: shelf("active", sortByCreatedAtDescending(working)),
+      inactiveBase: shelf("inactive", sortByCreatedAtDescending(inactive)),
       // Keep a global order behind project-scoped and parked views. Child and
       // parked rows are included because they can become visible later; a
       // reorder elsewhere must not silently discard their old slot.
       allPinnedBase: allSplit.pinned,
       allInboxBase: sortByCreatedAtDescending(allSplit.inbox),
-      parked: sortSettledThreads(onParkedShelf, lifecycle.parkedAtFor),
+      parked: shelf("parked", sortSettledThreads(onParkedShelf, lifecycle.parkedAtFor)),
       // Soonest wake first: "what comes back next" is the shelf's question.
-      snoozed: [...onSnoozeShelf].sort(
-        (left, right) => (lifecycle.wakeAtFor(left) ?? 0) - (lifecycle.wakeAtFor(right) ?? 0),
+      snoozed: shelf(
+        "snoozed",
+        [...onSnoozeShelf].sort((left, right) => (lifecycle.wakeAtFor(left) ?? 0) - (lifecycle.wakeAtFor(right) ?? 0)),
       ),
-      settled: sortSettledThreads(onSettledShelf, lifecycle.settledAtFor),
+      settled: shelf("settled", sortSettledThreads(onSettledShelf, lifecycle.settledAtFor)),
     };
   }, [
     activeThreadId,
@@ -120,7 +134,9 @@ export function useInboxShelfThreads({
     now,
     renamingShelfLocks,
     scope,
+    filter,
     threads,
     workingShelfEnabled,
   ]);
+  return { ...shelves, threadFilter };
 }

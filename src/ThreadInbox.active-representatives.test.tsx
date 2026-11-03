@@ -42,8 +42,9 @@ describe("scoped active representative regressions", () => {
       },
     );
     if (scope) {
-      fireEvent.keyDown(screen.getByLabelText(/Project scope/), { key: "Enter" });
-      fireEvent.click(screen.getByRole("row", { name: scope }));
+      const field = screen.getByRole("combobox", { name: "Filter threads" });
+      fireEvent.change(field, { target: { value: `[${scope}]` } });
+      fireEvent.keyDown(field, { key: "Enter" });
     }
     const shelf = await screen.findByRole("region", { name: "Settled" });
     expect(within(shelf).getByRole("button", { name: /^Settled/, expanded: false })).toBeDefined();
@@ -89,8 +90,9 @@ describe("scoped active representative regressions", () => {
         rpc: { listLifecycle: () => ({ rows: [] }) },
       },
     );
-    fireEvent.keyDown(screen.getByLabelText(/Project scope/), { key: "Enter" });
-    fireEvent.click(screen.getByRole("row", { name: scope }));
+    const field = screen.getByRole("combobox", { name: "Filter threads" });
+    fireEvent.change(field, { target: { value: `[${scope}]` } });
+    fireEvent.keyDown(field, { key: "Enter" });
     expect(await screen.findByRole("link", { name: title })).toBeDefined();
     expect(screen.queryByRole("link", { name: "Root A" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Child B" })).toBeNull();

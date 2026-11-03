@@ -26,8 +26,19 @@ function renderProjects() {
   });
 }
 
-function openPicker() {
-  fireEvent.keyDown(screen.getByRole("button", { name: /^Project scope:/ }), { key: "Enter" });
+function filterField() {
+  return screen.getByRole("combobox", { name: "Filter threads" });
+}
+
+function typeFilter(value: string) {
+  const field = filterField();
+  fireEvent.focus(field);
+  fireEvent.change(field, { target: { value } });
+  return field;
+}
+
+function chips() {
+  return screen.queryAllByRole("button", { name: / from filter$/ }).map((chip) => chip.textContent);
 }
 
 function shortcutOrder() {
@@ -64,7 +75,7 @@ it("drags pinned projects before and after other shortcuts and persists the orde
   dragProject(empty, screen.getByRole("button", { name: "Filter by Beta" }), "before")();
   expect(shortcutOrder()).toEqual(["Empty", "Beta", "Alpha"]);
   expect(JSON.parse(localStorage.getItem(STORAGE_KEYS.pinnedProjects.key)!)).toEqual(["Empty", "Beta", "Alpha"]);
-  expect(screen.getByRole("button", { name: "Project scope: All projects" })).toBeDefined();
+  expect(chips()).toEqual([]);
   rendered.lifecycle.unmount();
   renderProjects();
   expect(shortcutOrder()).toEqual(["Empty", "Beta", "Alpha"]);
@@ -82,7 +93,7 @@ it("leaves pin order and filters unchanged when a drag is cancelled or an extern
   fireEvent.drop(beta);
   expect(shortcutOrder()).toEqual(["Alpha", "Beta"]);
   expect(JSON.parse(localStorage.getItem(STORAGE_KEYS.pinnedProjects.key)!)).toEqual(["Alpha", "Beta"]);
-  expect(screen.getByRole("button", { name: "Project scope: All projects" })).toBeDefined();
+  expect(chips()).toEqual([]);
 });
 
 it("reorders project pins with Alt+Left/Right, keeps focus, and stops at either end", () => {
@@ -103,39 +114,32 @@ it("reorders project pins with Alt+Left/Right, keeps focus, and stops at either 
   expect(shortcutOrder()).toEqual(["Alpha", "Empty", "Beta"]);
   expect(document.activeElement).toBe(beta);
   expect(JSON.parse(localStorage.getItem(STORAGE_KEYS.pinnedProjects.key)!)).toEqual(["Alpha", "Empty", "Beta"]);
-  expect(screen.getByRole("button", { name: "Project scope: All projects" })).toBeDefined();
+  expect(chips()).toEqual([]);
 });
 
 it("pins independently of selection, persists shortcuts, and toggles multiple project filters", () => {
   const rendered = renderProjects();
   expect(screen.queryByRole("group", { name: "Pinned projects" })).toBeNull();
-  openPicker();
+  typeFilter("[");
   fireEvent.click(screen.getByRole("button", { name: "Pin Beta" }));
   fireEvent.click(screen.getByRole("button", { name: "Pin Alpha" }));
-  expect(screen.getByRole("button", { name: "Project scope: All projects" })).toBeDefined();
-  expect(screen.getByRole("grid", { name: "Projects" })).toBeDefined();
+  expect(chips()).toEqual([]);
+  expect(screen.getByRole("listbox", { name: "Filter suggestions" })).toBeDefined();
   expect(JSON.parse(localStorage.getItem(STORAGE_KEYS.pinnedProjects.key)!)).toEqual(["Beta", "Alpha"]);
-  fireEvent.click(screen.getByRole("button", { name: "Done" }));
+  fireEvent.keyDown(filterField(), { key: "Escape" });
+  fireEvent.keyDown(filterField(), { key: "Escape" });
   const shortcuts = screen.getByRole("group", { name: "Pinned projects" });
-  expect(
-    within(shortcuts)
-      .getAllByRole("button")
-      .map((button) => button.textContent),
-  ).toEqual(["Beta", "Alpha"]);
+  expect(shortcutOrder()).toEqual(["Beta", "Alpha"]);
   fireEvent.click(within(shortcuts).getByRole("button", { name: "Filter by Beta" }));
   expect(screen.queryByText("Alpha thread")).toBeNull();
   expect(screen.getByText("Beta thread")).toBeDefined();
   expect(within(shortcuts).getByRole("button", { name: "Filter by Beta", pressed: true })).toBeDefined();
-  expect(screen.getByRole("button", { name: "Project scope: 1 project" })).toBeDefined();
+  expect(chips()).toEqual(["Beta"]);
   fireEvent.click(within(shortcuts).getByRole("button", { name: "Filter by Alpha" }));
   expect(screen.getByText("Beta thread")).toBeDefined();
   expect(screen.getByText("Alpha thread")).toBeDefined();
-  expect(screen.getByRole("button", { name: "Project scope: 2 projects" })).toBeDefined();
+  expect(chips()).toEqual(["Beta", "Alpha"]);
   expect(within(shortcuts).getAllByRole("button", { pressed: true })).toHaveLength(2);
-  openPicker();
-  expect(screen.getByRole("row", { name: "Alpha", selected: true })).toBeDefined();
-  expect(screen.getByRole("row", { name: "Beta", selected: true })).toBeDefined();
-  fireEvent.click(screen.getByRole("button", { name: "Done" }));
   fireEvent.click(within(shortcuts).getByRole("button", { name: "Filter by Alpha" }));
   expect(screen.getByText("Beta thread")).toBeDefined();
   expect(screen.queryByText("Alpha thread")).toBeNull();
@@ -144,43 +148,31 @@ it("pins independently of selection, persists shortcuts, and toggles multiple pr
   renderProjects();
   expect(within(screen.getByRole("group", { name: "Pinned projects" })).getAllByRole("button")).toHaveLength(2);
   expect(screen.getByRole("button", { name: "Filter by Beta", pressed: true })).toBeDefined();
-  openPicker();
+  typeFilter("[Bet");
   fireEvent.click(screen.getByRole("button", { name: "Unpin Beta" }));
   expect(screen.queryByRole("button", { name: "Filter by Beta" })).toBeNull();
-  expect(screen.getByRole("button", { name: "Project scope: Beta" })).toBeDefined();
-  fireEvent.click(screen.getByRole("button", { name: "Reset to all projects" }));
+  expect(chips()).toEqual(["Beta"]);
+  fireEvent.click(screen.getByRole("button", { name: "Clear filter" }));
+  expect(chips()).toEqual([]);
   expect(screen.getByRole("button", { name: "Filter by Alpha" })).toBeDefined();
   expect(JSON.parse(localStorage.getItem(STORAGE_KEYS.pinnedProjects.key)!)).toEqual(["Alpha"]);
 });
 
-it("names unpinned selections before the pinned count and resets without removing pins", () => {
+it("shows pinned and typed selections as one chip row and clears without removing pins", () => {
   localStorage.setItem(STORAGE_KEYS.pinnedProjects.key, JSON.stringify(["Beta"]));
   renderProjects();
   fireEvent.click(screen.getByRole("button", { name: "Filter by Beta" }));
-  openPicker();
-  fireEvent.click(screen.getByRole("row", { name: "Alpha" }));
-  expect(screen.getByRole("button", { name: "Project scope: Alpha + 1 project" })).toBeDefined();
-  fireEvent.click(screen.getByRole("row", { name: "Empty" }));
-  expect(screen.getByRole("button", { name: "Project scope: Alpha + Empty + 1 project" })).toBeDefined();
-  fireEvent.click(screen.getByRole("row", { name: "Beta" }));
-  expect(screen.getByRole("button", { name: "Filter by Beta", pressed: false })).toBeDefined();
-  expect(screen.getByRole("button", { name: "Project scope: Alpha + Empty" })).toBeDefined();
-  fireEvent.click(screen.getByRole("button", { name: "Done" }));
-  fireEvent.click(screen.getByRole("button", { name: "Filter by Beta" }));
-  expect(screen.getByRole("button", { name: "Project scope: Alpha + Empty + 1 project" })).toBeDefined();
-  fireEvent.click(screen.getByRole("button", { name: "Reset project filter" }));
-  expect(screen.getByRole("button", { name: "Project scope: All projects" })).toBeDefined();
-  expect(screen.queryByRole("button", { name: "Reset project filter" })).toBeNull();
+  const field = typeFilter("[Alp");
+  fireEvent.keyDown(field, { key: "Enter" });
+  expect(chips()).toEqual(["Beta", "Alpha"]);
+  fireEvent.keyDown(field, { key: "Backspace" });
+  expect(chips()).toEqual(["Beta"]);
+  expect(screen.getByRole("button", { name: "Filter by Beta", pressed: true })).toBeDefined();
+  fireEvent.keyDown(field, { key: "Backspace", ctrlKey: true });
+  expect(chips()).toEqual([]);
   expect(screen.getByRole("button", { name: "Filter by Beta", pressed: false })).toBeDefined();
   expect(screen.getByText("Alpha thread")).toBeDefined();
   expect(screen.getByText("Beta thread")).toBeDefined();
-  openPicker();
-  expect(screen.getByRole("row", { name: "All projects", selected: true })).toBeDefined();
-  expect(screen.getByRole("row", { name: "Beta", selected: false })).toBeDefined();
-  fireEvent.click(screen.getByRole("button", { name: "Done" }));
-  fireEvent.click(screen.getByRole("button", { name: "Filter by Beta" }));
-  fireEvent.click(screen.getByRole("button", { name: "Filter by Beta" }));
-  expect(screen.getByRole("button", { name: "Project scope: All projects" })).toBeDefined();
 });
 
 it("keeps shortcuts outside the scroller even with collapsed shelves or no threads", () => {
@@ -195,26 +187,19 @@ it("keeps shortcuts outside the scroller even with collapsed shelves or no threa
   expect(within(screen.getByRole("group", { name: "Pinned projects" })).getAllByRole("button")).toHaveLength(2);
 });
 
-it("keeps pinning usable when storage is blocked and keyboard navigation can leave the pin button", () => {
+it("keeps pinning usable when storage is blocked and pins from the keyboard", () => {
   const spy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
     throw new Error("Storage blocked");
   });
   try {
     renderProjects();
-    openPicker();
-    const filter = screen.getByRole("combobox", { name: "Filter projects" });
-    fireEvent.change(filter, { target: { value: "Alpha" } });
-    const pin = screen.getByRole("button", { name: "Pin Alpha" });
-    expect(pin.tabIndex).toBe(0);
-    pin.focus();
-    fireEvent.click(pin);
+    const field = typeFilter("[Alpha");
+    fireEvent.keyDown(field, { key: "p", altKey: true });
     expect(screen.getByRole("button", { name: "Unpin Alpha" })).toBeDefined();
-    expect(screen.getByRole("button", { name: "Project scope: All projects" })).toBeDefined();
-    fireEvent.keyDown(pin, { key: "ArrowDown" });
-    expect(document.activeElement).toBe(filter);
-    fireEvent.keyDown(filter, { key: "Enter" });
-    expect(screen.getByRole("row", { name: "Alpha", selected: true })).toBeDefined();
-    fireEvent.keyDown(filter, { key: "Escape" });
+    expect(chips()).toEqual([]);
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(chips()).toEqual(["Alpha"]);
+    fireEvent.keyDown(field, { key: "Escape" });
     expect(screen.getByRole("button", { name: "Filter by Alpha", pressed: true })).toBeDefined();
   } finally {
     spy.mockRestore();

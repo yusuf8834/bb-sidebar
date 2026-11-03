@@ -1,5 +1,6 @@
 import type { useSidebarThreads } from "./bb-sdk";
-import type { ReactNode } from "react";
+import type { Dispatch, ReactNode, SetStateAction } from "react";
+import type { ThreadFilter } from "./thread-filter";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import { ThreadListLoading, ActiveEmptyState, WorkingEmptyState } from "./ThreadInboxEmptyStates";
 import {
@@ -37,6 +38,9 @@ interface ShelfThreads {
 interface ThreadInboxViewProps {
   shelves: Record<"pinned" | "inbox" | "working" | "inactive" | "snoozed" | "parked" | "settled", ShelfThreads>;
   scope: readonly string[];
+  filter: ThreadFilter;
+  onFilterChange: Dispatch<SetStateAction<ThreadFilter>>;
+  hosts: readonly string[];
   reorderAnnouncement: string;
   attachScrollFadeRef: (node: HTMLDivElement | null) => void;
   status: ReturnType<typeof useSidebarThreads>["status"];
@@ -68,6 +72,9 @@ interface ThreadInboxViewProps {
 export function ThreadInboxView({
   shelves,
   scope,
+  filter,
+  onFilterChange,
+  hosts,
   reorderAnnouncement,
   attachScrollFadeRef,
   status,
@@ -89,7 +96,13 @@ export function ThreadInboxView({
   return (
     <div data-bb-sidebar-root="" className="flex min-h-0 flex-1 flex-col">
       {/* Project scope is plugin-owned; New thread lives in bb's chrome. */}
-      <ProjectScopeControls scope={scope} status={status} />
+      <ProjectScopeControls
+        scope={scope}
+        status={status}
+        filter={filter}
+        onFilterChange={onFilterChange}
+        hosts={hosts}
+      />
 
       <p role="status" aria-live="polite" className="sr-only">
         {reorderAnnouncement}

@@ -53,7 +53,7 @@ type ActiveShelfKind = "pinned" | "inbox";
  *
  * The host owns New thread, and thread search lives in bb's quick palette, so
  * this list ignores the deprecated `searchQuery` prop. It adds the plugin's
- * project scope picker.
+ * filter bar: [project] @machine is:status.
  */
 export function ThreadInbox(props: PluginThreadListProps) {
   const snapshot = useSidebarThreads();
@@ -140,6 +140,7 @@ function ThreadInboxContent({
     parked,
     snoozed,
     settled,
+    threadFilter,
   } = useInboxShelfThreads({
     activeThreadId,
     childrenByParentId,
@@ -477,6 +478,7 @@ function ThreadInboxContent({
           settled: { threads: settled, visibleThreads: visibleSettled },
         }}
         scope={scope}
+        {...threadFilter}
         reorderAnnouncement={reorderAnnouncement}
         attachScrollFadeRef={attachScrollFadeRef}
         status={status}
