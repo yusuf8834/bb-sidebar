@@ -1,11 +1,12 @@
 import type { useSidebarThreads } from "./bb-sdk";
 import { useInboxActions, useInboxEnvironment } from "./InboxContext";
-import { ProjectScopeSelect } from "./ProjectScopeSelect";
+import { FilterBar } from "./FilterBar";
+import type { ThreadFilter } from "./thread-filter";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { projectIconUrl } from "./project-icons";
 import { usePinnedProjects } from "./usePinnedProjects";
 import { cn } from "./lib/utils";
-import { useState, type DragEvent } from "react";
+import { useState, type Dispatch, type DragEvent, type SetStateAction } from "react";
 
 function dropPlacement(event: DragEvent<HTMLButtonElement>) {
   const rect = event.currentTarget.getBoundingClientRect();
@@ -15,9 +16,15 @@ function dropPlacement(event: DragEvent<HTMLButtonElement>) {
 export function ProjectScopeControls({
   scope,
   status,
+  filter,
+  onFilterChange,
+  hosts,
 }: {
   scope: readonly string[];
   status: ReturnType<typeof useSidebarThreads>["status"];
+  filter: ThreadFilter;
+  onFilterChange: Dispatch<SetStateAction<ThreadFilter>>;
+  hosts: readonly string[];
 }) {
   const { projects, projectIconRevision } = useInboxEnvironment();
   const { setScope } = useInboxActions();
@@ -34,11 +41,14 @@ export function ProjectScopeControls({
   });
   return (
     <div className="shrink-0 px-2 pb-1">
-      <ProjectScopeSelect
+      <FilterBar
         scope={scope}
-        projects={projects}
-        projectIconRevision={projectIconRevision}
         onScopeChange={setScope}
+        filter={filter}
+        onFilterChange={onFilterChange}
+        projects={projects}
+        hosts={hosts}
+        projectIconRevision={projectIconRevision}
         pinnedProjects={pinnedProjects}
         onToggleProjectPin={toggleProjectPin}
       />

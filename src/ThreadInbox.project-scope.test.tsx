@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-import { expect, it, onTestFinished, vi } from "vitest";
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { expect, it, vi } from "vitest";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { renderSlot } from "./test-slot";
 import { inbox, thread, listProps, loadInboxApp, defaultSidebarSettings, rowLinks } from "./test-inbox";
 import { STORAGE_KEYS } from "./lib/storage-keys";
+import { BROWSER_EVENTS } from "./lib/browser-events";
 
 await loadInboxApp();
 
@@ -26,66 +27,131 @@ function renderProjects() {
   });
 }
 
-function openPicker() {
-  fireEvent.keyDown(screen.getByRole("button", { name: /^Project scope:/ }), { key: "Enter" });
-  return screen.getByRole("grid", { name: "Projects" });
+function field() {
+  return screen.getByRole("combobox", { name: "Filter threads" });
 }
 
-it("toggles multiple projects without closing, remembers them on remount, and resets to all", async () => {
+function type(value: string) {
+  const input = field();
+  fireEvent.focus(input);
+  fireEvent.change(input, { target: { value } });
+  return input;
+}
+
+function chips() {
+  return screen.queryAllByRole("button", { name: / from filter$/ }).map((chip) => chip.textContent);
+}
+
+function options() {
+  return within(screen.getByRole("listbox", { name: "Filter suggestions" }))
+    .getAllByRole("option")
+    .map((option) => option.textContent);
+}
+
+it("adds projects as chips from [prefix + Enter, remembers them on remount, and clears", () => {
   const rendered = renderProjects();
-  const picker = openPicker();
-  expect(picker.getAttribute("aria-multiselectable")).toBe("true");
-  expect(screen.getByText("Select one or more projects")).toBeDefined();
-  expect(within(screen.getByRole("dialog")).getByRole("status").textContent).toBe("All projects");
-  fireEvent.click(within(picker).getByRole("row", { name: "Alpha" }));
-  expect(within(screen.getByRole("dialog")).getByRole("status").textContent).toBe("1 project selected");
-  fireEvent.click(within(picker).getByRole("row", { name: "Gamma" }));
-  expect(within(screen.getByRole("dialog")).getByRole("status").textContent).toBe("2 projects selected");
-  expect(screen.getByRole("button", { name: "Project scope: Alpha + Gamma" })).toBeDefined();
-  expect(
-    within(picker)
-      .getAllByRole("row", { selected: true })
-      .map((option) => option.textContent),
-  ).toEqual(["Alpha", "Gamma"]);
+  let input = type("[al");
+  expect(options()).toEqual(["Alpha"]);
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(chips()).toEqual(["Alpha"]);
+  expect(input).toHaveProperty("value", "");
+  type("[Gam");
+  fireEvent.keyDown(input, { key: "Tab" });
+  expect(chips()).toEqual(["Alpha", "Gamma"]);
   expect(screen.getByText("Alpha thread")).toBeDefined();
   expect(screen.getByText("Gamma thread")).toBeDefined();
   expect(screen.queryByText("Beta thread")).toBeNull();
-  expect(document.activeElement).toBe(screen.getByRole("combobox", { name: "Filter projects" }));
-  fireEvent.click(screen.getByRole("button", { name: "Done" }));
-  expect(screen.queryByRole("grid", { name: "Projects" })).toBeNull();
-  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: /^Project scope:/ })));
 
   rendered.lifecycle.unmount();
   renderProjects();
-  expect(screen.getByRole("button", { name: "Project scope: Alpha + Gamma" })).toBeDefined();
+  expect(chips()).toEqual(["Alpha", "Gamma"]);
   expect(screen.queryByText("Beta thread")).toBeNull();
-  const restored = openPicker();
-  fireEvent.click(within(restored).getByRole("row", { name: "Alpha" }));
+  input = type("[alpha");
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(chips()).toEqual(["Gamma"]);
   expect(screen.queryByText("Alpha thread")).toBeNull();
-  expect(screen.getByText("Gamma thread")).toBeDefined();
-  fireEvent.change(screen.getByLabelText("Filter projects"), { target: { value: "missing" } });
-  fireEvent.click(screen.getByRole("button", { name: "Reset to all projects" }));
-  expect(within(screen.getByRole("dialog")).getByRole("status").textContent).toBe("All projects");
+  fireEvent.click(screen.getByRole("button", { name: "Clear filter" }));
+  expect(chips()).toEqual([]);
   for (const { name } of projects) expect(screen.getByText(`${name} thread`)).toBeDefined();
   expect(JSON.parse(sessionStorage.getItem(STORAGE_KEYS.projectScope.key)!)).toEqual([]);
 });
 
-it("lets the keyboard select multiple filtered projects, toggle off the last one, and dismiss with Escape", () => {
+it("turns pasted tokens into chips and keeps the rest as a title keyword", () => {
   renderProjects();
-  openPicker();
-  const input = screen.getByRole("combobox", { name: "Filter projects" });
-  for (const name of ["Alpha", "Beta"]) {
-    fireEvent.change(input, { target: { value: name } });
-    fireEvent.keyDown(input, { key: "Enter" });
-  }
+  const input = type("[alpha] [beta] thread");
+  expect(chips()).toEqual(["Alpha", "Beta"]);
+  expect(input).toHaveProperty("value", "thread");
   expect(screen.queryByText("Gamma thread")).toBeNull();
-  fireEvent.keyDown(input, { key: "Enter" });
-  expect(screen.queryByText("Beta thread")).toBeNull();
-  fireEvent.change(input, { target: { value: "Alpha" } });
-  fireEvent.keyDown(input, { key: "Enter" });
-  expect(screen.getByRole("button", { name: "Project scope: All projects" })).toBeDefined();
+  fireEvent.change(input, { target: { value: "missing" } });
+  expect(screen.queryByText("Alpha thread")).toBeNull();
   fireEvent.keyDown(input, { key: "Escape" });
-  expect(screen.queryByRole("grid", { name: "Projects" })).toBeNull();
+  fireEvent.keyDown(input, { key: "Escape" });
+  expect(input).toHaveProperty("value", "");
+  expect(screen.getByText("Alpha thread")).toBeDefined();
+});
+
+it("moves with the arrows, drops the last chip with Backspace, and clears with Ctrl+Backspace", () => {
+  renderProjects();
+  const input = type("[");
+  expect(options()).toEqual(["Alpha", "Beta", "Gamma"]);
+  fireEvent.keyDown(input, { key: "ArrowDown" });
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(chips()).toEqual(["Beta"]);
+  type("is:snoo");
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(chips()).toEqual(["Beta", "is:snoozed"]);
+  fireEvent.keyDown(input, { key: "Backspace" });
+  expect(chips()).toEqual(["Beta"]);
+  type("is:park ");
+  expect(chips()).toEqual(["Beta", "is:parked"]);
+  fireEvent.keyDown(input, { key: "Backspace", ctrlKey: true });
+  expect(chips()).toEqual([]);
+});
+
+it("filters by machine and thread state", () => {
+  const threads = [
+    thread({
+      id: "a",
+      projectId: "Alpha",
+      title: "Mona asks",
+      host: { id: "h1", name: "mona" },
+      hasPendingInteraction: true,
+    }),
+    thread({ id: "b", projectId: "Alpha", title: "Mona quiet", host: { id: "h1", name: "mona" } }),
+    thread({
+      id: "c",
+      projectId: "Beta",
+      title: "Ivo asks",
+      host: { id: "h2", name: "ivo" },
+      hasPendingInteraction: true,
+    }),
+  ];
+  renderSlot(inbox, listProps, {
+    sidebarThreads: { status: "ready", projects, threads },
+    rpc: { listLifecycle: () => ({ rows: [] }) },
+  });
+  const input = type("@mo");
+  expect(options()).toEqual(["@mona"]);
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(chips()).toEqual(["@mona"]);
+  expect(screen.queryByText("Ivo asks")).toBeNull();
+  expect(screen.getByText("Mona quiet")).toBeDefined();
+  type("is:needs-you ");
+  expect(chips()).toEqual(["is:needs-you", "@mona"]);
+  expect(screen.getByText("Mona asks")).toBeDefined();
+  expect(screen.queryByText("Mona quiet")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Remove @mona from filter" }));
+  expect(screen.getByText("Ivo asks")).toBeDefined();
+  expect(screen.queryByText("Mona quiet")).toBeNull();
+});
+
+it("focuses the field when the filter command runs", () => {
+  renderProjects();
+  act(() => {
+    window.dispatchEvent(new Event(BROWSER_EVENTS.focusFilter));
+  });
+  expect(document.activeElement).toBe(field());
+  expect(screen.getByRole("listbox", { name: "Filter suggestions" })).toBeDefined();
 });
 
 it("keeps selection usable when session storage is unavailable", () => {
@@ -94,9 +160,7 @@ it("keeps selection usable when session storage is unavailable", () => {
   });
   try {
     renderProjects();
-    const picker = openPicker();
-    fireEvent.click(within(picker).getByRole("row", { name: "Beta" }));
-    fireEvent.click(within(picker).getByRole("row", { name: "Gamma" }));
+    type("[beta] [gamma] ");
     expect(screen.getByText("Beta thread")).toBeDefined();
     expect(screen.queryByText("Alpha thread")).toBeNull();
   } finally {
@@ -145,25 +209,4 @@ it("filters every shelf without changing lifecycle or order", async () => {
     expect(screen.queryByText(`Beta ${shelf}`)).toBeNull();
   }
   expect(rendered.rpcCalls.filter(({ method }) => /^(reorder|settle|snooze|park|setThread)/.test(method))).toEqual([]);
-});
-
-it("keeps the on-screen keyboard down on touch devices", async () => {
-  // Reduced motion keeps list animations off; jsdom has no Element.animate.
-  vi.stubGlobal("matchMedia", (query: string) => ({
-    matches: query === "(pointer: coarse)" || query.includes("reduce"),
-    media: query,
-    addEventListener: () => {},
-    removeEventListener: () => {},
-  }));
-  onTestFinished(() => {
-    vi.unstubAllGlobals();
-  });
-  renderProjects();
-  const picker = openPicker();
-  const filter = screen.getByRole("combobox", { name: "Filter projects" });
-  await waitFor(() => expect(within(picker).getByRole("row", { name: "Alpha" })).toBeDefined());
-  expect(document.activeElement).not.toBe(filter);
-  fireEvent.click(within(picker).getByRole("row", { name: "Alpha" }));
-  expect(screen.getByRole("button", { name: "Project scope: Alpha" })).toBeDefined();
-  expect(document.activeElement).not.toBe(filter);
 });

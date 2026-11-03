@@ -2,6 +2,17 @@ import { expect } from "@playwright/test";
 import { seededTest as test } from "./seeds.mjs";
 import { fixture, rpc, shelf, link, reset, open } from "./helpers.mjs";
 
+const filterField = (page) => page.getByRole("combobox", { name: "Filter threads" });
+const chips = (page) => page.getByRole("button", { name: / from filter$/ });
+
+/** Types a project query into the filter bar, leaving its suggestions open. */
+async function suggestProjects(page, query) {
+  const field = filterField(page);
+  await field.click();
+  await field.fill(`[${query}`);
+  return field;
+}
+
 test("pinned projects can be drag sorted and keep their order after reload", async ({
   page,
   request,
@@ -9,11 +20,12 @@ test("pinned projects can be drag sorted and keep their order after reload", asy
 }) => {
   await reset(request);
   await open(page, { width: 280 });
-  await page.getByRole("button", { name: "Project scope: All projects", exact: true }).click();
+  const field = await suggestProjects(page, "");
   for (const name of ["Sidebar smoke", secondProject.name]) {
     await page.getByRole("button", { name: `Pin ${name}`, exact: true }).click();
   }
-  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await field.press("Escape");
+  await field.press("Escape");
   const shortcuts = page.getByRole("group", { name: "Pinned projects" });
   const first = shortcuts.getByRole("button", { name: "Filter by Sidebar smoke", exact: true });
   const second = shortcuts.getByRole("button", { name: `Filter by ${secondProject.name}`, exact: true });
@@ -21,7 +33,7 @@ test("pinned projects can be drag sorted and keep their order after reload", asy
   const targetBox = await second.boundingBox();
   await first.dragTo(second, { targetPosition: { x: targetBox.width - 3, y: targetBox.height / 2 } });
   await expect(shortcuts.getByRole("button")).toHaveText([secondProject.name, "Sidebar smoke"]);
-  await expect(page.getByRole("button", { name: "Project scope: All projects", exact: true })).toBeVisible();
+  await expect(chips(page)).toHaveCount(0);
   await page.reload();
   await expect(shortcuts.getByRole("button")).toHaveText([secondProject.name, "Sidebar smoke"]);
   await first.dragTo(second, { targetPosition: { x: 3, y: targetBox.height / 2 } });
@@ -36,7 +48,7 @@ test("pinned projects can be drag sorted and keep their order after reload", asy
   await shortcuts.screenshot({ path: test.info().outputPath("pinned-project-order.png") });
 });
 
-test("project filter remembers multiple projects per window and All projects restores every thread", async ({
+test("filter bar picks several projects by keyboard, remembers them per window, and Clear restores every thread", async ({
   page,
   request,
   secondProject,
@@ -45,111 +57,69 @@ test("project filter remembers multiple projects per window and All projects res
   await open(page, { width: 280 });
   await expect(link(page, secondProject.thread.title)).toBeVisible();
   for (const { title } of fixture.threads) await expect(link(page, title)).toBeVisible();
-  await page.getByRole("button", { name: "Project scope: All projects", exact: true }).click();
-  const filter = page.getByRole("combobox", { name: "Filter projects" });
-  await filter.fill(secondProject.name);
-  await filter.press("Tab");
-  await expect(page.getByRole("button", { name: `Pin ${secondProject.name}`, exact: true })).toBeFocused();
-  await page.keyboard.press("Enter");
-  await expect(page.getByRole("button", { name: `Unpin ${secondProject.name}`, exact: true })).toBeFocused();
-  await expect(page.getByRole("button", { name: "Project scope: All projects", exact: true })).toBeVisible();
-  await filter.fill("");
-  await page.getByRole("row", { name: "Sidebar smoke", exact: true }).hover();
-  await page.getByRole("dialog").screenshot({ path: test.info().outputPath("project-picker.png") });
-  const pickerWidth = await page.getByRole("dialog").evaluate((element) => element.getBoundingClientRect().width);
-  const scopeLayout = async () => ({
-    headerHeight: await page
-      .getByRole("button", { name: /^Project scope:/ })
-      .evaluate((element) => element.getBoundingClientRect().height),
-    pinsTop: await page
-      .getByRole("group", { name: "Pinned projects" })
-      .evaluate((element) => element.getBoundingClientRect().top),
+
+  // Fuzzy: "sidsec" finds "Sidebar second project". Alt+P pins without selecting.
+  const field = await suggestProjects(page, "sidsec");
+  await expect(page.getByRole("option").first()).toContainText(secondProject.name);
+  await field.press("Alt+p");
+  await expect(page.getByRole("button", { name: `Unpin ${secondProject.name}`, exact: true })).toBeVisible();
+  await expect(chips(page)).toHaveCount(0);
+  await page.getByRole("listbox", { name: "Filter suggestions" }).screenshot({
+    path: test.info().outputPath("filter-suggestions.png"),
   });
-  const unfilteredLayout = await scopeLayout();
-  await page.getByRole("row", { name: secondProject.name, exact: true }).click();
-  await expect(page.getByRole("button", { name: "Project scope: 1 project", exact: true })).toBeVisible();
-  expect(await scopeLayout()).toEqual(unfilteredLayout);
-  await expect(page.getByRole("button", { name: "Reset project filter", exact: true })).toBeVisible();
-  await expect
-    .poll(() => page.getByRole("dialog").evaluate((element) => element.getBoundingClientRect().width))
-    .toBe(pickerWidth);
-  await page.getByRole("dialog").screenshot({ path: test.info().outputPath("project-picker-selected.png") });
+  await field.press("Enter");
+  await expect(chips(page)).toHaveText([secondProject.name]);
   await expect(shelf(page, "Active").getByRole("link")).toHaveCount(1);
   await expect(link(page, secondProject.thread.title)).toBeVisible();
   for (const { title } of fixture.threads) await expect(link(page, title)).toHaveCount(0);
 
-  // The picker stays open for a second choice; Enter toggles the filtered result.
-  await page.getByRole("combobox", { name: "Filter projects" }).fill("Sidebar smoke");
-  await page.getByRole("combobox", { name: "Filter projects" }).press("Enter");
-  const selectedLabel = "Project scope: Sidebar smoke + 1 project";
-  await expect(page.getByRole("button", { name: selectedLabel, exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Done", exact: true }).click();
+  // A second project adds to the first.
+  await field.fill("[smoke");
+  await field.press("Enter");
+  await expect(chips(page)).toHaveText([secondProject.name, "Sidebar smoke"]);
+  await field.press("Escape");
   await page.reload();
-  await expect(page.getByRole("button", { name: selectedLabel, exact: true })).toBeVisible();
+  await expect(chips(page)).toHaveText([secondProject.name, "Sidebar smoke"]);
   await expect(shelf(page, "Active").getByRole("link")).toHaveCount(fixture.threads.length + 1);
+
+  // Pinned shortcuts and chips share one selection.
   const shortcut = page.getByRole("button", { name: `Filter by ${secondProject.name}`, exact: true });
-  await expect(shortcut).toBeVisible();
   await expect(shortcut).toHaveAttribute("aria-pressed", "true");
   await shortcut.click();
+  await expect(chips(page)).toHaveText(["Sidebar smoke"]);
   await expect(shelf(page, "Active").getByRole("link")).toHaveCount(fixture.threads.length);
-  await expect(shortcut).toHaveAttribute("aria-pressed", "false");
   await shortcut.click();
-  await expect(shelf(page, "Active").getByRole("link")).toHaveCount(fixture.threads.length + 1);
   await expect(shortcut).toHaveAttribute("aria-pressed", "true");
   await page.locator("[data-bb-sidebar-root]").screenshot({ path: test.info().outputPath("pinned-projects.png") });
-  await page.getByRole("button", { name: "Reset project filter", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Project scope: All projects", exact: true })).toBeVisible();
-  await expect(shortcut).toHaveAttribute("aria-pressed", "false");
-  // Both pinned shortcuts toggle independently and share their state with the picker.
-  expect(await scopeLayout()).toEqual(unfilteredLayout);
-  await page.getByRole("button", { name: "Project scope: All projects", exact: true }).click();
-  await page.getByRole("button", { name: "Pin Sidebar smoke", exact: true }).click();
-  await page.getByRole("button", { name: "Done", exact: true }).click();
-  await shortcut.click();
-  expect(await scopeLayout()).toEqual(unfilteredLayout);
-  await page.getByRole("button", { name: "Filter by Sidebar smoke", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Project scope: 2 projects", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Filter by Sidebar smoke", exact: true })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
-  await page.getByRole("button", { name: "Project scope: 2 projects", exact: true }).click();
-  await expect(page.getByRole("row", { name: secondProject.name, exact: true })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
-  await expect(page.getByRole("row", { name: "Sidebar smoke", exact: true })).toHaveAttribute("aria-selected", "true");
-  await page.getByRole("button", { name: "Unpin Sidebar smoke", exact: true }).click();
-  await expect(page.getByRole("button", { name: selectedLabel, exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Done", exact: true }).click();
 
+  // Before typing, the dropdown leads with recent picks.
+  await filterField(page).click();
+  await expect(page.getByText("Recent", { exact: true })).toBeVisible();
+  await filterField(page).press("Escape");
+
+  // Each window keeps its own selection.
   const otherWindow = await page.context().newPage();
   try {
     await open(otherWindow);
-    await expect(otherWindow.getByRole("button", { name: "Project scope: All projects", exact: true })).toBeVisible();
-    await otherWindow.getByRole("button", { name: "Project scope: All projects", exact: true }).click();
-    await otherWindow.getByRole("row", { name: secondProject.name, exact: true }).click();
+    await expect(chips(otherWindow)).toHaveCount(0);
+    const otherField = await suggestProjects(otherWindow, "smoke");
+    await otherField.press("Enter");
+    await expect(chips(otherWindow)).toHaveText(["Sidebar smoke"]);
     await page.reload();
-    await expect(page.getByRole("button", { name: selectedLabel, exact: true })).toBeVisible();
+    await expect(chips(page)).toHaveText(["Sidebar smoke", secondProject.name]);
   } finally {
     await otherWindow.close();
   }
 
-  await page.getByRole("button", { name: selectedLabel, exact: true }).click();
-  await page.getByRole("row", { name: "Sidebar smoke", exact: true }).click();
-  await expect(shelf(page, "Active").getByRole("link")).toHaveCount(1);
-  await page.getByRole("row", { name: "All projects", exact: true }).click();
-  await expect
-    .poll(() => page.getByRole("dialog").evaluate((element) => element.getBoundingClientRect().width))
-    .toBe(pickerWidth);
-  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await page.getByRole("button", { name: "Clear filter", exact: true }).click();
+  await expect(chips(page)).toHaveCount(0);
+  await expect(shortcut).toHaveAttribute("aria-pressed", "false");
   await page.reload();
-  await expect(page.getByRole("button", { name: "Project scope: All projects", exact: true })).toBeVisible();
   await expect(shelf(page, "Active").getByRole("link")).toHaveCount(fixture.threads.length + 1);
   for (const { title } of [...fixture.threads, secondProject.thread]) await expect(link(page, title)).toBeVisible();
-  await page.getByRole("button", { name: "Project scope: All projects", exact: true }).click();
+  await suggestProjects(page, "sidsec");
   await page.getByRole("button", { name: `Unpin ${secondProject.name}`, exact: true }).click();
-  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await filterField(page).press("Escape");
   await expect(shortcut).toHaveCount(0);
   await page.reload();
   await expect(page.getByRole("group", { name: "Pinned projects" })).toHaveCount(0);

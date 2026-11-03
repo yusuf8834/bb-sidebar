@@ -8,6 +8,7 @@ import { ParentChip } from "./src/ParentChip";
 import { SubagentsChip } from "./src/SubagentsChip";
 import { SidebarSettings } from "./src/SidebarSettings";
 import { registerThreadHeaderAction } from "./src/bb-sdk";
+import { BROWSER_EVENTS } from "./src/lib/browser-events";
 
 export default definePluginApp((app) => {
   app.slots.settingsSection({
@@ -20,6 +21,17 @@ export default definePluginApp((app) => {
     title: "BB Sidebar",
     description: "Shelves, project filtering, manual ordering, and optional sorted views.",
     component: ThreadInbox,
+  });
+
+  // Keyboard entry to the filter bar: [project] @machine is:status. The bar
+  // listens for this event; with the sidebar closed there is no bar to focus.
+  app.commands.register({
+    id: "filter-threads",
+    title: "BB Sidebar: Filter threads by project, machine, or status",
+    defaultShortcut: { key: "s", mod: true, shift: true },
+    run: () => {
+      window.dispatchEvent(new Event(BROWSER_EVENTS.focusFilter));
+    },
   });
 
   // Registered first, so it renders on the left of the children chip: the

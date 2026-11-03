@@ -4,6 +4,14 @@ import type { ShelfExpansionState } from "../ThreadInboxView";
 import { MAX_CHILD_EXPANSION, pruneChildExpansion } from "./safe-storage";
 import { readStorageRaw } from "./storage-codec";
 import { STORAGE_KEYS } from "./storage-keys";
+import {
+  EMPTY_FILTER,
+  SHELVES,
+  THREAD_STATES,
+  type Shelf,
+  type ThreadFilter,
+  type ThreadState,
+} from "../thread-filter";
 import type { PreferenceCodec } from "./use-persisted-preference";
 
 export const projectScopeCodec: PreferenceCodec<string[]> = {
@@ -16,6 +24,34 @@ export const projectScopeCodec: PreferenceCodec<string[]> = {
       : null;
   },
   encode: JSON.stringify,
+};
+
+export const threadFilterCodec: PreferenceCodec<ThreadFilter> = {
+  storage: "session",
+  fallback: () => EMPTY_FILTER,
+  decode: (stored) => {
+    const value: unknown = JSON.parse(stored ?? "null");
+    if (typeof value !== "object" || value === null) return null;
+    const record = value as Record<string, unknown>;
+    const strings = (field: unknown) =>
+      Array.isArray(field) ? field.filter((entry): entry is string => typeof entry === "string") : [];
+    return {
+      hosts: strings(record.hosts).map((host) => host.toLowerCase()),
+      states: strings(record.states).filter((state): state is ThreadState =>
+        (THREAD_STATES as readonly string[]).includes(state),
+      ),
+      shelves: strings(record.shelves).filter((shelf): shelf is Shelf =>
+        (SHELVES as readonly string[]).includes(shelf),
+      ),
+      keyword: typeof record.keyword === "string" ? record.keyword : "",
+    };
+  },
+  encode: JSON.stringify,
+};
+
+export const recentFiltersCodec: PreferenceCodec<string[]> = {
+  ...projectScopeCodec,
+  storage: "local",
 };
 
 export const pinnedProjectsCodec: PreferenceCodec<string[]> = {
