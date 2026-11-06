@@ -379,7 +379,7 @@ it("keeps the named delete confirmation and sends its confirmed tree through the
   const dialog = await screen.findByRole("dialog", { name: "Delete thread?" });
   expect(within(dialog).getByText("Work a")).toBeDefined();
   expect(within(dialog).getByText("Sidebar")).toBeDefined();
-  expect(within(dialog).getByText(/its 1 child thread/)).toBeDefined();
+  expect(await within(dialog).findByText(/its 1 child thread/)).toBeDefined();
   expect(wired.harness.inspection.sdk.callsTo("threads.delete")).toEqual([]);
   fireEvent.click(within(dialog).getByRole("button", { name: "Delete thread" }));
   await waitFor(() =>

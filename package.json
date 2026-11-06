@@ -14,8 +14,8 @@
     "url": "https://github.com/yusuf8834/bb-sidebar/issues"
   },
   "engines": {
-    "bb": ">=0.47.0",
-    "bbPluginSdk": ">=0.6.75"
+    "bb": ">=0.48.0",
+    "bbPluginSdk": ">=0.6.94"
   },
   "bb": {
     "name": "BB Sidebar",

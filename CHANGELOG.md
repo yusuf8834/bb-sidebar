@@ -14,7 +14,11 @@
 - **Project sort keeps each project in place.** A project's position in Active no longer follows its top thread, so settling, snoozing or running a thread, or a project dropping to one thread, no longer moves the project. A project new to the view starts at the top. Dragging a project or a lone thread at the top level moves the project, saved on this device; it no longer rewrites the manual thread order.
 - Titles in the hover card and its child-thread rows wrap to two lines instead of being cut off.
 - **Opening a thread from the sidebar keeps its Full Screen.** Thread rows, child-thread rows, and the hover card's subthreads are now real links that bb opens, so a thread you left in Full Screen comes back that way. Cmd/Ctrl-click opens the thread in a split, and middle-click or Shift-click opens it in a new window or tab. Child-thread rows open with Enter; Space no longer opens them.
-- Built against plugin SDK 0.6.94, the version in bb 0.48.0. bb 0.47.0 remains supported.
+- Requires bb 0.48.0 or later, and is built against plugin SDK 0.6.94, the version in bb 0.48.0.
+
+### Fixed
+
+- **Delete counts every thread it removes.** The delete confirmation now asks bb which threads go with the thread, so its count includes archived child threads and threads bb deletes along with it, not just the children shown in the sidebar. Delete is disabled for the moment it takes to count.
 
 ## [0.3.7] - 2026-10-23
 
