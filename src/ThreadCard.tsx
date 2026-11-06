@@ -230,9 +230,9 @@ export function ThreadCard({
       data-row-emphasis={emphasis}
       data-settle-fade=""
       className={cn(
-        "pointer-events-none relative truncate text-sm",
+        "pointer-events-none relative break-words text-sm",
         showProject ? "mt-0.5" : "min-w-0 flex-1",
-        isRenaming && "pointer-events-auto",
+        isRenaming ? "pointer-events-auto" : "line-clamp-2",
         emphasis === "read-idle" ? "text-muted-foreground" : "text-foreground",
         (emphasis === "unread" || emphasis === "woke") && "font-medium",
       )}

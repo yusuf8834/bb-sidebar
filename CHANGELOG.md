@@ -13,6 +13,7 @@
 - **Settle finished pull requests** replaces "Settle merged pull requests" and covers closed pull requests too, so turning it off stops all pull-request settling. Before, a thread whose pull request closed without merging was always settled. The option is off for new installs; existing installs keep their current choice. With it and inactivity settling both off, the sidebar no longer checks GitHub every five minutes.
 - **Project sort keeps each project in place.** A project's position in Active no longer follows its top thread, so settling, snoozing or running a thread, or a project dropping to one thread, no longer moves the project. A project new to the view starts at the top. Dragging a project or a lone thread at the top level moves the project, saved on this device; it no longer rewrites the manual thread order.
 - Titles in the hover card and its child-thread rows wrap to two lines instead of being cut off.
+- Titles on full cards wrap to two lines instead of being cut off. Compact cards and shelf rows stay on one line.
 - **Opening a thread from the sidebar keeps its Full Screen.** Thread rows, child-thread rows, and the hover card's subthreads are now real links that bb opens, so a thread you left in Full Screen comes back that way. Cmd/Ctrl-click opens the thread in a split, and middle-click or Shift-click opens it in a new window or tab. Child-thread rows open with Enter; Space no longer opens them.
 - Built against plugin SDK 0.6.94, the version in bb 0.48.0. bb 0.47.0 remains supported.
 
