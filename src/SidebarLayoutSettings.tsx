@@ -26,7 +26,7 @@ export function SidebarLayoutSettings({
       <SettingRow
         title="Thread display"
         experimental
-        description="Full cards show each thread on three lines. Compact working threads use one line while a thread or its child agents are working. Compact all threads keeps every thread on one line, with its status, unread state, and children chip."
+        description="Full cards show each thread on three lines, or four when the title wraps. Compact working threads use one line while a thread or its child agents are working. Compact all threads keeps every thread on one line, with its status, unread state, and children chip."
         control={
           <SettingsSelect
             aria-label="Thread display"
