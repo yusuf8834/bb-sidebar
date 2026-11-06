@@ -52,7 +52,7 @@ export interface ThreadReorderControls {
 }
 
 /**
- * Three-line card, or one line in compact mode. Project groups omit the project
+ * Three-line card (four when the title wraps), or one line in compact mode. Project groups omit the project
  * line. Status follows manual reorders. Controls sit above a full-bleed anchor
  * for valid markup and keyboard access.
  */
@@ -232,7 +232,8 @@ export function ThreadCard({
       className={cn(
         "pointer-events-none relative break-words text-sm",
         showProject ? "mt-0.5" : "min-w-0 flex-1",
-        isRenaming ? "pointer-events-auto" : "line-clamp-2",
+        isRenaming && "pointer-events-auto",
+        !isRenaming && "line-clamp-2",
         emphasis === "read-idle" ? "text-muted-foreground" : "text-foreground",
         (emphasis === "unread" || emphasis === "woke") && "font-medium",
       )}
@@ -383,7 +384,12 @@ export function ThreadCard({
                   )}
                 />
               </ThreadDetailsTooltip>
-              <div className="pointer-events-none relative flex h-5 min-w-0 items-center gap-1.5">
+              <div
+                className={cn(
+                  "pointer-events-none relative flex min-h-5 min-w-0 gap-1.5",
+                  showProject ? "items-center" : "items-start",
+                )}
+              >
                 {showProject ? (
                   <span
                     data-settle-fade=""
