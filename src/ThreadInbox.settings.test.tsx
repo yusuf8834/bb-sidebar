@@ -98,6 +98,7 @@ describe("sidebar settings", () => {
 
   it("limits stripes by display mode while keeping all project names colored", async () => {
     localStorage.setItem("bb-sidebar:active-sort:v1", "project");
+    localStorage.setItem("bb-sidebar:single-thread-project-grouping:v1", "false");
     localStorage.setItem("bb-sidebar:shelf-expansion:v1", JSON.stringify({ settled: true, archived: true }));
     let settings = {
       ...defaultSidebarSettings,

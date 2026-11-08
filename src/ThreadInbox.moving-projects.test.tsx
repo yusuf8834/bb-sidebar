@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { renderSlot } from "./test-slot";
 import { inbox, defaultSidebarSettings, thread, listProps, loadInboxApp, rowLinks } from "./test-inbox";
@@ -12,6 +12,9 @@ const savedProjectOrder = () => JSON.parse(window.localStorage.getItem("bb-sideb
 
 describe("ThreadInbox", () => {
   describe("moving projects as a whole", () => {
+    // These cover lone-thread slots, which only exist with the grouping off.
+    beforeEach(() => window.localStorage.setItem("bb-sidebar:single-thread-project-grouping:v1", "false"));
+
     it.each([true, false])(
       "retains scoped active and deep queued attention in a collapsed project: setting=%s",
       async (showAttention) => {

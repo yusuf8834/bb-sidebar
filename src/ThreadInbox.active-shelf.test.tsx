@@ -294,6 +294,7 @@ describe("ThreadInbox", () => {
 
   it("names a project once in a header when it has two or more threads", () => {
     window.localStorage.setItem("bb-sidebar:active-sort:v1", "project");
+    window.localStorage.setItem("bb-sidebar:single-thread-project-grouping:v1", "false");
     window.localStorage.setItem(
       "bb-sidebar:inbox-order-cache:v1",
       JSON.stringify(["web-1", "zed-1", "web-2", "api-1"]),
@@ -358,8 +359,38 @@ describe("ThreadInbox", () => {
     ).toEqual([expect.stringMatching(/^Web.*Second/)]);
   });
 
+  it("gives one-thread projects a collapsible header until the option is turned off", async () => {
+    window.localStorage.setItem("bb-sidebar:active-sort:v1", "project");
+    render(
+      [
+        thread({ id: "zed-1", projectId: "zed", title: "Zed thread", createdAt: 2 }),
+        thread({ id: "api-1", projectId: "api", title: "Api thread", createdAt: 1 }),
+      ],
+      [
+        { id: "api", name: "Api", isPersonal: false, href: "", settingsHref: "" },
+        { id: "zed", name: "Zed", isPersonal: false, href: "", settingsHref: "" },
+      ],
+    );
+
+    const headers = () =>
+      screen.queryAllByRole("button", { name: /\(\d+\)$/ }).map((header) => header.getAttribute("aria-label"));
+    expect(headers()).toEqual(["Zed (1)", "Api (1)"]);
+    fireEvent.click(screen.getByRole("button", { name: "Zed (1)", expanded: true }));
+    expect(screen.queryByText("Zed thread")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Sort active threads: Project" }));
+    const option = screen.getByRole("checkbox", { name: "Group single-thread projects" });
+    expect((option as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(option);
+    expect(headers()).toEqual([]);
+    await waitFor(() =>
+      expect(window.localStorage.getItem("bb-sidebar:single-thread-project-grouping:v1")).toBe("false"),
+    );
+  });
+
   it("looks like manual order when no project has a second thread", () => {
     window.localStorage.setItem("bb-sidebar:active-sort:v1", "project");
+    window.localStorage.setItem("bb-sidebar:single-thread-project-grouping:v1", "false");
     render(
       [
         thread({ id: "zed-1", projectId: "zed", title: "Zed thread", createdAt: 2 }),

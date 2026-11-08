@@ -34,6 +34,11 @@ export const environmentGroupingCodec: PreferenceCodec<boolean> = {
   encode: String,
 };
 
+export const singleThreadProjectGroupingCodec: PreferenceCodec<boolean> = {
+  ...environmentGroupingCodec,
+  fallback: () => true,
+};
+
 export const projectCollapseCodec: PreferenceCodec<Set<string>> = {
   fallback: () => new Set(),
   decode: (stored) => {

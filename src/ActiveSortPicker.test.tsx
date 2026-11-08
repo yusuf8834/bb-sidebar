@@ -10,12 +10,15 @@ afterEach(cleanup);
 function Picker() {
   const [mode, setMode] = useState<ActiveSortMode>("manual");
   const [groupEnvironments, setGroupEnvironments] = useState(false);
+  const [groupSingleThreadProjects, setGroupSingleThreadProjects] = useState(true);
   return (
     <ActiveSortPicker
       mode={mode}
       onModeChange={setMode}
       groupEnvironments={groupEnvironments}
       onGroupEnvironmentsChange={setGroupEnvironments}
+      groupSingleThreadProjects={groupSingleThreadProjects}
+      onGroupSingleThreadProjectsChange={setGroupSingleThreadProjects}
     />
   );
 }
@@ -55,4 +58,8 @@ it("keeps Project open for environment grouping after pointer and Enter activati
   const toggle = screen.getByRole("checkbox", { name: "Group by worktree" });
   fireEvent.click(toggle);
   expect((toggle as HTMLInputElement).checked).toBe(true);
+  const singles = screen.getByRole("checkbox", { name: "Group single-thread projects" });
+  expect((singles as HTMLInputElement).checked).toBe(true);
+  fireEvent.click(singles);
+  expect((singles as HTMLInputElement).checked).toBe(false);
 });

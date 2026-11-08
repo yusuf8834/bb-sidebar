@@ -5,7 +5,12 @@ import { allOrderUnits, layoutActiveGroups, projectGroupView, siblingScope, unit
 import { mergeProjectOrder, projectOrderUnits, unitProjectId, visibleShelfThreads } from "./inbox-layout";
 import type { ProjectUnit, ProjectViewUnit, ReorderScope } from "./inbox-layout";
 import { orderSubsetInPlace, rebaseMovedId, rebaseMovedUnit } from "./pinned-order";
-import { environmentGroupingCodec, projectCollapseCodec, projectOrderCodec } from "./lib/inbox-preference-codecs";
+import {
+  environmentGroupingCodec,
+  projectCollapseCodec,
+  projectOrderCodec,
+  singleThreadProjectGroupingCodec,
+} from "./lib/inbox-preference-codecs";
 import { STORAGE_KEYS } from "./lib/storage-keys";
 import { usePersistedPreference } from "./lib/use-persisted-preference";
 
@@ -50,6 +55,10 @@ export function useInboxProjectGroups({
     STORAGE_KEYS.environmentGrouping.key,
     environmentGroupingCodec,
   );
+  const [groupSingleThreadProjects, setGroupSingleThreadProjects] = usePersistedPreference(
+    STORAGE_KEYS.singleThreadProjectGrouping.key,
+    singleThreadProjectGroupingCodec,
+  );
   const collapseCodec = useMemo(
     () => ({
       ...projectCollapseCodec,
@@ -90,19 +99,27 @@ export function useInboxProjectGroups({
     [],
   );
   const storedUnits = useMemo(
-    () => layoutActiveGroups(orderedInbox, groupEnvironments, projectOrder),
-    [orderedInbox, groupEnvironments, projectOrder],
+    () => layoutActiveGroups(orderedInbox, groupEnvironments, projectOrder, groupSingleThreadProjects),
+    [orderedInbox, groupEnvironments, projectOrder, groupSingleThreadProjects],
   );
   // Rows move across environments when their environment headers are hidden.
   // Keep the full thread lists so rebasing preserves hidden siblings' slots.
   const reorderUnits = useMemo(
     () =>
       groupEnvironments && !expanded
-        ? layoutActiveGroups(orderedInbox, false, projectOrder)
+        ? layoutActiveGroups(orderedInbox, false, projectOrder, groupSingleThreadProjects)
         : storedUnits.map((unit) =>
             unit.kind === "group" && collapsedProjects.has(unit.projectId) ? { ...unit, children: undefined } : unit,
           ),
-    [orderedInbox, storedUnits, groupEnvironments, expanded, collapsedProjects, projectOrder],
+    [
+      orderedInbox,
+      storedUnits,
+      groupEnvironments,
+      expanded,
+      collapsedProjects,
+      projectOrder,
+      groupSingleThreadProjects,
+    ],
   );
   const orderUnits = useMemo(() => allOrderUnits(storedUnits), [storedUnits]);
   const previewProjectOrder = useMemo(() => {
@@ -126,8 +143,8 @@ export function useInboxProjectGroups({
     );
   }, [orderedInbox, reorderUnits, dragOrder, projectMode]);
   const units = useMemo(
-    () => layoutActiveGroups(inbox, groupEnvironments, previewProjectOrder),
-    [inbox, groupEnvironments, previewProjectOrder],
+    () => layoutActiveGroups(inbox, groupEnvironments, previewProjectOrder, groupSingleThreadProjects),
+    [inbox, groupEnvironments, previewProjectOrder, groupSingleThreadProjects],
   );
   const visibleInbox = useMemo(
     () => visibleShelfThreads(inbox, expanded, activeThreadId, undefined, attentionIds),
@@ -198,6 +215,8 @@ export function useInboxProjectGroups({
     rebaseOrder,
     groupEnvironments,
     setGroupEnvironments,
+    groupSingleThreadProjects,
+    setGroupSingleThreadProjects,
     toggleProjectCollapse,
     toggleEnvironmentCollapse,
   };

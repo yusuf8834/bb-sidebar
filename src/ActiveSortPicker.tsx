@@ -16,11 +16,15 @@ export function ActiveSortPicker({
   onModeChange,
   groupEnvironments,
   onGroupEnvironmentsChange,
+  groupSingleThreadProjects,
+  onGroupSingleThreadProjectsChange,
 }: {
   mode: ActiveSortMode;
   onModeChange: (mode: ActiveSortMode) => void;
   groupEnvironments: boolean;
   onGroupEnvironmentsChange: (enabled: boolean) => void;
+  groupSingleThreadProjects: boolean;
+  onGroupSingleThreadProjectsChange: (enabled: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   const groupName = useId();
@@ -87,23 +91,42 @@ export function ActiveSortPicker({
         </div>
         {mode === "project" ? (
           <div className="mt-1 border-t border-border pt-1">
-            <label className="block cursor-default">
-              <input
-                type="checkbox"
-                className="peer sr-only"
-                checked={groupEnvironments}
-                onChange={(event) => onGroupEnvironmentsChange(event.target.checked)}
-              />
-              <span className="flex items-center justify-between gap-4 rounded-sm px-2 py-1.5 text-xs hover:bg-state-hover peer-focus-visible:bg-state-hover">
-                Group by worktree
-                <span className="flex size-3.5 items-center justify-center">
-                  {groupEnvironments ? <Icon name="Check" className="size-4" aria-hidden /> : null}
-                </span>
-              </span>
-            </label>
+            <SortOption
+              label="Group single-thread projects"
+              checked={groupSingleThreadProjects}
+              onChange={onGroupSingleThreadProjectsChange}
+            />
+            <SortOption label="Group by worktree" checked={groupEnvironments} onChange={onGroupEnvironmentsChange} />
           </div>
         ) : null}
       </PopoverContent>
     </Popover>
+  );
+}
+
+function SortOption({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (enabled: boolean) => void;
+}) {
+  return (
+    <label className="block cursor-default">
+      <input
+        type="checkbox"
+        className="peer sr-only"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      <span className="flex items-center justify-between gap-4 rounded-sm px-2 py-1.5 text-xs hover:bg-state-hover peer-focus-visible:bg-state-hover">
+        {label}
+        <span className="flex size-3.5 items-center justify-center">
+          {checked ? <Icon name="Check" className="size-4" aria-hidden /> : null}
+        </span>
+      </span>
+    </label>
   );
 }

@@ -16,8 +16,9 @@ export function isActiveSortMode(value: string): value is ActiveSortMode {
   return ACTIVE_SORT_MODES.some((mode) => mode === value);
 }
 
-// A project needs this many Active threads before it earns a header; below
-// it, its thread stays an ordinary card in the project's slot.
+// Unless every project is grouped, a project needs this many Active threads
+// before it earns a header; below it, its thread stays an ordinary card in the
+// project's slot.
 const MIN_PROJECT_GROUP_SIZE = 2;
 
 export type ProjectViewUnit =
@@ -51,12 +52,15 @@ export function projectUnitKey(projectId: string): string {
  * order, so a project stays put while its threads leave Active and come back.
  * Projects the order has not seen yet come first, in the order their first
  * threads appear. Threads keep the inbox order within their project. A project
- * with enough threads is drawn as a group; a smaller one is its lone thread.
+ * with enough threads is drawn as a group; a smaller one is its lone thread,
+ * unless `groupSingleThreads` draws every project as a group.
  */
 export function layoutActiveThreadsByProject(
   inbox: readonly PluginSidebarThread[],
   projectOrder: readonly string[] = [],
+  groupSingleThreads = false,
 ): ProjectUnit[] {
+  const minGroupSize = groupSingleThreads ? 1 : MIN_PROJECT_GROUP_SIZE;
   const threadsByProject = new Map<string, PluginSidebarThread[]>();
   for (const thread of inbox) {
     const threads = threadsByProject.get(thread.projectId);
@@ -66,7 +70,7 @@ export function layoutActiveThreadsByProject(
   return mergeProjectOrder(projectOrder, [...threadsByProject.keys()]).flatMap((projectId): ProjectUnit[] => {
     const threads = threadsByProject.get(projectId);
     if (!threads) return [];
-    if (threads.length < MIN_PROJECT_GROUP_SIZE) return [{ kind: "thread", key: threads[0]!.id, thread: threads[0]! }];
+    if (threads.length < minGroupSize) return [{ kind: "thread", key: threads[0]!.id, thread: threads[0]! }];
     return [{ kind: "group", key: projectUnitKey(projectId), projectId, threads }];
   });
 }

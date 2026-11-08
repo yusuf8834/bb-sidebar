@@ -81,6 +81,15 @@ describe("layoutActiveThreadsByProject", () => {
     expect(layoutActiveThreadsByProject([a])).toEqual([{ kind: "thread", key: "a", thread: a }]);
     expect(layoutActiveThreadsByProject([])).toEqual([]);
   });
+  it("groups singleton projects when asked", () => {
+    const a = thread({ id: "a", projectId: "p" });
+    const b = thread({ id: "b", projectId: "q" });
+    const c = thread({ id: "c", projectId: "p" });
+    expect(layoutActiveThreadsByProject([a, b, c], [], true)).toEqual([
+      { kind: "group", key: "project:p", projectId: "p", threads: [a, c] },
+      { kind: "group", key: "project:q", projectId: "q", threads: [b] },
+    ]);
+  });
   it("places projects by the saved order, whichever of their threads leads", () => {
     const a = thread({ id: "a", projectId: "p" });
     const b = thread({ id: "b", projectId: "q" });

@@ -58,7 +58,11 @@ interface ThreadInboxViewProps {
   inboxProjectView: readonly ProjectViewUnit[];
   environmentGrouping: Pick<
     ReturnType<typeof useInboxProjectGroups>,
-    "groupEnvironments" | "setGroupEnvironments" | "toggleEnvironmentCollapse"
+    | "groupEnvironments"
+    | "setGroupEnvironments"
+    | "groupSingleThreadProjects"
+    | "setGroupSingleThreadProjects"
+    | "toggleEnvironmentCollapse"
   >;
   reorderControls: (key: string, shelf: "pinned" | "inbox", title: string) => ThreadReorderControls;
   sortedVisibleInbox: readonly PluginSidebarThread[];
@@ -149,6 +153,8 @@ export function ThreadInboxView({
                         onModeChange={setActiveSortMode}
                         groupEnvironments={environmentGrouping.groupEnvironments}
                         onGroupEnvironmentsChange={environmentGrouping.setGroupEnvironments}
+                        groupSingleThreadProjects={environmentGrouping.groupSingleThreadProjects}
+                        onGroupSingleThreadProjectsChange={environmentGrouping.setGroupSingleThreadProjects}
                       />
                     }
                   >
