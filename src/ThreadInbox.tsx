@@ -241,20 +241,6 @@ function ThreadInboxContent({
     () => sortActiveThreads(visibleInbox, activeSortMode),
     [activeSortMode, visibleInbox],
   );
-  // Leaving a thread follows Pinned, then Active, including collapsed rows.
-  const nextThreadCandidates = useMemo(
-    () => [
-      ...pinned,
-      ...(activeSortMode === "project"
-        ? inboxProjectUnits.flatMap((unit) => (unit.kind === "thread" ? [unit.thread] : unit.threads))
-        : sortActiveThreads(inbox, activeSortMode)),
-      ...working,
-    ],
-    [activeSortMode, inbox, inboxProjectUnits, pinned, working],
-  );
-  const nextThreadCandidatesRef = useRef(nextThreadCandidates);
-  nextThreadCandidatesRef.current = nextThreadCandidates;
-
   // A drag installs its listeners once, at pointer-down, but the shelf keeps
   // moving underneath it: the host pushes order changes mid-gesture. The order
   // and the membership a drop depends on are therefore read through these refs
@@ -399,17 +385,8 @@ function ThreadInboxContent({
       const parked = await mutation();
       if (!parked || activeThreadIdRef.current !== thread.id) return;
 
-      // Read the latest list after the request, since another client may
-      // have moved or reordered the first candidate while it was pending.
-      const nextThread = nextThreadCandidatesRef.current.find((candidate) => candidate.id !== thread.id);
-      if (nextThread) {
-        navigate.toThread(nextThread.id);
-      } else {
-        navigate.toCompose({
-          projectId: thread.projectId,
-          focusPrompt: true,
-        });
-      }
+      // Never land on a thread the user did not pick.
+      navigate.toCompose({ projectId: thread.projectId, focusPrompt: true });
       onNavigate();
     },
     [navigate, onNavigate],

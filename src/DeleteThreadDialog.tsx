@@ -63,7 +63,7 @@ export function DeleteThreadDialog({
     try {
       await rpc.call("deleteThread", { threadId: thread.id, childThreadsConfirmed: true });
       toast.success("Thread deleted", { description: title });
-      if (context.threadId === thread.id) navigate.toCompose();
+      if (context.threadId === thread.id) navigate.toCompose({ projectId: thread.projectId, focusPrompt: true });
       onOpenChange(false);
     } catch (error) {
       toast.error("Could not delete thread", {

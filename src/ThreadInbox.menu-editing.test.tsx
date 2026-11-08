@@ -247,6 +247,34 @@ describe("row context menu", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Delete thread?" })).toBeNull());
   });
 
+  it("starts a new thread in the project after deleting the open thread", async () => {
+    const rendered = renderSlot(
+      inbox,
+      { ...listProps, activeThreadId: "current" },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [thread({ id: "current", title: "Current" }), thread({ id: "other", title: "Other" })],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
+        },
+        context: { threadId: "current", projectId: "proj_1" },
+        rpc: { listLifecycle: () => ({ rows: [] }), deleteThread: () => ({ ok: true }) },
+      },
+    );
+    fireEvent.contextMenu(await screen.findByText("Current"));
+    fireEvent.click(within(await screen.findByRole("menu", { name: "Thread actions" })).getByText("Delete"));
+    const dialog = await screen.findByRole("dialog", { name: "Delete thread?" });
+    const confirm = within(dialog).getByRole("button", { name: "Delete thread" });
+    await waitFor(() => expect(confirm.hasAttribute("disabled")).toBe(false));
+    fireEvent.click(confirm);
+
+    await waitFor(() =>
+      expect(rendered.navigateCalls).toEqual([
+        { method: "toCompose", options: { projectId: "proj_1", focusPrompt: true } },
+      ]),
+    );
+  });
+
   it("closes the delete confirmation when bb cannot count the threads it deletes", async () => {
     const rendered = renderSlot(inbox, listProps, {
       sidebarThreads: {
