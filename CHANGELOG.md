@@ -18,7 +18,7 @@
 
 ### Fixed
 
-- **Delete counts every thread it removes.** The delete confirmation now asks bb which threads go with the thread, so its count includes archived child threads and threads bb deletes along with it, not just the children shown in the sidebar. Delete is disabled for the moment it takes to count.
+- **Delete counts every thread it removes.** The delete confirmation now asks bb which threads go with the thread, so its count includes archived child threads and threads bb deletes along with it, not just the children shown in the sidebar.
 
 ## [0.3.7] - 2026-10-23
 

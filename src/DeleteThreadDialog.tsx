@@ -1,4 +1,4 @@
-import { useSidebarThreads } from "./bb-sdk";
+import { countDeleteCascade, useSidebarThreads } from "./bb-sdk";
 import { useEffect, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useBbContext, useBbNavigate, useRpc, useSdk, type PluginSidebarThread } from "@get-bb/plugin-sdk/app";
@@ -10,7 +10,7 @@ import { usePortalScopeProps } from "./lib/portal-scope";
 /**
  * The sidebar's own delete confirmation. bb's generic one says only "Delete
  * thread?", which is easy to misread across a busy list; this one names the
- * thread and its project, and counts the threads that go with it.
+ * thread and its project, and counts the children that go with it.
  */
 export function DeleteThreadDialog({
   thread,
@@ -33,26 +33,28 @@ export function DeleteThreadDialog({
   const project = projects.find((candidate) => candidate.id === thread.projectId);
   const projectName = project && !project.isPersonal ? project.name : "Personal";
   const title = threadDisplayTitle(thread);
-  const [cascade, setCascade] = useState<CascadeCount>({ status: "counting" });
+  // null while bb counts. bb also deletes archived descendants and lifecycle
+  // dependents, which the sidebar's thread list does not hold.
+  const [childCount, setChildCount] = useState<number | null>(null);
 
-  // bb deletes archived descendants and lifecycle dependents too, which the
-  // sidebar's thread list does not include, so ask bb what goes with it.
   useEffect(() => {
     if (!open) return;
     const controller = new AbortController();
-    setCascade({ status: "counting" });
-    sdk.threads.experimental_listCascade({ threadIds: [thread.id], action: "delete", signal: controller.signal }).then(
-      ({ threads }) => {
-        if (controller.signal.aborted) return;
-        const row = threads.find((candidate) => candidate.threadId === thread.id);
-        setCascade({ status: "counted", count: row?.cascadeThreadIds.length ?? 0 });
+    setChildCount(null);
+    countDeleteCascade(sdk, thread.id, controller.signal).then(
+      (count) => {
+        if (!controller.signal.aborted) setChildCount(count);
       },
-      () => {
-        if (!controller.signal.aborted) setCascade({ status: "failed" });
+      (error) => {
+        if (controller.signal.aborted) return;
+        toast.error("Could not check which threads would be deleted", {
+          description: error instanceof Error ? error.message : undefined,
+        });
+        onOpenChange(false);
       },
     );
     return () => controller.abort();
-  }, [open, sdk, thread.id]);
+  }, [open, sdk, thread.id, onOpenChange]);
 
   const submit = async () => {
     if (submitting.current) return;
@@ -97,7 +99,9 @@ export function DeleteThreadDialog({
             </div>
           </div>
           <Dialog.Description className="mb-4 mt-3 text-xs leading-5 text-muted-foreground">
-            {describeCascade(cascade)}
+            {childCount
+              ? `This also deletes ${childCount === 1 ? "its 1 child thread" : `its ${childCount} child threads`}. This action cannot be undone.`
+              : "This action cannot be undone."}
           </Dialog.Description>
           <div className="flex justify-end gap-2">
             <Dialog.Close asChild>
@@ -111,7 +115,7 @@ export function DeleteThreadDialog({
             </Dialog.Close>
             <button
               type="button"
-              disabled={busy || cascade.status === "counting"}
+              disabled={busy || childCount === null}
               onClick={() => void submit()}
               className="h-8 rounded-md bg-destructive px-3 text-xs font-medium text-destructive-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
             >
@@ -122,14 +126,4 @@ export function DeleteThreadDialog({
       </Dialog.Portal>
     </Dialog.Root>
   );
-}
-
-type CascadeCount = { status: "counting" } | { status: "counted"; count: number } | { status: "failed" };
-
-function describeCascade(cascade: CascadeCount): string {
-  if (cascade.status === "counting") return "Counting the threads deleted with it…";
-  if (cascade.status === "failed") return "Any child threads are deleted too. This action cannot be undone.";
-  if (cascade.count === 0) return "This action cannot be undone.";
-  const children = cascade.count === 1 ? "its 1 child thread" : `its ${cascade.count} child threads`;
-  return `This also deletes ${children}. This action cannot be undone.`;
 }
