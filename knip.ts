@@ -1,7 +1,7 @@
 import type { KnipConfig } from "knip";
 
 // The SDK loads these peer dependencies even without direct source imports.
-const sdkPeerDependencies = ["hono", "cron-parser", "better-sqlite3"];
+const sdkPeerDependencies = ["hono", "better-sqlite3"];
 
 const config: KnipConfig = {
   entry: [
