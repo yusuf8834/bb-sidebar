@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.9] - 2026-11-08
+
+### Fixed
+
+- **Installing and updating from git works again.** 0.3.8 failed to install or update with `Could not resolve "cron-parser"`, because a package the server needs was listed only as a development dependency, which bb leaves out when it installs a plugin. Installs that stayed on 0.3.7 can update directly to this release ([#24](https://github.com/yusuf8834/bb-sidebar/issues/24)).
+
 ## [0.3.8] - 2026-11-07
 
 ### Added
