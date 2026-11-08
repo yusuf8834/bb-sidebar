@@ -9,6 +9,11 @@ pre-commit:
     file-sizes:
       run: node scripts/check-file-sizes.mjs
 
+commit-msg:
+  commands:
+    strip-ai-attribution:
+      run: perl -ni -e 'print unless /^co-authored-by:.*cursoragent\@cursor\.com/i || /^made-with:\s*cursor\b/i' {1}
+
 pre-push:
   commands:
     check:

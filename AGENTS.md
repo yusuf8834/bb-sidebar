@@ -180,7 +180,8 @@ Use `npm run format` to format the repository. `npm run lint`,
 main checkout and every worktree; branches without `lefthook.yml` skip these
 checks. Pre-commit runs Biome check and import boundaries on staged files,
 plus the size gate. Pre-push runs `npm run check`. Hooks check files without
-applying fixes.
+applying fixes. Commit-msg removes the `Co-authored-by` and `Made-with` trailers
+Cursor adds to agent commits even with attribution turned off.
 If Knip says unused and bb plugin types did not pin it, remove it.
 `npm run knip` checks unused exports and exported types in every file,
 without per-file or issue-type exceptions. `knip.ts` preserves only SDK
