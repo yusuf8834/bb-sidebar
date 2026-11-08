@@ -1,4 +1,5 @@
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
+import type { ChildStatusKind } from "./child-status";
 import type { OrderUnit } from "./pinned-order";
 import { visibleInboxThreads } from "./inbox";
 
@@ -21,11 +22,18 @@ export function isActiveSortMode(value: string): value is ActiveSortMode {
 // project's slot.
 const MIN_PROJECT_GROUP_SIZE = 2;
 
+/** How many threads a collapsed group hides with one kind of news. */
+export interface GroupAlert {
+  kind: Exclude<ChildStatusKind, "working">;
+  count: number;
+}
+
 export type ProjectViewUnit =
   | Extract<ProjectUnit, { kind: "thread" }>
   | (Omit<Extract<ProjectUnit, { kind: "group" }>, "children"> & {
       expanded: boolean;
       threadCount: number;
+      alerts: GroupAlert[];
       children?: ProjectViewUnit[];
     });
 

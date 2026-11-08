@@ -1,6 +1,8 @@
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 import { layoutActiveThreadsByProject, projectOrderUnits, visibleShelfThreads } from "./inbox-layout";
-import type { ProjectUnit, ProjectViewUnit } from "./inbox-layout";
+import type { GroupAlert, ProjectUnit, ProjectViewUnit } from "./inbox-layout";
+import { childStatusKind } from "./child-status";
+import type { ChildStatusKind } from "./child-status";
 import type { OrderUnit } from "./pinned-order";
 
 export function environmentUnitKey(projectId: string, environmentId: string): string {
@@ -93,6 +95,23 @@ export function unitsAtScope(units: readonly ProjectUnit[], parentKey: string | 
   return parent?.kind === "group" ? groupChildren(parent) : [];
 }
 
+const ALERT_KINDS: readonly GroupAlert["kind"][] = ["failed", "needs-you", "done"];
+
+/** News among the threads a collapsed group hides, most urgent first. */
+function hiddenAlerts(threads: readonly PluginSidebarThread[], shown: readonly PluginSidebarThread[]): GroupAlert[] {
+  const shownIds = new Set(shown.map((thread) => thread.id));
+  const counts = new Map<ChildStatusKind | null, number>();
+  for (const thread of threads) {
+    if (shownIds.has(thread.id)) continue;
+    const kind = childStatusKind(thread);
+    counts.set(kind, (counts.get(kind) ?? 0) + 1);
+  }
+  return ALERT_KINDS.flatMap((kind) => {
+    const count = counts.get(kind) ?? 0;
+    return count > 0 ? [{ kind, count }] : [];
+  });
+}
+
 export function projectGroupView(
   units: readonly ProjectUnit[],
   collapsedProjects: ReadonlySet<string>,
@@ -108,6 +127,7 @@ export function projectGroupView(
       ...unit,
       expanded,
       threadCount: unit.threads.length,
+      alerts: expanded ? [] : hiddenAlerts(unit.threads, threads),
       threads,
       children:
         expanded && unit.children

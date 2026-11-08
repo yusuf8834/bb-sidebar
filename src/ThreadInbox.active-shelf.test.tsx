@@ -445,6 +445,27 @@ describe("ThreadInbox", () => {
     );
   });
 
+  it("marks a collapsed project with a dot for each kind of news it hides", async () => {
+    window.localStorage.setItem("bb-sidebar:active-sort:v1", "project");
+    window.localStorage.setItem("bb-sidebar:project-collapse:v1", JSON.stringify(["web"]));
+    render(
+      [
+        thread({ id: "web-1", projectId: "web", title: "Done", indicator: "unread-success" }),
+        thread({ id: "web-2", projectId: "web", title: "Asks", hasPendingInteraction: true }),
+        thread({ id: "web-3", projectId: "web", title: "Asks too", indicator: "waiting-for-input" }),
+      ],
+      [{ id: "web", name: "Web", isPersonal: false, href: "", settingsHref: "" }],
+    );
+
+    const header = screen.getByRole("button", { name: "Web (3), 2 need you, 1 done", expanded: false });
+    expect(
+      [...header.querySelectorAll("[data-group-alert]")].map((dot) => dot.getAttribute("data-group-alert")),
+    ).toEqual(["needs-you", "done"]);
+    fireEvent.click(header);
+    const open = screen.getByRole("button", { name: "Web (3)", expanded: true });
+    expect(open.querySelector("[data-group-alerts]")).toBeNull();
+  });
+
   it("lists threads newest first", () => {
     render([thread({ id: "a", title: "Older", createdAt: 1 }), thread({ id: "b", title: "Newer", createdAt: 2 })]);
     // The anchor is a full-bleed overlay, so read the row containers.

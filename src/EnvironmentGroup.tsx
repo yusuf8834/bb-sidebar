@@ -3,6 +3,7 @@ import type { ProjectViewUnit } from "./inbox-layout";
 import type { ThreadReorderControls } from "./ThreadCard";
 import { environmentLabel } from "./environment-groups";
 import { Icon } from "./components/Icon";
+import { GroupAlertDots, groupAlertPhrase } from "./GroupAlertDots";
 import { cn } from "./lib/utils";
 import { useListMotion } from "./useListMotion";
 
@@ -34,7 +35,7 @@ export function EnvironmentGroup({
           type="button"
           data-reorder-key={unit.key}
           aria-expanded={unit.expanded}
-          aria-label={`${label} (${unit.threadCount})`}
+          aria-label={`${label} (${unit.threadCount})${groupAlertPhrase(unit.alerts)}`}
           aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
           title={[environment.name, environment.path, host?.name].filter(Boolean).join("\n")}
           onClick={onToggle}
@@ -48,6 +49,7 @@ export function EnvironmentGroup({
           <Icon name="FolderGit" className="size-3 shrink-0 text-muted-foreground/60" aria-hidden />
           <span className="min-w-0 truncate font-mono">{label}</span>
           <span className="shrink-0 text-muted-foreground/50">{unit.threadCount}</span>
+          <GroupAlertDots alerts={unit.alerts} />
           <span className="flex-1" />
           <Icon
             name="ChevronDown"

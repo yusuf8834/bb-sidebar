@@ -10,8 +10,9 @@ import { SlimRow } from "./SlimRow";
 import { CleanSettledDialog } from "./CleanSettledDialog";
 import { TRAILING_GLYPH_BOX_CLASS } from "./StatusSlot";
 import { projectIconUrl } from "./project-icons";
-import type { ProjectViewUnit } from "./inbox-layout";
+import type { GroupAlert, ProjectViewUnit } from "./inbox-layout";
 import { EnvironmentGroup } from "./EnvironmentGroup";
+import { GroupAlertDots, groupAlertPhrase } from "./GroupAlertDots";
 import { environmentLabel } from "./environment-groups";
 import { useInboxEnvironment, useInboxActions, useInboxActivity } from "./InboxContext";
 
@@ -199,6 +200,7 @@ function ActiveProjectGroup({
   projectName,
   projectIconUrl,
   threadCount,
+  alerts,
   expanded,
   onToggle,
   reorder,
@@ -209,6 +211,7 @@ function ActiveProjectGroup({
   projectName: string;
   projectIconUrl: string | null;
   threadCount: number;
+  alerts: readonly GroupAlert[];
   expanded: boolean;
   onToggle: () => void;
   reorder: ThreadReorderControls;
@@ -237,7 +240,7 @@ function ActiveProjectGroup({
           onPointerDown={reorder.onPointerDown}
           onKeyDown={reorder.onKeyDown}
           aria-expanded={expanded}
-          aria-label={`${projectName} (${threadCount})`}
+          aria-label={`${projectName} (${threadCount})${groupAlertPhrase(alerts)}`}
           aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
           // Padded like a card, so the name lines up with every row's title and
           // the chevron with every row's trailing glyph. Vertical panning stays
@@ -259,6 +262,7 @@ function ActiveProjectGroup({
             {projectName}
           </span>
           <span className="shrink-0 text-2xs text-muted-foreground/50">{threadCount}</span>
+          <GroupAlertDots alerts={alerts} />
           <span className="h-px flex-1 bg-sidebar-border/50" />
           <span className={TRAILING_GLYPH_BOX_CLASS}>
             <Icon
@@ -307,6 +311,7 @@ export function ProjectGroups({
             projectName={projectName}
             projectIconUrl={projectIconUrl(unit.projectId, projectIconRevision)}
             threadCount={unit.threadCount}
+            alerts={unit.alerts}
             expanded={unit.expanded}
             onToggle={() => onToggle(unit.projectId)}
             reorder={reorderControls(unit, projectName)}
