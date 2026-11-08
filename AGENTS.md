@@ -46,7 +46,7 @@ Inbox context: `src/InboxContext.tsx` shares environment, actions, and activity.
 
 App experimental SDK hooks use stable names from `src/bb-sdk.ts`.
 Pin to the SDK the latest stable bb-app ships; migrate experimental_* breaks
-through `src/bb-sdk.ts`. The minimum host is bb 0.47.0 with SDK 0.6.75.
+through `src/bb-sdk.ts`. The minimum host is bb 0.48.0 with SDK 0.6.94.
 Pull request data comes from the bundled GitHub PR Status plugin
 (`src/github-pr-status.ts`): rows through `useEnvironmentPullRequest` in
 `src/bb-sdk.ts`, and `plugins.callRpc` in `server-policy`. A failed or

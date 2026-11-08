@@ -121,6 +121,12 @@ export async function createWired(
           threads = threads.filter((item) => !ids.has(item.id));
           return { ok: true };
         },
+        experimental_listCascade: async ({ threadIds }) => ({
+          threads: threadIds.map((threadId) => ({
+            threadId,
+            cascadeThreadIds: [...treeIds(threadId)].filter((id) => id !== threadId),
+          })),
+        }),
         defaultExecutionOptions: async () => null,
       },
       terminals: {
@@ -213,6 +219,7 @@ export async function createWired(
                 markUnread: (args) => bb.sdk.threads.markUnread(args),
                 archive: (args) => bb.sdk.threads.archive(args),
                 unarchive: (args) => bb.sdk.threads.unarchive(args),
+                experimental_listCascade: (args) => bb.sdk.threads.experimental_listCascade(args),
               },
             },
             // Confirmation and the Undo toast below are harness-produced, not host UI.

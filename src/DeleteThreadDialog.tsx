@@ -1,7 +1,7 @@
-import { useSidebarThreads } from "./bb-sdk";
-import { useRef, useState } from "react";
+import { countDeleteCascade, useSidebarThreads } from "./bb-sdk";
+import { useEffect, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { useBbContext, useBbNavigate, useRpc, type PluginSidebarThread } from "@get-bb/plugin-sdk/app";
+import { useBbContext, useBbNavigate, useRpc, useSdk, type PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import { toast } from "./lib/toast";
 import type { bbSidebarRpcContract } from "./contract";
 import { threadDisplayTitle } from "./inbox";
@@ -21,7 +21,8 @@ export function DeleteThreadDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { projects, threads } = useSidebarThreads();
+  const { projects } = useSidebarThreads();
+  const sdk = useSdk();
   const rpc = useRpc<typeof bbSidebarRpcContract>();
   const navigate = useBbNavigate();
   const context = useBbContext();
@@ -32,7 +33,28 @@ export function DeleteThreadDialog({
   const project = projects.find((candidate) => candidate.id === thread.projectId);
   const projectName = project && !project.isPersonal ? project.name : "Personal";
   const title = threadDisplayTitle(thread);
-  const childCount = countDescendants(thread.id, threads);
+  // null while bb counts. bb also deletes archived descendants and lifecycle
+  // dependents, which the sidebar's thread list does not hold.
+  const [childCount, setChildCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const controller = new AbortController();
+    setChildCount(null);
+    countDeleteCascade(sdk, thread.id, controller.signal).then(
+      (count) => {
+        if (!controller.signal.aborted) setChildCount(count);
+      },
+      (error) => {
+        if (controller.signal.aborted) return;
+        toast.error("Could not check which threads would be deleted", {
+          description: error instanceof Error ? error.message : undefined,
+        });
+        onOpenChange(false);
+      },
+    );
+    return () => controller.abort();
+  }, [open, sdk, thread.id, onOpenChange]);
 
   const submit = async () => {
     if (submitting.current) return;
@@ -77,7 +99,7 @@ export function DeleteThreadDialog({
             </div>
           </div>
           <Dialog.Description className="mb-4 mt-3 text-xs leading-5 text-muted-foreground">
-            {childCount > 0
+            {childCount
               ? `This also deletes ${childCount === 1 ? "its 1 child thread" : `its ${childCount} child threads`}. This action cannot be undone.`
               : "This action cannot be undone."}
           </Dialog.Description>
@@ -93,7 +115,7 @@ export function DeleteThreadDialog({
             </Dialog.Close>
             <button
               type="button"
-              disabled={busy}
+              disabled={busy || childCount === null}
               onClick={() => void submit()}
               className="h-8 rounded-md bg-destructive px-3 text-xs font-medium text-destructive-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
             >
@@ -104,27 +126,4 @@ export function DeleteThreadDialog({
       </Dialog.Portal>
     </Dialog.Root>
   );
-}
-
-function countDescendants(rootId: string, threads: readonly PluginSidebarThread[]): number {
-  const childrenOf = new Map<string, string[]>();
-  for (const thread of threads) {
-    if (!thread.parentThreadId) continue;
-    const siblings = childrenOf.get(thread.parentThreadId);
-    if (siblings) siblings.push(thread.id);
-    else childrenOf.set(thread.parentThreadId, [thread.id]);
-  }
-  let count = 0;
-  const seen = new Set<string>([rootId]);
-  const pending = [rootId];
-  while (pending.length > 0) {
-    const current = pending.pop()!;
-    for (const childId of childrenOf.get(current) ?? []) {
-      if (seen.has(childId)) continue;
-      seen.add(childId);
-      count += 1;
-      pending.push(childId);
-    }
-  }
-  return count;
 }

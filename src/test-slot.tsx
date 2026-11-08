@@ -66,6 +66,9 @@ export function renderSlot<Props extends object>(
       unarchive: async () => ({ ok: true as const }),
       markRead: response,
       markUnread: response,
+      experimental_listCascade: async ({ threadIds }: { threadIds: readonly string[] }) => ({
+        threads: threadIds.map((threadId) => ({ threadId, cascadeThreadIds: [] })),
+      }),
       ...options.sdk?.threads,
     },
   };

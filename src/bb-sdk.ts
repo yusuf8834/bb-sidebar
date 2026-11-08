@@ -1,4 +1,4 @@
-import { experimental_useRpcKeyedQuery, experimental_useThreadActions } from "@get-bb/plugin-sdk/app";
+import { experimental_useRpcKeyedQuery, experimental_useThreadActions, type useSdk } from "@get-bb/plugin-sdk/app";
 import type { ComponentType } from "react";
 import type {
   PluginAppSlots,
@@ -51,6 +51,12 @@ export function registerThreadHeaderAction(
 export function useThreadActions(thread: PluginSidebarThread, options?: PluginThreadActionsOptions) {
   const environment = thread.environment?.id ? { id: thread.environment.id, path: thread.environment.path } : null;
   return experimental_useThreadActions({ ...thread, environment }, options);
+}
+
+/** How many other threads bb deletes with this one, archived ones and lifecycle dependents included. */
+export async function countDeleteCascade(sdk: ReturnType<typeof useSdk>, threadId: string, signal: AbortSignal) {
+  const { threads } = await sdk.threads.experimental_listCascade({ threadIds: [threadId], action: "delete", signal });
+  return threads[0]?.cascadeThreadIds.length ?? 0;
 }
 
 // The browser bundle stays free of zod, so the GitHub PR Status contract uses

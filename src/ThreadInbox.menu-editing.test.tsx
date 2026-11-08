@@ -201,7 +201,9 @@ describe("row context menu", () => {
     );
   });
 
-  it("confirms deletion with the thread title and project before deleting", async () => {
+  it("confirms deletion with the thread title, project and bb's delete cascade before deleting", async () => {
+    const cascade = deferred<{ threads: Array<{ threadId: string; cascadeThreadIds: string[] }> }>();
+    const listCascade = vi.fn((_input: unknown) => cascade.promise);
     const rendered = renderSlot(inbox, listProps, {
       sidebarThreads: {
         status: "ready",
@@ -214,6 +216,7 @@ describe("row context menu", () => {
       },
       providers: { status: "ready", providers: defaultProviders },
       rpc: { listLifecycle: () => ({ rows: [] }), deleteThread: () => ({ ok: true }) },
+      sdk: { threads: { experimental_listCascade: listCascade } },
     });
     fireEvent.contextMenu(await screen.findByText("Delete me"));
     const menu = await screen.findByRole("menu", { name: "Thread actions" });
@@ -222,7 +225,15 @@ describe("row context menu", () => {
     const dialog = await screen.findByRole("dialog", { name: "Delete thread?" });
     expect(within(dialog).getByText("Delete me")).toBeTruthy();
     expect(within(dialog).getByText("bb")).toBeTruthy();
-    expect(within(dialog).getByText(/its 2 child threads/)).toBeTruthy();
+    expect(listCascade.mock.calls[0]?.[0]).toMatchObject({ threadIds: ["thr_del"], action: "delete" });
+    expect(within(dialog).getByRole("button", { name: "Delete thread" }).hasAttribute("disabled")).toBe(true);
+    // The list holds two descendants; bb also deletes an archived child and a lifecycle dependent.
+    cascade.resolve({
+      threads: [
+        { threadId: "thr_del", cascadeThreadIds: ["thr_child", "thr_grandchild", "thr_archived", "thr_dependent"] },
+      ],
+    });
+    expect(await within(dialog).findByText(/its 4 child threads/)).toBeTruthy();
     expect(rendered.rpcCalls.filter((call) => call.method === "deleteThread")).toEqual([]);
     expect(rendered.threadActionCalls).not.toContainEqual(expect.objectContaining({ key: "bb--core/delete" }));
 
@@ -234,6 +245,30 @@ describe("row context menu", () => {
       }),
     );
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Delete thread?" })).toBeNull());
+  });
+
+  it("closes the delete confirmation when bb cannot count the threads it deletes", async () => {
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ id: "thr_del", title: "Delete me" })],
+        projects: [],
+      },
+      providers: { status: "ready", providers: defaultProviders },
+      rpc: { listLifecycle: () => ({ rows: [] }), deleteThread: () => ({ ok: true }) },
+      sdk: { threads: { experimental_listCascade: async () => Promise.reject(new Error("offline")) } },
+    });
+    fireEvent.contextMenu(await screen.findByText("Delete me"));
+    fireEvent.click(within(await screen.findByRole("menu", { name: "Thread actions" })).getByText("Delete"));
+
+    await waitFor(() =>
+      expect(toastMocks.error).toHaveBeenCalledWith("Could not check which threads would be deleted", {
+        className: "bb-sidebar-toast",
+        description: "offline",
+      }),
+    );
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Delete thread?" })).toBeNull());
+    expect(rendered.rpcCalls.filter((call) => call.method === "deleteThread")).toEqual([]);
   });
 
   it("cancelling the delete confirmation deletes nothing", async () => {

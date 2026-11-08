@@ -40,7 +40,7 @@ Use **Parent** in a thread's context menu to search threads in the same project,
 bb plugin install git:https://github.com/yusuf8834/bb-sidebar.git
 ```
 
-Requires bb 0.47.0 or later. Pull request badges and automatic settling read pull request status from bb's bundled GitHub PR Status plugin. While it is disabled, badges are hidden and threads with a workspace are not settled automatically.
+Requires bb 0.48.0 or later. Pull request badges and automatic settling read pull request status from bb's bundled GitHub PR Status plugin. While it is disabled, badges are hidden and threads with a workspace are not settled automatically.
 
 Then choose **BB Sidebar** under **Settings > Appearance > Sidebar**.
 
