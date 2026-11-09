@@ -123,10 +123,10 @@ describe("a child waiting on the user", () => {
     const parent = thread({ id: "parent" });
     const worker = thread({ id: "worker", parentThreadId: "parent", indicator: "runtime" });
     const asker = thread({ id: "asker", parentThreadId: "worker", indicator: "waiting-for-input" });
-    expect(isWorkingTree(parent, [worker], new Map())).toBe(true);
-    expect(isWorkingTree(parent, [worker], new Map([["worker", [asker]]]))).toBe(false);
+    expect(isWorkingTree(parent, [worker], new Map(), new Map())).toBe(true);
+    expect(isWorkingTree(parent, [worker], new Map([["worker", [asker]]]), new Map())).toBe(false);
     const busyParent = thread({ id: "busy", indicator: "runtime" });
     const busyAsker = thread({ id: "busy-asker", parentThreadId: "busy", hasPendingInteraction: true });
-    expect(isWorkingTree(busyParent, [busyAsker], new Map())).toBe(false);
+    expect(isWorkingTree(busyParent, [busyAsker], new Map(), new Map())).toBe(false);
   });
 });

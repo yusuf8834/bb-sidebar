@@ -87,3 +87,47 @@ describe("row statuses from other plugins", () => {
     expect(within(details).getByText(sandbox.label)).toBeDefined();
   });
 });
+
+describe("a running row status from another plugin", () => {
+  const ci = { icon: "Loading", label: "Waiting for CI", tone: "running" } as const;
+  const threads = [
+    thread({ id: "waiting", title: "Waiting work", indicator: "unread-success", isUnread: true }),
+    thread({ id: "sandboxed", title: "Sandboxed work" }),
+    thread({ id: "failed", title: "Failed work", indicator: "unread-error" }),
+    thread({ id: "tree", title: "Tree work" }),
+    thread({ id: "child", title: "Child work", parentThreadId: "tree" }),
+  ];
+  const statuses = { waiting: ci, sandboxed: sandbox, failed: ci, child: ci };
+
+  function renderWithStatuses(settings: Record<string, unknown>) {
+    renderSlot(inbox, listProps, {
+      sidebarThreads: { status: "ready", threads, projects },
+      sidebarRowStatuses: statuses,
+      rpc: {
+        getSidebarSettings: () => ({ ...defaultSidebarSettings, inactiveThreadsEnabled: false, ...settings }),
+        listLifecycle: () => ({ rows: [] }),
+      },
+    });
+  }
+
+  it("moves the thread, or its parent, to Working", async () => {
+    renderWithStatuses({ workingShelf: true });
+    const working = await screen.findByRole("region", { name: "Working" });
+    await waitFor(() => expect(within(working).getByText("Waiting work")).toBeDefined());
+    expect(within(working).getByText("Tree work")).toBeDefined();
+    // Another tone is not work, and a failure still needs the user.
+    const active = screen.getByRole("region", { name: "Active" });
+    expect(within(active).getByText("Sandboxed work")).toBeDefined();
+    expect(within(active).getByText("Failed work")).toBeDefined();
+  });
+
+  it("keeps the thread compact with Compact working threads", async () => {
+    renderWithStatuses({ threadDisplay: "compact-working" });
+    const isCompact = (title: string) => row(title).querySelector("[data-parent-card]")!.classList.contains("h-8");
+    await screen.findByRole("link", { name: /Waiting work/ });
+    await waitFor(() => expect(isCompact("Waiting work")).toBe(true));
+    expect(isCompact("Tree work")).toBe(true);
+    expect(isCompact("Sandboxed work")).toBe(false);
+    expect(isCompact("Failed work")).toBe(false);
+  });
+});

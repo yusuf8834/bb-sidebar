@@ -330,7 +330,7 @@ describe("parking threads", () => {
   it("counts live descendants despite unread success and keeps requests for input in Active", () => {
     const parent = thread({ id: "parent" });
     const liveChild = thread({ id: "child", parentThreadId: "parent", indicator: "unread-success", status: "active" });
-    expect(isWorkingTree(parent, [liveChild], new Map())).toBe(true);
+    expect(isWorkingTree(parent, [liveChild], new Map(), new Map())).toBe(true);
     const askingParent = thread({
       id: "asking",
       indicator: "waiting-for-input",
@@ -342,7 +342,7 @@ describe("parking threads", () => {
         goals: 0,
       },
     });
-    expect(isWorkingTree(askingParent, [], new Map())).toBe(false);
+    expect(isWorkingTree(askingParent, [], new Map(), new Map())).toBe(false);
   });
 
   it("keeps Unpin clickable on a parent compacted by child work", async () => {

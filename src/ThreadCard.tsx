@@ -25,7 +25,7 @@ import { STATUS_SLOT_CLASS, StatusOrTime } from "./StatusSlot";
 import { CompactStatusOrTime } from "./StatusGlyph";
 import { threadDisplayTitle } from "./inbox";
 import { InlineThreadTitle } from "./InlineThreadTitle";
-import { isWorkingTree } from "./working-tree";
+import { useIsWorkingTree } from "./useWorkingTree";
 import { ProjectFavicon, ProjectStripe } from "./ProjectFavicon";
 import { useProjectColor } from "./ProjectColors";
 import { OpenPortsIndicator } from "./OpenPorts";
@@ -188,8 +188,8 @@ export function ThreadCard({
   const holdParkActions = isSnoozeOpen || isSettling;
   const childListId = useId();
   // Keep busy trees compact until a failure, question, or wake needs attention.
-  const naturalCompact =
-    compactAlways || (compactWhenWorking && !isWoke && isWorkingTree(thread, childThreads, childrenByParent));
+  const isWorking = useIsWorkingTree(thread, childThreads, childrenByParent);
+  const naturalCompact = compactAlways || (compactWhenWorking && !isWoke && isWorking);
   const compact = isRenaming ? compactAtRenameStart.current : naturalCompact;
   const stripeView = compact ? "collapsed" : "full";
   const projectColor = useProjectColor(thread.projectId);

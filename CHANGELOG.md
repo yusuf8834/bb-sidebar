@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- **Running statuses from other plugins count as work.** A thread whose row another plugin marks with bb's running tone, such as one waiting on CI, moves to the Working shelf and stays compact with **Compact working threads**, as does a parent with such a child. Other tones change nothing, and a failure or a question still keeps the thread in Active.
+
 ## [0.3.9] - 2026-11-08
 
 ### Fixed

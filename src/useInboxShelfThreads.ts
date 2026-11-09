@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
+import { useSidebarThreadRowStatuses, type PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import type { LifecycleApi } from "./useLifecycle";
 import {
   filterByProjects,
@@ -38,6 +38,7 @@ export function useInboxShelfThreads({
   threads,
   workingShelfEnabled,
 }: InboxShelfThreadsOptions) {
+  const rowStatuses = useSidebarThreadRowStatuses();
   return useMemo(() => {
     const allVisible = visibleInboxThreads(threads);
     const scoped = filterByProjects(allVisible, scope);
@@ -83,7 +84,7 @@ export function useInboxShelfThreads({
       if (
         workingShelfEnabled &&
         !lifecycle.wokeFor(thread) &&
-        isWorkingTree(thread, childrenByParentId.get(thread.id) ?? [], childrenByParentId)
+        isWorkingTree(thread, childrenByParentId.get(thread.id) ?? [], childrenByParentId, rowStatuses)
       ) {
         working.push(thread);
       } else if (!askingParentIds.has(thread.id) && isInactiveThread(thread, now, inactiveAfterHours)) {
@@ -119,6 +120,7 @@ export function useInboxShelfThreads({
     lifecycle,
     now,
     renamingShelfLocks,
+    rowStatuses,
     scope,
     threads,
     workingShelfEnabled,

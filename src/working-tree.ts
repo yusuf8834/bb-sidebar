@@ -1,12 +1,13 @@
-import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
+import type { PluginSidebarThread, PluginSidebarThreadRowStatus } from "@get-bb/plugin-sdk/app";
 import { childStatusKind, childSubtree, threadAsksForInput } from "./child-status";
 import { isThreadWorking } from "./lifecycle";
 import { threadShortStatus } from "./StatusSlot";
 
 /**
  * Whether a thread, or anything under it, still has work running: its own
- * turn, its background agents, commands, workflows, and goals, and any
- * working descendant. The badge can prioritize unread success over a live
+ * turn, its background agents, commands, workflows, and goals, a running
+ * status another plugin set on its row (such as a CI run it waits on), and
+ * any working descendant. The badge can prioritize unread success over a live
  * turn, so inspect activity as well as its displayed status.
  *
  * The thread itself needing you, or failing, outranks its children's work:
@@ -20,6 +21,7 @@ export function isWorkingTree(
   thread: PluginSidebarThread,
   childThreads: readonly PluginSidebarThread[],
   childrenByParent: ReadonlyMap<string, readonly PluginSidebarThread[]>,
+  rowStatuses: ReadonlyMap<string, PluginSidebarThreadRowStatus>,
 ): boolean {
   if (
     thread.hasPendingInteraction ||
@@ -31,10 +33,12 @@ export function isWorkingTree(
   }
   const descendants = childSubtree(childThreads, childrenByParent);
   if (descendants.some(threadAsksForInput)) return false;
-  if (threadShortStatus(thread)?.showsDuration === true || isThreadWorking(thread)) return true;
+  const hasLiveWork = (candidate: PluginSidebarThread) =>
+    isThreadWorking(candidate) || rowStatuses.get(candidate.id)?.tone === "running";
+  if (threadShortStatus(thread)?.showsDuration === true || hasLiveWork(thread)) return true;
   return descendants.some(
     (child) =>
       childStatusKind(child) === "working" ||
-      (child.indicator !== "unread-error" && child.queuedWork !== "failed" && isThreadWorking(child)),
+      (child.indicator !== "unread-error" && child.queuedWork !== "failed" && hasLiveWork(child)),
   );
 }
