@@ -54,6 +54,9 @@ function ProjectMenu({
   const [busy, setBusy] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const submitting = useRef(false);
+  // Settings hides the sidebar: returning focus to the row would reopen its
+  // hover card against a hidden anchor, pinned to the window's top-left corner.
+  const leavingForSettings = useRef(false);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -109,8 +112,14 @@ function ProjectMenu({
 
   const items = (
     <>
-      <ContextMenu.Item asChild className={itemClass}>
-        <a href={`/projects/${encodeURIComponent(project.id)}/settings`}>Project settings</a>
+      <ContextMenu.Item
+        asChild
+        className={itemClass}
+        onSelect={() => {
+          leavingForSettings.current = true;
+        }}
+      >
+        <a href={project.settingsHref}>Project settings</a>
       </ContextMenu.Item>
       <ContextMenu.Separator className="my-1 h-px bg-border" />
       <ContextMenu.Item className={itemClass} onSelect={() => begin("rename")}>
@@ -133,7 +142,8 @@ function ProjectMenu({
         items,
         onOpenChange: setMenuOpen,
         onCloseAutoFocus: (event) => {
-          if (action) event.preventDefault();
+          if (action || leavingForSettings.current) event.preventDefault();
+          leavingForSettings.current = false;
         },
       })}
       <Dialog.Root
