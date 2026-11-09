@@ -164,6 +164,7 @@ describe("ThreadInbox", () => {
           title: "Alpha new",
           createdAt: 3,
           updatedAt: 10,
+          latestAttentionAt: 50,
         }),
         thread({
           id: "beta-new",
@@ -171,6 +172,7 @@ describe("ThreadInbox", () => {
           title: "Beta new",
           createdAt: 4,
           updatedAt: 30,
+          latestAttentionAt: 20,
         }),
         thread({
           id: "alpha-old",
@@ -178,6 +180,7 @@ describe("ThreadInbox", () => {
           title: "Alpha old",
           createdAt: 1,
           updatedAt: 40,
+          latestAttentionAt: 30,
         }),
         thread({
           id: "beta-old",
@@ -185,6 +188,7 @@ describe("ThreadInbox", () => {
           title: "Beta old",
           createdAt: 2,
           updatedAt: 20,
+          latestAttentionAt: 10,
         }),
       ],
       [
@@ -215,6 +219,7 @@ describe("ThreadInbox", () => {
     fireEvent.keyDown(sortMenu, { key: "Enter" });
     expect(screen.getByRole("radio", { name: "Manual order" })).toBeDefined();
     expect(screen.getByRole("radio", { name: "Recent activity" })).toBeDefined();
+    expect(screen.getByRole("radio", { name: "Waiting longest" })).toBeDefined();
     expect(screen.getByRole("radio", { name: "Date created" })).toBeDefined();
     expect(screen.getByRole("radio", { name: "Project" })).toBeDefined();
     fireEvent.click(screen.getByRole("radio", { name: "Recent activity" }), { detail: 1 });
@@ -234,6 +239,26 @@ describe("ThreadInbox", () => {
     fireEvent.keyDown(
       within(activeShelf).getByRole("button", {
         name: "Sort active threads: Recent activity",
+      }),
+      { key: "Enter" },
+    );
+    fireEvent.click(screen.getByRole("radio", { name: "Waiting longest" }), { detail: 1 });
+    // Oldest news first: Alpha old's later update, such as a read, does not lift it.
+    expect(
+      within(activeShelf)
+        .getAllByRole("listitem")
+        .map((row) => row.textContent),
+    ).toEqual([
+      expect.stringContaining("Beta old"),
+      expect.stringContaining("Beta new"),
+      expect.stringContaining("Alpha old"),
+      expect.stringContaining("Alpha new"),
+    ]);
+    expect(rowLinks(activeShelf).every((link) => link.getAttribute("aria-keyshortcuts") === null)).toBe(true);
+
+    fireEvent.keyDown(
+      within(activeShelf).getByRole("button", {
+        name: "Sort active threads: Waiting longest",
       }),
       { key: "Enter" },
     );

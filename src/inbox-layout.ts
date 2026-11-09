@@ -3,7 +3,7 @@ import type { ChildStatusKind } from "./child-status";
 import type { OrderUnit } from "./pinned-order";
 import { visibleInboxThreads } from "./inbox";
 
-export const ACTIVE_SORT_MODES = ["manual", "activity", "created", "project"] as const;
+export const ACTIVE_SORT_MODES = ["manual", "activity", "waiting", "created", "project"] as const;
 export type ActiveSortMode = (typeof ACTIVE_SORT_MODES)[number];
 
 export type ReorderMode = "thread" | "unit";
@@ -112,10 +112,26 @@ export function sameOrder(left: readonly string[], right: readonly string[]): bo
   return left.length === right.length && left.every((id, index) => id === right[index]);
 }
 
+/** Whether the mode orders Active by time, so the rows have no manual order to drag. */
+export function sortsActiveByTime(mode: ActiveSortMode): boolean {
+  return mode === "activity" || mode === "waiting" || mode === "created";
+}
+
 export function sortActiveThreads(
   threads: readonly PluginSidebarThread[],
   mode: ActiveSortMode,
 ): PluginSidebarThread[] {
+  if (mode === "waiting") {
+    // bb moves `latestAttentionAt` when a turn finishes, not when the thread is
+    // read, renamed, or pinned, so a thread joins the end once it has news and
+    // then holds its place until it has more.
+    return [...threads].sort(
+      (left, right) =>
+        left.latestAttentionAt - right.latestAttentionAt ||
+        left.createdAt - right.createdAt ||
+        left.id.localeCompare(right.id),
+    );
+  }
   if (mode !== "activity" && mode !== "created") return [...threads];
   const primaryKey = mode === "activity" ? "updatedAt" : "createdAt";
   return [...threads].sort(

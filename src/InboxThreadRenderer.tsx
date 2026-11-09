@@ -2,7 +2,7 @@ import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import { ThreadCard, type ThreadReorderControls } from "./ThreadCard";
 import { memo, useCallback } from "react";
 import { useInboxEnvironment, useInboxActions, useInboxActivity } from "./InboxContext";
-import type { ActiveSortMode } from "./inbox-layout";
+import { sortsActiveByTime, type ActiveSortMode } from "./inbox-layout";
 import { DEFAULT_SIDEBAR_SETTINGS } from "./sidebar-settings";
 
 type ActiveShelfKind = "pinned" | "inbox";
@@ -68,7 +68,7 @@ const InboxThread = memo(function InboxThread({
       reorder={
         !reorderable ||
         (shelf === "pinned" && thread.pinSortKey == null) ||
-        (shelf === "inbox" && (activeSortMode === "activity" || activeSortMode === "created"))
+        (shelf === "inbox" && sortsActiveByTime(activeSortMode))
           ? undefined
           : threadReorderControls(thread, shelf)
       }

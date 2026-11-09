@@ -24,6 +24,10 @@ test("Active sort arrow keys keep the picker open until Enter commits", async ({
   await expect(picker).toHaveAttribute("data-state", "open");
   await activity.press("ArrowDown");
   await expect(picker).toHaveAttribute("data-state", "open");
+  const waiting = picker.getByRole("radio", { name: "Waiting longest" });
+  await expect(waiting).toBeChecked();
+  await expect(waiting).toBeFocused();
+  await waiting.press("ArrowDown");
   const created = picker.getByRole("radio", { name: "Date created" });
   await expect(created).toBeChecked();
   await expect(created).toBeFocused();

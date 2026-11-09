@@ -10,7 +10,7 @@ A stable thread list for [bb](https://github.com/get-bb/bb). Threads stay where 
 
 ## Features
 
-- Manual ordering plus Recent activity, Date created, and Project sort modes
+- Manual ordering plus Recent activity, Waiting longest, Date created, and Project sort modes
 - Subtle project grouping for projects with multiple active threads
 - Optional worktree grouping in Project sort: threads that share a worktree get collapsible groups
 - Pinned, Active, Inactive, Snoozed, Parked, and Settled shelves
