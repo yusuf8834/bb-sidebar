@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **Project settings opens cleanly from the thread menu.** The item now links to bb's settings route, so bb's Home button leaves the settings page again instead of returning to it, and the thread's hover card no longer reopens in the window's top-left corner behind the settings page.
+
 ## [0.3.9] - 2026-11-08
 
 ### Fixed
