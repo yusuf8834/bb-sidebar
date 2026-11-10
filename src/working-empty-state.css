@@ -1,7 +1,11 @@
 /*
  * The little typist that fills Active while every thread is working: its head
- * bobs to the keys, it blinks now and then, the sprout on top sways, and the
- * typing bubble pulses. All of it holds still under reduced motion.
+ * bobs to the keys, it blinks, the sprout on top sways, and the typing bubble
+ * pulses, for about four seconds, then it rests. It stays on screen for as long
+ * as work runs, and an endless loop would keep Chromium redrawing the window at
+ * the display's refresh rate the whole time (see StatusGlyph). Every loop ends
+ * on the pose the drawing has at rest, so nothing jumps when it stops. All of it
+ * holds still under reduced motion.
  */
 
 .bb-sidebar-working-eye {
@@ -16,19 +20,19 @@
 
 @media (prefers-reduced-motion: no-preference) {
   .bb-sidebar-working-head {
-    animation: bb-sidebar-working-bob 0.9s ease-in-out infinite;
+    animation: bb-sidebar-working-bob 0.9s ease-in-out 4;
   }
 
   .bb-sidebar-working-eye {
-    animation: bb-sidebar-working-blink 4.2s ease-in-out infinite;
+    animation: bb-sidebar-working-blink 4.2s ease-in-out 1;
   }
 
   .bb-sidebar-working-sprout {
-    animation: bb-sidebar-working-sway 2.4s ease-in-out infinite;
+    animation: bb-sidebar-working-sway 2.4s ease-in-out 2;
   }
 
   .bb-sidebar-working-dot {
-    animation: bb-sidebar-working-dot 1.2s ease-in-out infinite;
+    animation: bb-sidebar-working-dot 1.2s ease-in-out 3;
   }
 
   .bb-sidebar-working-dot:nth-of-type(2) {
@@ -64,9 +68,12 @@
 @keyframes bb-sidebar-working-sway {
   0%,
   100% {
+    transform: rotate(0);
+  }
+  25% {
     transform: rotate(-8deg);
   }
-  50% {
+  75% {
     transform: rotate(8deg);
   }
 }

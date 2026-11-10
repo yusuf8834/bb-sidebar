@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- **The sidebar no longer keeps your Mac busy while threads work.** The working spinner, the activity glyphs for workflows, background agents and commands, plan mode and goals, and the "Working" shelf header now hold still, and the little typist in an empty Active plays for about four seconds and then rests. Any endless animation keeps Chromium redrawing bb's window at the display's refresh rate: on a 120 Hz MacBook Pro one 16px spinner kept bb and macOS's WindowServer near a full CPU core for as long as a thread worked, and a slower or stepped spin still cost about a third of that. The glyphs keep their shapes and colours, and "Working · 5m" still shows how long a thread has run. Short-lived loading spinners still turn, and now hold still under reduced motion too ([get-bb/bb#7233](https://github.com/get-bb/bb/issues/7233)).
 - **Project settings opens cleanly from the thread menu.** The item now links to bb's settings route, so bb's Home button leaves the settings page again instead of returning to it, and the thread's hover card no longer reopens in the window's top-left corner behind the settings page.
 
 ## [0.3.9] - 2026-11-08

@@ -225,7 +225,7 @@ function StopPortButton({ threadId, port, pid }: { threadId: string; port: numbe
     >
       <Icon
         name={state === "stopping" ? "Loading" : "StopCircle"}
-        className={cn("size-3", state === "stopping" && "animate-spin")}
+        className={cn("size-3", state === "stopping" && "animate-spin motion-reduce:animate-none")}
         aria-hidden
       />
       {confirming ? "Stop" : null}

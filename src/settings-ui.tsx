@@ -73,7 +73,7 @@ function SaveIndicator({ status }: { status: SaveStatus | undefined }) {
     >
       {shown === "saving" ? (
         <>
-          <Icon name="Loading" aria-hidden className="size-3 animate-spin" />
+          <Icon name="Loading" aria-hidden className="size-3 animate-spin motion-reduce:animate-none" />
           Saving…
         </>
       ) : shown === "saved" ? (

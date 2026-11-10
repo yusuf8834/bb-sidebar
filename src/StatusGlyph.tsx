@@ -17,6 +17,15 @@ import { useThreadLimit } from "./RateLimits";
  * the two lists sit in the same window, and a user who switches between them
  * should not have to learn a second vocabulary.
  *
+ * The shapes match; the motion does not, on purpose. bb spins the live-work
+ * glyph and shines the activity glyphs forever. In Chromium any running
+ * animation redraws the window at the display's refresh rate, and on a 120 Hz
+ * Mac that kept bb's renderer, GPU process and WindowServer near a full core
+ * for as long as a thread worked, however small the glyph. A slower spin or a
+ * stepped one still cost a third of that. So these glyphs hold still: the
+ * shape, the working tone and "Working · 5m" carry the state, and a spinner
+ * never said whether an agent was alive anyway. See get-bb/bb#7233.
+ *
  * An unrecognized indicator draws nothing: bb adds kinds over time, and a
  * plugin built today must not break on a kind shipped tomorrow.
  */
@@ -39,23 +48,17 @@ export function StatusGlyph({
     case "waiting-for-input":
       return <Icon name="CircleQuestion" aria-label={aria} className={cn(shared, statusToneClass(indicator))} />;
     case "runtime":
-      return (
-        <Icon
-          name="Loading"
-          aria-label={aria}
-          className={cn(shared, "animate-spin opacity-75", statusToneClass(indicator))}
-        />
-      );
+      return <Icon name="Loading" aria-label={aria} className={cn(shared, "opacity-75", statusToneClass(indicator))} />;
     case "workflow":
-      return <ShineIcon name="Workflow" label={aria} className={cn(shared, statusToneClass(indicator))} />;
+      return <ActivityIcon name="Workflow" label={aria} className={cn(shared, statusToneClass(indicator))} />;
     case "background-agent":
-      return <ShineIcon name="UserRoundPlus" label={aria} className={cn(shared, statusToneClass(indicator))} />;
+      return <ActivityIcon name="UserRoundPlus" label={aria} className={cn(shared, statusToneClass(indicator))} />;
     case "background-command":
-      return <ShineIcon name="Terminal" label={aria} className={cn(shared, statusToneClass(indicator))} />;
+      return <ActivityIcon name="Terminal" label={aria} className={cn(shared, statusToneClass(indicator))} />;
     case "plan-mode":
-      return <ShineIcon name="ListTodo" label={aria} className={cn(shared, statusToneClass(indicator))} />;
+      return <ActivityIcon name="ListTodo" label={aria} className={cn(shared, statusToneClass(indicator))} />;
     case "goal":
-      return <ShineIcon name="Target" label={aria} className={cn(shared, statusToneClass(indicator))} />;
+      return <ActivityIcon name="Target" label={aria} className={cn(shared, statusToneClass(indicator))} />;
     case "draft":
     case "working-draft":
       return <Icon name="Edit" aria-label={aria} className={cn(shared, statusToneClass(indicator))} />;
@@ -75,7 +78,7 @@ export function StatusGlyph({
   }
 }
 
-function ShineIcon({
+function ActivityIcon({
   name,
   label,
   className,
@@ -84,7 +87,7 @@ function ShineIcon({
   label: string | undefined;
   className: string;
 }) {
-  return <Icon name={name} aria-label={label} className={cn("animate-shine-icon opacity-75", className)} />;
+  return <Icon name={name} aria-label={label} className={cn("opacity-75", className)} />;
 }
 
 /**

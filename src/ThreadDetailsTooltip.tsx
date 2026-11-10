@@ -9,7 +9,7 @@ import { Icon, type IconName } from "./components/Icon";
 import { ProviderGlyph } from "./ProviderGlyph";
 import { StatusGlyph } from "./StatusGlyph";
 import { useThreadRowStatus, useThreadWithDraft } from "./StatusSlot";
-import { ThreadStatusGlyph } from "./bb-sdk";
+import { StillThreadStatusGlyph } from "./StillThreadStatusGlyph";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { projectIconUrl } from "./project-icons";
 import { OpenPortDetails } from "./OpenPorts";
@@ -151,7 +151,7 @@ export function ThreadDetailsTooltip({
           // Another plugin's row status, spelled out: the row only has room for its glyph.
           <div className="flex items-center gap-2">
             <span className="flex size-3.5 shrink-0 items-center justify-center">
-              <ThreadStatusGlyph indicator="none" rowStatus={rowStatus} size="compact" />
+              <StillThreadStatusGlyph indicator="none" rowStatus={rowStatus} size="compact" />
             </span>
             <span className="min-w-0 flex-1 truncate">{rowStatus.label}</span>
           </div>
