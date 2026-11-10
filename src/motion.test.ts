@@ -11,7 +11,8 @@ import { describe, expect, it } from "vitest";
  * near a full core on a 120 Hz Mac; slower or stepped motion still cost a
  * third of that (see StatusGlyph and get-bb/bb#7233). So a looping utility or
  * an `infinite` keyframe may only sit on a spinner for an operation that ends
- * in seconds, or on a hover, and each one is listed below with its reason.
+ * in seconds, on a hover, or on a pulse that holds still most of the time and
+ * is measured, and each one is listed below with its reason.
  * Anything new fails here until it is either made finite or listed.
  */
 
@@ -45,6 +46,11 @@ const ALLOWED: Record<string, { count: number; reason: string }> = {
   "src/RateLimitRecovery.tsx": { count: 1, reason: "spinner while a retry is in flight" },
   "src/OpenPorts.tsx": { count: 1, reason: "spinner while a port stops" },
   "src/settle-button.css": { count: 1, reason: "star shimmer only while the settle button is hovered or focused" },
+  "src/working-pulse.css": {
+    count: 1,
+    reason:
+      "the working glyph's T3-style pulse: long holds and stepped ramps, synced, measured at 2-4 points of a core",
+  },
 };
 
 function withoutComments(source: string): string {

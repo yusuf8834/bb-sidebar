@@ -1,4 +1,5 @@
 import type { PluginSidebarThreadIndicator } from "@get-bb/plugin-sdk";
+import type { AnimationEvent } from "react";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import { Icon } from "./components/Icon";
 import { cn } from "./lib/utils";
@@ -6,6 +7,7 @@ import { relativeTimeLabel } from "./relative-time";
 import { shortStatusLabel, statusToneClass, StatusOrTime, threadShortStatus, useThreadWithDraft } from "./StatusSlot";
 import { useWorkingSinceContext } from "./useWorkingSince";
 import { useThreadLimit } from "./RateLimits";
+import "./working-pulse.css";
 
 /**
  * This plugin's status glyphs, matching bb's own sidebar shape for shape: the
@@ -25,14 +27,30 @@ import { useThreadLimit } from "./RateLimits";
  * stepped one still cost a third of that, and a spinner held still reads as
  * frozen. So live work gets a pulse in a box, which says "running" without
  * promising motion, in the enclosed style of the circle-x and the
- * circle-question; the bare pulse stays the Active shelf's. The activity
- * glyphs keep their shapes and hold still too. The working tone and
+ * circle-question; the bare pulse stays the Active shelf's. It breathes the way
+ * T3 Code's status dot does, mostly holding still (see working-pulse.css),
+ * which costs a few points of a core instead of a full one. The activity
+ * glyphs keep their shapes and hold still. The working tone and
  * "Working · 5m" carry the rest, and a spinner never said whether an agent was
  * alive anyway. See get-bb/bb#7233.
  *
  * An unrecognized indicator draws nothing: bb adds kinds over time, and a
  * plugin built today must not break on a kind shipped tomorrow.
  */
+
+/**
+ * Pin a working pulse to the start of the document timeline, so every working
+ * glyph, however late it mounted, is at the same point of the cycle and they
+ * all change in the same frames.
+ */
+export function syncWorkingPulse(event: AnimationEvent<HTMLElement>) {
+  if (event.animationName !== "bb-sidebar-working-pulse") return;
+  for (const animation of event.currentTarget.getAnimations()) {
+    if ("animationName" in animation && animation.animationName === "bb-sidebar-working-pulse") {
+      animation.startTime = 0;
+    }
+  }
+}
 
 export function StatusGlyph({
   indicator,
@@ -52,7 +70,11 @@ export function StatusGlyph({
     case "waiting-for-input":
       return <Icon name="CircleQuestion" aria-label={aria} className={cn(shared, statusToneClass(indicator))} />;
     case "runtime":
-      return <Icon name="Working" aria-label={aria} className={cn(shared, statusToneClass(indicator))} />;
+      return (
+        <span className="bb-sidebar-working-pulse inline-flex shrink-0" onAnimationStart={syncWorkingPulse}>
+          <Icon name="Working" aria-label={aria} className={cn(shared, statusToneClass(indicator))} />
+        </span>
+      );
     case "workflow":
       return <ActivityIcon name="Workflow" label={aria} className={cn(shared, statusToneClass(indicator))} />;
     case "background-agent":
