@@ -73,7 +73,7 @@ function ThreadInboxContent({
   snapshot: ReturnType<typeof useSidebarThreads>;
 }) {
   const { status, threads, projects } = snapshot;
-  const workingSince = useWorkingSince(threads);
+  const workingSince = useWorkingSince(threads, status);
   const { providers } = useProviders();
   const navigate = useBbNavigate();
   const sidebarSettings = useSidebarSettings();
