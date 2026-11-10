@@ -26,6 +26,7 @@ export { default as PinIcon } from "@hugeicons/core-free-icons/PinIcon";
 export { default as PinOffIcon } from "@hugeicons/core-free-icons/PinOffIcon";
 export { default as PlugSocketIcon } from "@hugeicons/core-free-icons/PlugSocketIcon";
 export { default as Pulse01Icon } from "@hugeicons/core-free-icons/Pulse01Icon";
+export { default as PulseRectangle01Icon } from "@hugeicons/core-free-icons/PulseRectangle01Icon";
 export { default as Search01Icon } from "@hugeicons/core-free-icons/Search01Icon";
 export { default as StopCircleIcon } from "@hugeicons/core-free-icons/StopCircleIcon";
 export { default as Target02Icon } from "@hugeicons/core-free-icons/Target02Icon";

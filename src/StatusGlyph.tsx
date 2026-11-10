@@ -9,22 +9,26 @@ import { useThreadLimit } from "./RateLimits";
 
 /**
  * This plugin's status glyphs, matching bb's own sidebar shape for shape: the
- * red circle-x for a failure, the circle-question for a raised hand, the
- * spinner for live work, and a dot for a finished thread you have not read.
+ * red circle-x for a failure, the circle-question for a raised hand, and a dot
+ * for a finished thread you have not read.
  *
  * The SDK ships `indicator` as data and no status component on purpose, so a
  * replaced sidebar can choose its own look. This one deliberately does not:
  * the two lists sit in the same window, and a user who switches between them
  * should not have to learn a second vocabulary.
  *
- * The shapes match; the motion does not, on purpose. bb spins the live-work
- * glyph and shines the activity glyphs forever. In Chromium any running
+ * Live work is where this list departs from bb, on purpose. bb spins a
+ * spinner and shines the activity glyphs forever. In Chromium any running
  * animation redraws the window at the display's refresh rate, and on a 120 Hz
  * Mac that kept bb's renderer, GPU process and WindowServer near a full core
  * for as long as a thread worked, however small the glyph. A slower spin or a
- * stepped one still cost a third of that. So these glyphs hold still: the
- * shape, the working tone and "Working · 5m" carry the state, and a spinner
- * never said whether an agent was alive anyway. See get-bb/bb#7233.
+ * stepped one still cost a third of that, and a spinner held still reads as
+ * frozen. So live work gets a pulse in a box, which says "running" without
+ * promising motion, in the enclosed style of the circle-x and the
+ * circle-question; the bare pulse stays the Active shelf's. The activity
+ * glyphs keep their shapes and hold still too. The working tone and
+ * "Working · 5m" carry the rest, and a spinner never said whether an agent was
+ * alive anyway. See get-bb/bb#7233.
  *
  * An unrecognized indicator draws nothing: bb adds kinds over time, and a
  * plugin built today must not break on a kind shipped tomorrow.
@@ -48,7 +52,7 @@ export function StatusGlyph({
     case "waiting-for-input":
       return <Icon name="CircleQuestion" aria-label={aria} className={cn(shared, statusToneClass(indicator))} />;
     case "runtime":
-      return <Icon name="Loading" aria-label={aria} className={cn(shared, "opacity-75", statusToneClass(indicator))} />;
+      return <Icon name="Working" aria-label={aria} className={cn(shared, statusToneClass(indicator))} />;
     case "workflow":
       return <ActivityIcon name="Workflow" label={aria} className={cn(shared, statusToneClass(indicator))} />;
     case "background-agent":
