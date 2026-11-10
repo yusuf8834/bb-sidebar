@@ -20,6 +20,7 @@ A stable thread list for [bb](https://github.com/get-bb/bb). Threads stay where 
 - Automatic project icons with custom overrides
 - Expandable child-thread indicators with running and attention states, on shelf rows too
 - Live status, branch, pull request, and provider details, plus statuses set by other plugins
+- Command palette commands that snooze or unsnooze the thread in view
 - A `bb sidebar` command so agents can list, snooze, settle, park, resume, pin, and re-parent threads
 - Persistent provider-limit warnings with one-click scheduled Continue after reset and a cancel option
 - Workspace port discovery, hover-card details, and optional browser links

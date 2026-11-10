@@ -5,6 +5,7 @@
 ### Added
 
 - **Waiting longest** in the Active sort picker puts the thread whose news has waited longest at the top. A thread joins the end when its turn finishes and then keeps its place: reading, renaming, or pinning it does not move it, unlike Recent activity.
+- **Snooze from the command palette.** bb's command palette (Cmd+K, then Escape to leave thread search) lists "BB Sidebar: Snooze this thread" for 1 hour, 5 hours, this evening, tomorrow morning, and next week, plus "BB Sidebar: Unsnooze this thread". Each acts on the thread in view, with the same rules, toast, and Undo as the row menu. They use these fixed durations, not your configured snooze shortcuts. Settings → Keyboard can bind each one to a key.
 
 ### Changed
 

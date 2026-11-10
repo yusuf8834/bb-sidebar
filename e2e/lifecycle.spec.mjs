@@ -82,3 +82,41 @@ test("Clean preview shows zero resources and empty cleanup changes nothing", asy
     expect((await cli(["terminal", "list", "--thread", id])).sessions).toEqual([]);
   }
 });
+
+test("palette commands snooze and unsnooze the thread in view", async ({ page, request }) => {
+  const thread = fixture.threads[0];
+  const snoozedUntil = async () =>
+    (await rpc(request, "listLifecycle")).rows.find((row) => row.threadId === thread.id)?.snoozedUntil ?? null;
+  const runCommand = async (title) => {
+    await page.keyboard.press("ControlOrMeta+K");
+    // The palette opens on thread search; Escape returns to its commands.
+    await page.keyboard.press("Escape");
+    await page.keyboard.type(title);
+    await page.getByRole("option", { name: title }).click();
+  };
+
+  test.setTimeout(120_000);
+  await link(page, thread.title).click();
+  await expect(page).toHaveURL(new RegExp(thread.id));
+  // Opening a seeded thread may start its runtime, and a working thread cannot be snoozed.
+  const working = shelf(page, "Active")
+    .getByRole("listitem")
+    .filter({ has: page.getByRole("link", { name: new RegExp(`${thread.title}$`) }) })
+    .getByLabel("Thread working");
+  await expect(async () => {
+    if (await working.count()) await cli(["thread", "stop", thread.id]);
+    await expect(working).toHaveCount(0);
+    await runCommand("BB Sidebar: Snooze this thread for 1 hour");
+    await expect.poll(snoozedUntil, { timeout: 3_000 }).not.toBeNull();
+  }).toPass({ timeout: 60_000 });
+  await expand(page, "Snoozed");
+  await expect(link(page, thread.title, "Snoozed")).toBeVisible();
+  await expect(link(page, thread.title)).toHaveCount(0);
+  await expect.poll(snoozedUntil).toBeGreaterThan(Date.now() + 59 * 60_000);
+
+  await link(page, thread.title, "Snoozed").click();
+  await expect(page).toHaveURL(new RegExp(thread.id));
+  await runCommand("BB Sidebar: Unsnooze this thread");
+  await expect(link(page, thread.title)).toBeVisible();
+  await expect.poll(snoozedUntil).toBeNull();
+});
