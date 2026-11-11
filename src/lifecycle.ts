@@ -158,6 +158,27 @@ export function resolveShelf(
 }
 
 /**
+ * Whether a thread's queued message is the sidebar's own scheduled Continue,
+ * which its snooze is waiting for. That message does not count as queued
+ * work: the thread stays Snoozed until the Continue is sent. Any other queued
+ * work, or a Continue that failed, keeps the thread visible.
+ */
+export function waitsForScheduledContinue(
+  row: Pick<ThreadLifecycleRow, "snoozedUntil"> | undefined,
+  scheduled: { sendAt: number; failed: boolean } | null | undefined,
+  queuedWork: string,
+  now: number,
+): boolean {
+  return (
+    !!scheduled &&
+    scheduled.sendAt > now &&
+    !scheduled.failed &&
+    queuedWork !== "failed" &&
+    row?.snoozedUntil === scheduled.sendAt
+  );
+}
+
+/**
  * The shelf a thread's own sidebar row sits on.
  *
  * A pinned thread stays in Active unless the user filed it away explicitly:

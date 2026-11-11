@@ -176,8 +176,9 @@ export default async function plugin(bb: BbPluginApi) {
   ctx.bb.background.schedule("auto-settle", "*/5 * * * *", async () => {
     await policy.evaluatePolicies();
   });
-  ctx.bb.rpc.register(bbSidebarRpcContract, { ...handlers, ...createServerRateLimits(ctx, lifecycle) });
-  ctx.bb.cli.register(createServerCli(lifecycle, handlers));
+  const rateLimits = createServerRateLimits(ctx, lifecycle);
+  ctx.bb.rpc.register(bbSidebarRpcContract, { ...handlers, ...rateLimits });
+  ctx.bb.cli.register(createServerCli(lifecycle, handlers, rateLimits.getThreadLimits));
   // New or resumed child work reopens the ancestor path, keeping its existing
   // sidebar nesting reachable. Siblings retain their own settled state.
   ctx.bb.events.on("thread.created", async ({ thread }) => {

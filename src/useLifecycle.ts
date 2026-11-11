@@ -16,6 +16,7 @@ import {
   sidebarThreadSignals,
   type ThreadLifecycleRow,
   type ThreadShelf,
+  waitsForScheduledContinue,
 } from "./lifecycle";
 import { createCachedRpcState } from "./lib/cached-rpc-state";
 import { lifecycleRowsCodec } from "./lib/lifecycle-cache-codec";
@@ -175,15 +176,9 @@ export function useLifecycle(threads: readonly PluginSidebarThread[]): Lifecycle
     const signalsFor = (thread: PluginSidebarThread) => {
       const signals = sidebarThreadSignals(thread);
       const scheduled = recovery?.rows[thread.id]?.scheduled;
-      // This snooze waits for our own scheduled Continue; other queued work stays visible.
-      if (
-        scheduled &&
-        scheduled.sendAt > now &&
-        !scheduled.failed &&
-        thread.queuedWork !== "failed" &&
-        rows.get(thread.id)?.snoozedUntil === scheduled.sendAt
-      )
+      if (waitsForScheduledContinue(rows.get(thread.id), scheduled, thread.queuedWork, now)) {
         signals.hasQueuedWork = false;
+      }
       return askingParentIds.has(thread.id) ? { ...signals, hasPendingInteraction: true } : signals;
     };
     // One mutation per thread at a time. The write publishes on the realtime

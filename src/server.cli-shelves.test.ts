@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { makeThreadResponse } from "@get-bb/plugin-sdk/testing";
+import { makeQueueEntry, makeThreadResponse } from "@get-bb/plugin-sdk/testing";
 import plugin from "./server";
 import { createFakePluginHost, disposers, projectThread, projectsWith, type ProjectThread } from "./test-server";
 
@@ -13,7 +13,9 @@ interface Row {
   parkedAt?: number | null;
 }
 
-async function loadWith(threads: ProjectThread[], rows: Record<string, Row>) {
+type Queue = ReturnType<typeof makeQueueEntry>[];
+
+async function loadWith(threads: ProjectThread[], rows: Record<string, Row>, queues: Record<string, Queue> = {}) {
   const { bb, harness } = createFakePluginHost({
     pluginId: "bb-sidebar",
     sdk: {
@@ -21,6 +23,8 @@ async function loadWith(threads: ProjectThread[], rows: Record<string, Row>) {
       threads: {
         get: async ({ threadId }) => makeThreadResponse({ id: threadId }),
         unpin: async ({ threadId }) => makeThreadResponse({ id: threadId }),
+        queuedMessages: { list: async ({ threadId }) => queues[threadId] ?? [] },
+        events: { list: async () => [] },
       },
     },
   });
@@ -118,6 +122,26 @@ describe("bb sidebar list places children on their parent's shelf", () => {
       expect.objectContaining({ threadId: "parent", shelf: "snoozed", snoozedUntil: wake }),
       expect.objectContaining({ threadId: "child", shelf: "snoozed", snoozedUntil: wake }),
     ]);
+  });
+
+  it("keeps a snooze that waits on the sidebar's scheduled Continue on Snoozed", async () => {
+    const wake = Date.now() + HOUR_MS;
+    const continueAt = (sendAt: number, originPluginId = "bb-sidebar") =>
+      makeQueueEntry({ sendAt, originPluginId, content: [{ type: "text", text: "Continue", mentions: [] }] });
+    const threads = ["scheduled", "other-time", "someone-else"].map((id) =>
+      projectThread({ id, status: "error", queuedWork: "waiting", latestAttentionAt: 50 }),
+    );
+    const snoozed = { snoozedUntil: wake, snoozedAt: 60 };
+    const { shelves } = await loadWith(
+      threads,
+      { scheduled: snoozed, "other-time": snoozed, "someone-else": snoozed },
+      {
+        scheduled: [continueAt(wake)],
+        "other-time": [continueAt(wake + 1)],
+        "someone-else": [continueAt(wake, "another-plugin")],
+      },
+    );
+    expect(await shelves()).toEqual({ scheduled: "snoozed", "other-time": "active", "someone-else": "active" });
   });
 
   it("keeps a child on its own shelf when its parent is not in the list", async () => {
