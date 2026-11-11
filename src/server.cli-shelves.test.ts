@@ -144,6 +144,16 @@ describe("bb sidebar list places children on their parent's shelf", () => {
     expect(await shelves()).toEqual({ scheduled: "snoozed", "other-time": "active", "someone-else": "active" });
   });
 
+  it("lists a snoozed thread as Active when its limit lookup fails", async () => {
+    const wake = Date.now() + HOUR_MS;
+    const threads = [projectThread({ id: "waiting", status: "error", queuedWork: "waiting", latestAttentionAt: 50 })];
+    const { harness, shelves } = await loadWith(threads, { waiting: { snoozedUntil: wake, snoozedAt: 60 } });
+    harness.inspection.sdk.stub("threads.queuedMessages.list", async () => {
+      throw new Error("host unreachable");
+    });
+    expect(await shelves()).toEqual({ waiting: "active" });
+  });
+
   it("keeps a child on its own shelf when its parent is not in the list", async () => {
     const threads = [projectThread({ id: "orphan", parentThreadId: "archived-parent", latestAttentionAt: 40 })];
     const { shelves } = await loadWith(threads, { orphan: { settledAt: 100, settledOverride: "settled" } });
@@ -176,6 +186,16 @@ describe("bb sidebar list places children on their parent's shelf", () => {
 });
 
 describe("bb sidebar resume reads the shelf the sidebar shows", () => {
+  it("leaves a thread that woke on its own alone", async () => {
+    const threads = [projectThread({ id: "woke", latestAttentionAt: 50 })];
+    const { harness } = await loadWith(threads, { woke: { snoozedUntil: Date.now() - HOUR_MS, snoozedAt: 60 } });
+    expect(await harness.behavior.runCli(["resume", "--thread", "woke"])).toMatchObject({
+      stdout: "woke is already active\n",
+    });
+    // The row keeps the sidebar's Woke marker until the user dismisses it.
+    expect(await harness.behavior.callRpc("listLifecycle", {})).toMatchObject({ rows: [{ threadId: "woke" }] });
+  });
+
   it("names the parent instead of calling a child in a settled tree active", async () => {
     const { threads, rows } = legacySettledTree();
     const { harness, shelves } = await loadWith(threads, rows);
