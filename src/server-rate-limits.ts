@@ -11,8 +11,33 @@ export function createServerRateLimits({ bb }: ServerContext, lifecycle: ReturnT
   bb.onDispose(() => controller.abort());
   const locks = new Map<string, Promise<unknown>>();
   const changed = () => bb.realtime.publish(RATE_LIMITS_CHANNEL, {});
+  // Thread events arrive in bursts and every open sidebar refetches on each ping, so publish the first event at
+  // once and fold the rest of each one-second window into a single trailing ping.
+  let burst: ReturnType<typeof setTimeout> | undefined;
+  let trailing = false;
+  const closeBurst = () => {
+    burst = undefined;
+    if (!trailing || controller.signal.aborted) return;
+    trailing = false;
+    changed();
+    openBurst();
+  };
+  const openBurst = () => {
+    burst = setTimeout(closeBurst, 1000);
+    burst.unref();
+  };
+  const threadChanged = () => {
+    if (controller.signal.aborted) return;
+    if (burst) {
+      trailing = true;
+      return;
+    }
+    changed();
+    openBurst();
+  };
+  bb.onDispose(() => clearTimeout(burst));
   for (const event of ["thread.failed", "thread.active", "thread.idle", "thread.deleted"] as const) {
-    bb.events.on(event, changed);
+    bb.events.on(event, threadChanged);
   }
 
   async function scheduledContinue(threadId: string) {

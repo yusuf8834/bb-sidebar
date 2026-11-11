@@ -281,6 +281,37 @@ describe("scheduled Continue RPC", () => {
     expect(harness.inspection.realtimeSignals.some((signal) => signal.channel === RATE_LIMITS_CHANNEL)).toBe(true);
   });
 
+  it("coalesces thread-event bursts into one immediate and one trailing ping per second", async () => {
+    const { call, harness } = await setup();
+    const pings = () => harness.inspection.realtimeSignals.filter((signal) => signal.channel === RATE_LIMITS_CHANNEL);
+    const thread = makeThreadResponse({ id: "thr_other" });
+    const burst = async () => {
+      await harness.behavior.emitThreadEvent("thread.active", { thread });
+      await harness.behavior.emitThreadEvent("thread.failed", { thread, error: null });
+      await harness.behavior.emitThreadEvent("thread.idle", { thread, lastAssistantText: null });
+      await harness.behavior.emitThreadEvent("thread.deleted", { thread });
+    };
+    await burst();
+    expect(pings()).toHaveLength(1);
+    await call("scheduleLimitContinue", { threadId: "thr_1" });
+    expect(pings()).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(999);
+    expect(pings()).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(pings()).toHaveLength(3);
+    await burst();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(pings()).toHaveLength(4);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(pings()).toHaveLength(4);
+    await burst();
+    expect(pings()).toHaveLength(5);
+    await burst();
+    await harness.lifecycle.dispose();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(pings()).toHaveLength(5);
+  });
+
   it("files an existing schedule in Snoozed without sending again or resetting its wake history", async () => {
     const { call, setQueue, harness } = await setup();
     setQueue([
