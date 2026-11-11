@@ -209,7 +209,7 @@ it("marks only the owning thread without a count and clears its icon when the po
   expect(screen.getByRole("img", { name: label })).toBeTruthy();
   groups = [];
   await act(async () => {
-    await vi.advanceTimersByTimeAsync(10_000);
+    await vi.advanceTimersByTimeAsync(30_000);
   });
   expect(screen.queryByRole("img", { name: label })).toBeNull();
   cleanup();

@@ -12,6 +12,9 @@ const OpenPortsContext = createContext<ReadonlyMap<string, readonly OpenPort[]>>
 // Separate from the ports, so a consumer that only asks for a rescan never
 // rerenders when the list changes.
 const RefreshOpenPortsContext = createContext<() => void>(() => {});
+// getOpenPorts answers from a 30s server cache, so polling faster only
+// fetches the same snapshot again.
+const PORT_POLL_INTERVAL_MS = 30_000;
 
 function samePorts(left: ReadonlyMap<string, readonly OpenPort[]>, right: ReadonlyMap<string, readonly OpenPort[]>) {
   if (left.size !== right.size) return false;
@@ -55,7 +58,7 @@ export function OpenPortsProvider({ children }: { children: ReactNode }) {
         publish(new Map());
       } finally {
         inFlight = false;
-        if (!disposed && !isHidden()) timer = setTimeout(refresh, 10_000);
+        if (!disposed && !isHidden()) timer = setTimeout(refresh, PORT_POLL_INTERVAL_MS);
       }
     }
     function visibilityChanged() {

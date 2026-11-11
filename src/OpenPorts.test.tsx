@@ -35,7 +35,7 @@ async function show() {
   });
   return commits;
 }
-async function tick(ms = 10_000) {
+async function tick(ms = 30_000) {
   await act(async () => {
     await vi.advanceTimersByTimeAsync(ms);
   });
@@ -66,6 +66,19 @@ describe("port polling", () => {
     const failed = commits.mock.calls.length;
     await tick();
     expect(commits).toHaveBeenCalledTimes(failed);
+  });
+
+  it("polls every 30 seconds, matching the server's port cache", async () => {
+    await show();
+    expect(mocks.rpc.call).toHaveBeenCalledTimes(1);
+    await tick(29_999);
+    expect(mocks.rpc.call).toHaveBeenCalledTimes(1);
+    await tick(1);
+    expect(mocks.rpc.call).toHaveBeenCalledTimes(2);
+    await tick(29_999);
+    expect(mocks.rpc.call).toHaveBeenCalledTimes(2);
+    await tick(1);
+    expect(mocks.rpc.call).toHaveBeenCalledTimes(3);
   });
 
   it("skips hidden startup and polling, then refreshes immediately on return", async () => {
