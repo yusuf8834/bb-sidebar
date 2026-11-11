@@ -5,6 +5,11 @@ import {
   iconPathsForHref,
   normalizeProjectIconPath,
 } from "./project-icons";
+import {
+  manifestProjectIconPath,
+  PROJECT_ICON_SEARCH_QUERIES,
+  rankDiscoveredProjectIcons,
+} from "./project-icon-discovery";
 import { PROJECT_ICONS_CHANNEL } from "./contract";
 interface StoredProjectIconRow {
   project_id: string;
@@ -141,6 +146,29 @@ export function createServerProjectIcons(ctx: ServerContext) {
       : ctx.bb.sdk.projects.fileContent({ projectId, path });
   };
 
+  const listProjectFiles = async (projectId: string, environmentId: string | null, query: string) => {
+    const request = { projectId, query, limit: "100" };
+    if (environmentId) return ctx.bb.sdk.projects.files({ ...request, environmentId });
+    const hostId = await defaultProjectHostId(projectId);
+    return hostId ? ctx.bb.sdk.projects.files({ ...request, hostId }) : ctx.bb.sdk.projects.files(request);
+  };
+
+  const readManifestIconPath = async (projectId: string, environmentId: string | null): Promise<string | null> => {
+    try {
+      return manifestProjectIconPath(await readProjectFile(projectId, environmentId, "package.json"));
+    } catch (error) {
+      if (isMissingFileError(error)) return null;
+      throw error;
+    }
+  };
+
+  const searchProjectIcons = async (projectId: string, environmentId: string | null): Promise<string[]> => {
+    const results = await Promise.all(
+      PROJECT_ICON_SEARCH_QUERIES.map((query) => listProjectFiles(projectId, environmentId, query)),
+    );
+    return rankDiscoveredProjectIcons(results.flatMap((result) => result.files.map((file) => file.path)));
+  };
+
   const tryProjectIcon = async (
     projectId: string,
     environmentId: string | null,
@@ -188,9 +216,15 @@ export function createServerProjectIcons(ctx: ServerContext) {
     const candidates: string[] = [];
     const customPath = readProjectIconOverride(projectId);
     if (customPath) candidates.push(customPath);
-    candidates.push(...PROJECT_ICON_CANDIDATES);
     let icon: ResolvedProjectIcon | null = null;
     let unavailable = false;
+    try {
+      const manifestPath = await readManifestIconPath(projectId, environmentId);
+      if (manifestPath) candidates.push(manifestPath);
+    } catch {
+      unavailable = true;
+    }
+    candidates.push(...PROJECT_ICON_CANDIDATES);
     for (const candidate of new Set(candidates)) {
       try {
         icon = await tryProjectIcon(projectId, environmentId, candidate);
@@ -218,6 +252,22 @@ export function createServerProjectIcons(ctx: ServerContext) {
           // Each source file is optional.
           if (!isMissingFileError(error)) unavailable = true;
         }
+      }
+    }
+    if (!icon) {
+      try {
+        for (const path of await searchProjectIcons(projectId, environmentId)) {
+          if (candidates.includes(path)) continue;
+          try {
+            icon = await tryProjectIcon(projectId, environmentId, path);
+          } catch {
+            unavailable = true;
+            continue;
+          }
+          if (icon) break;
+        }
+      } catch {
+        unavailable = true;
       }
     }
     if (!icon && unavailable) {
