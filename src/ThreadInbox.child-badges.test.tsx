@@ -107,7 +107,7 @@ describe("ThreadInbox", () => {
     });
     expect(badge.getAttribute("data-child-status")).toBe("working");
     expect(badge.className).toContain("bg-[color:var(--bb-sidebar-badge-working-bg)]");
-    expect(badge.querySelector('[data-icon="Loading"]')).not.toBeNull();
+    expect(badge.querySelector('[data-icon="Working"]')).not.toBeNull();
     expect(screen.getByRole("list", { name: "Child threads" })).toBeDefined();
     expect(screen.getByText("Working child")).toBeDefined();
   });
@@ -139,7 +139,7 @@ describe("ThreadInbox", () => {
     expect(badge.getAttribute("data-child-status")).toBe("needs-you");
     expect(badge.className).toContain("bg-[color:var(--bb-sidebar-badge-needs-you-bg)]");
     expect(badge.querySelector('[data-icon="CircleQuestion"]')).not.toBeNull();
-    expect(badge.querySelector('[data-icon="Loading"]')).toBeNull();
+    expect(badge.querySelector('[data-icon="Working"]')).toBeNull();
   });
 
   it("keeps every child with a status visible while collapsed, and folds read ones", () => {

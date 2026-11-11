@@ -1,0 +1,34 @@
+/*
+ * The working glyph's pulse, borrowed from T3 Code (pingdotgg/t3code#3978):
+ * a two-second cycle that holds at full strength, steps down to half in six
+ * quick jumps, holds again, and steps back. Chromium only draws a frame when
+ * the value changes, so the long holds cost nothing and the ramps cost a few
+ * frames; on a 120 Hz Mac it measured 2-4 points of a core above a glyph that
+ * never moves, where a spin cost a full core (see StatusGlyph). It animates
+ * opacity on an HTML wrapper, which the compositor can run, never the SVG.
+ * Every pulse is pinned to one timeline (syncWorkingPulse), so several working
+ * rows change in the same frames instead of each adding its own. It holds
+ * still under reduced motion.
+ */
+
+@media (prefers-reduced-motion: no-preference) {
+  .bb-sidebar-working-pulse {
+    animation: bb-sidebar-working-pulse 2s infinite;
+  }
+}
+
+@keyframes bb-sidebar-working-pulse {
+  0%,
+  40% {
+    opacity: 1;
+    animation-timing-function: steps(6);
+  }
+  50%,
+  90% {
+    opacity: 0.5;
+    animation-timing-function: steps(6);
+  }
+  100% {
+    opacity: 1;
+  }
+}

@@ -1,0 +1,15 @@
+/*
+ * bb's own status glyph, drawn here for another plugin's row status, pulses and
+ * shines forever. Any running animation keeps Chromium redrawing the window at
+ * the display's refresh rate (see StatusGlyph), so inside this plugin the glyph
+ * holds still, the way bb already draws it under [aria-hidden]: same shape and
+ * colour, no motion and no shine mask. Unlayered and !important, because these
+ * rules have to outrank bb's own stylesheet, not just Tailwind's utilities.
+ */
+.bb-sidebar-still,
+.bb-sidebar-still * {
+  animation: none !important;
+  -webkit-mask-image: none !important;
+  mask-image: none !important;
+  will-change: auto !important;
+}

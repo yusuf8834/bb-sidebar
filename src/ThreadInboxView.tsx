@@ -195,8 +195,7 @@ export function ThreadInboxView({
                 {working.threads.length > 0 ? (
                   <CollapsibleShelf
                     label="Working"
-                    icon="Loading"
-                    animateIcon
+                    icon="Working"
                     count={working.threads.length}
                     expanded={expandedShelves.working}
                     onToggle={() =>

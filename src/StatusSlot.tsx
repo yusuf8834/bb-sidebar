@@ -5,7 +5,7 @@ import {
   type PluginSidebarThreadIndicator,
   type PluginSidebarThreadRowStatus,
 } from "@get-bb/plugin-sdk/app";
-import { ThreadStatusGlyph } from "./bb-sdk";
+import { StillThreadStatusGlyph } from "./StillThreadStatusGlyph";
 import { useMemo } from "react";
 import { isWorkingIndicator } from "./child-status";
 import { cn } from "./lib/utils";
@@ -61,7 +61,7 @@ export function StatusOrTime({
     // bb's glyph for another plugin's status, in place of the label; the age stays.
     return (
       <span className="flex items-center gap-1">
-        <ThreadStatusGlyph indicator="none" rowStatus={rowStatus} size="compact" />
+        <StillThreadStatusGlyph indicator="none" rowStatus={rowStatus} size="compact" />
         <span className="tabular-nums text-2xs text-muted-foreground">{relativeTimeLabel(thread.updatedAt, now)}</span>
       </span>
     );

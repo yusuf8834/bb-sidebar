@@ -19,12 +19,23 @@ export function useWorkingSinceContext(): WorkingSince {
   return useContext(WorkingSinceContext);
 }
 
-/** Track when each thread in the list started its current run of work. */
-export function useWorkingSince(threads: readonly PluginSidebarThread[]): WorkingSince {
+/**
+ * Track when each thread in the list started its current run of work.
+ *
+ * Only a loaded list is evidence that a thread stopped: while bb is still
+ * loading, or after a failed load, the list is empty or stale, and
+ * reconciling against it would clear every stamp, so a reload would restart
+ * every "Working · 5m" from zero.
+ */
+export function useWorkingSince(
+  threads: readonly PluginSidebarThread[],
+  status: "error" | "loading" | "ready",
+): WorkingSince {
   const [workingSince, setWorkingSince] = useState<WorkingSince>(readWorkingSince);
   useEffect(() => {
+    if (status !== "ready") return;
     setWorkingSince((previous) => reconcileWorkingSince(previous, threads, Date.now()));
-  }, [threads]);
+  }, [threads, status]);
   useEffect(() => {
     if (workingSince === EMPTY_WORKING_SINCE) return;
     writeWorkingSince(workingSince);

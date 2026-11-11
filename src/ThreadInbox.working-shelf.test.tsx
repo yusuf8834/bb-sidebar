@@ -247,8 +247,8 @@ describe("parking threads", () => {
       await waitFor(() => expect(card("Busy work").classList.contains("h-8")).toBe(compactWorkingThreads));
       expect(card("Asking work").classList.contains("h-8")).toBe(false);
       expect(card("Idle work").classList.contains("h-8")).toBe(false);
-      // The folded row keeps bb's spinner and the full label for screen readers.
-      expect(card("Busy work").querySelector('[data-icon="Loading"]') !== null).toBe(compactWorkingThreads);
+      // The folded row keeps the working glyph and the full label for screen readers.
+      expect(card("Busy work").querySelector('[data-icon="Working"]') !== null).toBe(compactWorkingThreads);
       expect(within(card("Busy work") as HTMLElement).getByText("Working")).toBeDefined();
     },
   );
