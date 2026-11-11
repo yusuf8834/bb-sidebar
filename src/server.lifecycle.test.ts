@@ -298,6 +298,23 @@ describe("lifecycle RPC", () => {
     await expect(harness.behavior.callRpc("listLifecycle", {})).resolves.toEqual({ rows: [] });
   });
 
+  it("forgets a deleted thread's pull request scan", async () => {
+    const harness = await loadPlugin();
+    const message = { seq: 1, type: "item/completed", data: { item: { type: "agentMessage", text: "done" } } };
+    harness.inspection.sdk.stub("threads.events.list", async () => [message]);
+    const reads = () => harness.inspection.sdk.callsTo("threads.events.list") as Array<[{ afterSeq?: string }]>;
+    await harness.behavior.callRpc("getThreadPullRequests", { threadId: "thr_1" });
+    await harness.behavior.callRpc("getThreadPullRequests", { threadId: "thr_1" });
+    expect(reads().at(-1)?.[0].afterSeq).toBe("1");
+
+    await harness.behavior.emitThreadEvent("thread.deleted", {
+      thread: makeThreadResponse({ id: "thr_1" }),
+    });
+
+    await harness.behavior.callRpc("getThreadPullRequests", { threadId: "thr_1" });
+    expect(reads().at(-1)?.[0].afterSeq).toBeUndefined();
+  });
+
   it("removes a deleted thread from the saved inbox order", async () => {
     const harness = await loadPlugin();
     await harness.behavior.callRpc("reorderInbox", {

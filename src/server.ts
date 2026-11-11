@@ -200,6 +200,7 @@ export default async function plugin(bb: BbPluginApi) {
   // thread reusing the id, and stale rows accumulate otherwise.
   ctx.bb.events.on("thread.deleted", ({ thread }) => {
     clear(thread.id);
+    threadPullRequests.forgetThread(thread.id);
     const removed = ctx.db.prepare(`DELETE FROM inbox_order WHERE thread_id = ?`).run(thread.id);
     if (removed.changes > 0) {
       ctx.bb.realtime.publish(INBOX_ORDER_CHANNEL, {});

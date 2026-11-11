@@ -25,7 +25,7 @@ export function createThreadPullRequests(bb: BbPluginApi) {
   // Merged and closed PRs never change; open ones are rechecked after a minute.
   const statuses = new Map<string, { value: ThreadPullRequest; expiresAt: number }>();
 
-  async function scan(threadId: string): Promise<string[]> {
+  async function scan(threadId: string) {
     const previous = scans.get(threadId) ?? { afterSeq: null, urls: [] };
     const urls = new Set(previous.urls);
     let afterSeq = previous.afterSeq;
@@ -42,17 +42,22 @@ export function createThreadPullRequests(bb: BbPluginApi) {
       if (page.length) afterSeq = page[page.length - 1]!.seq;
       if (page.length < EVENT_PAGE_SIZE) break;
     }
-    const next = { afterSeq, urls: [...urls] };
-    scans.set(threadId, next);
-    return next.urls;
+    return { afterSeq, urls: [...urls] };
   }
 
   function createdUrls(threadId: string): Promise<string[]> {
-    let pending = pendingScans.get(threadId);
-    if (!pending) {
-      pending = scan(threadId).finally(() => pendingScans.delete(threadId));
-      pendingScans.set(threadId, pending);
-    }
+    const existing = pendingScans.get(threadId);
+    if (existing) return existing;
+    // forgetThread drops a pending scan, so only the current one may write.
+    const pending: Promise<string[]> = scan(threadId)
+      .then((next) => {
+        if (pendingScans.get(threadId) === pending) scans.set(threadId, next);
+        return next.urls;
+      })
+      .finally(() => {
+        if (pendingScans.get(threadId) === pending) pendingScans.delete(threadId);
+      });
+    pendingScans.set(threadId, pending);
     return pending;
   }
 
@@ -71,6 +76,8 @@ export function createThreadPullRequests(bb: BbPluginApi) {
         signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20_000)]),
       },
     );
+    // A thread deleted during the lookup must not leave statuses behind.
+    if (!scans.has(threadId)) return;
     const checkedAt = Date.now();
     for (const pullRequest of pullRequests) {
       statuses.set(pullRequest.url, {
@@ -82,6 +89,13 @@ export function createThreadPullRequests(bb: BbPluginApi) {
   }
 
   return {
+    /** Drops a deleted thread's scan and the statuses no other thread uses. */
+    forgetThread(threadId: string) {
+      scans.delete(threadId);
+      pendingScans.delete(threadId);
+      const referenced = new Set([...scans.values()].flatMap((entry) => entry.urls));
+      for (const url of statuses.keys()) if (!referenced.has(url)) statuses.delete(url);
+    },
     async getThreadPullRequests({ threadId }: { threadId: string }) {
       const urls = await createdUrls(threadId);
       try {
