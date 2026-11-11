@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFakePluginHost, makeThreadResponse } from "@get-bb/plugin-sdk/testing";
 import { AUTO_TITLE_RECOVERY_MIGRATION, createAutoTitleRecovery } from "./auto-title";
-import { createTitleRegenerator } from "./regenerate-title";
+import { createTitleRegenerator, PermanentTitleError } from "./regenerate-title";
 
 const disposers: Array<() => Promise<void>> = [];
 beforeEach(() => vi.useFakeTimers());
@@ -59,6 +59,11 @@ function setup(useRealGenerator = false) {
       off = true;
     },
     active: () => harness.behavior.emitThreadEvent("thread.active", { thread }),
+    attempt: async () => {
+      await harness.behavior.emitThreadEvent("thread.active", { thread });
+      await vi.advanceTimersByTimeAsync(10_000);
+    },
+    claims: () => db.prepare("SELECT thread_id FROM title_recovery_attempts").all(),
     idle: () => harness.behavior.emitThreadEvent("thread.idle", { thread, lastAssistantText: null }),
   };
 }
@@ -114,14 +119,105 @@ describe("automatic title recovery", () => {
     },
   );
 
-  it("does not keep retrying after a failed generation", async () => {
+  it("retries a transient failure on later thread events, at most three attempts in total", async () => {
     const state = setup();
     state.regenerate.mockRejectedValue(new Error("Timed out"));
-    await state.active();
-    await vi.advanceTimersByTimeAsync(10_000);
+    await state.attempt();
+    expect(state.regenerate).toHaveBeenCalledTimes(1);
+    expect(state.claims()).toEqual([]);
     await state.idle();
     await vi.advanceTimersByTimeAsync(10_000);
+    expect(state.regenerate).toHaveBeenCalledTimes(2);
+    for (let i = 0; i < 4; i++) await state.attempt();
+    expect(state.regenerate).toHaveBeenCalledTimes(3);
+    expect(state.claims()).toEqual([{ thread_id: "target" }]);
+  });
+
+  it("keeps the claim after a transient failure is followed by success", async () => {
+    const state = setup();
+    state.regenerate.mockRejectedValueOnce(new Error("Cloud timeout"));
+    await state.attempt();
+    await state.attempt();
+    await state.attempt();
+    expect(state.regenerate).toHaveBeenCalledTimes(2);
+    expect(state.claims()).toEqual([{ thread_id: "target" }]);
+  });
+
+  it("stops after one permanent failure", async () => {
+    const state = setup();
+    state.regenerate.mockRejectedValue(new PermanentTitleError("This thread has no user-message text"));
+    await state.attempt();
+    await state.attempt();
     expect(state.regenerate).toHaveBeenCalledTimes(1);
+    expect(state.claims()).toEqual([{ thread_id: "target" }]);
+  });
+
+  it("starts a fresh attempt budget after a thread is deleted", async () => {
+    const state = setup();
+    state.regenerate.mockRejectedValue(new Error("Timed out"));
+    await state.attempt();
+    await state.attempt();
+    await state.harness.behavior.emitThreadEvent("thread.deleted", { thread: makeThreadResponse({ id: "target" }) });
+    for (let i = 0; i < 4; i++) await state.attempt();
+    expect(state.regenerate).toHaveBeenCalledTimes(5);
+  });
+
+  it("spawns at most three Codex helpers for a thread whose helper always times out", async () => {
+    const state = setupCodex();
+    state.sdk.stub("threads.wait", async () => {
+      throw new Error("Timed out waiting for the thread");
+    });
+    for (let i = 0; i < 5; i++) await state.attempt();
+    expect(state.sdk.callsTo("threads.spawn")).toHaveLength(3);
+    expect(state.sdk.callsTo("threads.delete")).toHaveLength(3);
+    expect(state.claims()).toEqual([{ thread_id: "target" }]);
+  });
+
+  it("keeps the claim when a reload aborts an attempt in flight", async () => {
+    const state = setupCodex();
+    state.sdk.stub("threads.wait", async ({ signal }: { signal: AbortSignal }) => {
+      await new Promise((_, reject) => signal.addEventListener("abort", () => reject(signal.reason)));
+    });
+    await state.attempt();
+    expect(state.sdk.callsTo("threads.spawn")).toHaveLength(1);
+    let db!: ReturnType<typeof state.bb.storage.database>;
+    const replacement = await state.harness.lifecycle.reload((bb) => {
+      db = bb.storage.database();
+      createAutoTitleRecovery(bb, state.regenerate);
+    });
+    disposers.push(() => replacement.harness.lifecycle.dispose());
+    expect(db.prepare("SELECT thread_id FROM title_recovery_attempts").all()).toEqual([{ thread_id: "target" }]);
+    await replacement.harness.behavior.emitThreadEvent("thread.active", {
+      thread: makeThreadResponse({ id: "target", title: null, visibility: "visible" }),
+    });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(state.regenerate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { mode: "service", attempts: 1 },
+    { mode: "automatic", attempts: 3 },
+  ])("treats an unsupported $mode title service as permanent only when selected", async ({ mode, attempts }) => {
+    const state = setupCodex();
+    const custom = {
+      id: "custom",
+      pluginId: "custom-ai",
+      displayName: "Custom AI",
+      tasks: ["thread-title"],
+      status: { ready: true },
+      automaticRank: 1,
+    };
+    const signingIn = { ...custom, id: "bb", pluginId: "bb-ai", status: { ready: false, message: "Signing in" } };
+    state.sdk.stub("system.aiServices", async () => ({
+      selections: {
+        "thread-title":
+          mode === "service" ? { mode, pluginId: "custom-ai", serviceId: "custom" } : { mode: "automatic" },
+      },
+      services: [custom, { ...signingIn, automaticRank: 0 }],
+    }));
+    for (let i = 0; i < 4; i++) await state.attempt();
+    expect(state.sdk.callsTo("threads.timeline")).toHaveLength(attempts);
+    expect(state.harness.logEntries.at(-1)?.message).toContain("does not support Custom AI yet");
   });
 
   it("cancels pending work and removes the attempt when a thread is deleted", async () => {

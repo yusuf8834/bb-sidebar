@@ -1,25 +1,45 @@
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
-import type { createTitleRegenerator } from "./regenerate-title";
+import { type createTitleRegenerator, PermanentTitleError } from "./regenerate-title";
 
 // Give BB's native title request time to settle before recovery. BB also skips
 // first prompts shorter than five words, which still need a sidebar title.
 const RECOVERY_DELAY_MS = 10_000;
 const MAX_CONCURRENT_RECOVERIES = 2;
+// Attempts per thread, including the first. Codex attempts spawn a paid helper.
+const MAX_RECOVERY_ATTEMPTS = 3;
 
 export const AUTO_TITLE_RECOVERY_MIGRATION = `CREATE TABLE IF NOT EXISTS title_recovery_attempts (
   thread_id TEXT PRIMARY KEY
 )`;
 
-/** Recover a missing title once, without tying naming to sidebar mounts. */
+/**
+ * Recover a missing title without tying naming to sidebar mounts. A transient
+ * failure releases the claim so a later thread event can try again; a permanent
+ * failure, or the last allowed attempt, keeps it. Failure counts live in memory.
+ */
 export function createAutoTitleRecovery(bb: BbPluginApi, regenerateTitle: ReturnType<typeof createTitleRegenerator>) {
   const db = bb.storage.database();
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
   const queued = new Set<string>();
   const running = new Set<string>();
   const deleted = new Set<string>();
+  const failures = new Map<string, number>();
   let disposed = false;
   const attempted = db.prepare("SELECT 1 FROM title_recovery_attempts WHERE thread_id = ?");
   const claim = db.prepare("INSERT OR IGNORE INTO title_recovery_attempts (thread_id) VALUES (?)");
+  const release = db.prepare("DELETE FROM title_recovery_attempts WHERE thread_id = ?");
+
+  function recordFailure(threadId: string, error: unknown) {
+    // A disposed plugin keeps its claim; thread.deleted already removed it.
+    if (disposed || deleted.has(threadId)) return;
+    const count = (failures.get(threadId) ?? 0) + 1;
+    if (error instanceof PermanentTitleError || count >= MAX_RECOVERY_ATTEMPTS) {
+      failures.delete(threadId);
+      return;
+    }
+    failures.set(threadId, count);
+    release.run(threadId);
+  }
 
   async function recover(threadId: string) {
     try {
@@ -35,7 +55,13 @@ export function createAutoTitleRecovery(bb: BbPluginApi, regenerateTitle: Return
       const { selections } = await bb.sdk.system.aiServices();
       if (disposed || deleted.has(threadId) || selections["thread-title"].mode === "off") return;
       if (claim.run(threadId).changes === 0) return;
-      await regenerateTitle(threadId, { onlyIfUntitled: true });
+      try {
+        await regenerateTitle(threadId, { onlyIfUntitled: true });
+        failures.delete(threadId);
+      } catch (error) {
+        recordFailure(threadId, error);
+        throw error;
+      }
     } catch (error) {
       if (!disposed)
         bb.log.info(
@@ -86,12 +112,14 @@ export function createAutoTitleRecovery(bb: BbPluginApi, regenerateTitle: Return
     clearTimeout(timers.get(thread.id));
     timers.delete(thread.id);
     queued.delete(thread.id);
-    db.prepare("DELETE FROM title_recovery_attempts WHERE thread_id = ?").run(thread.id);
+    failures.delete(thread.id);
+    release.run(thread.id);
   });
   bb.onDispose(() => {
     disposed = true;
     for (const timer of timers.values()) clearTimeout(timer);
     timers.clear();
     queued.clear();
+    failures.clear();
   });
 }

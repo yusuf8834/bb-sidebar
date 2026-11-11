@@ -7,6 +7,9 @@ type Row = Timeline["rows"][number];
 const MESSAGE_LIMIT = 3;
 const MESSAGE_CHAR_LIMIT = 8_000;
 
+/** A failure that retrying the same thread cannot fix; the message stays user-facing. */
+export class PermanentTitleError extends Error {}
+
 interface TitleGenerationOptions {
   onlyIfUntitled?: boolean;
 }
@@ -161,14 +164,16 @@ export function createTitleRegenerator(bb: BbPluginApi) {
 
   async function generate(threadId: string, options: TitleGenerationOptions) {
     const original = await bb.sdk.threads.get({ threadId });
-    if (options.onlyIfUntitled && original.title !== null) throw new Error("The thread already has a title");
+    if (options.onlyIfUntitled && original.title !== null)
+      throw new PermanentTitleError("The thread already has a title");
     if (
       options.onlyIfUntitled &&
       (original.visibility !== "visible" || original.archivedAt !== null || original.deletedAt !== null)
     )
-      throw new Error("The thread is no longer available for automatic naming");
+      throw new PermanentTitleError("The thread is no longer available for automatic naming");
     const messages = await lastUserMessages(bb, threadId);
-    if (!messages.some(Boolean)) throw new Error("This thread has no user-message text to generate a title from");
+    if (!messages.some(Boolean))
+      throw new PermanentTitleError("This thread has no user-message text to generate a title from");
     const { selections, services } = await bb.sdk.system.aiServices({ signal: controller.signal });
     const selection = selections["thread-title"];
     if (selection.mode === "off") throw new Error("Thread titles are turned off in Settings → AI services");
@@ -191,7 +196,9 @@ export function createTitleRegenerator(bb: BbPluginApi) {
         } else if (service.pluginId === "provider-codex" && service.id === "codex") {
           title = await generateCodex(original, messages);
         } else {
-          throw new Error(`Sidebar title regeneration does not support ${service.displayName} yet`);
+          // Automatic mode may still succeed with another candidate on a later try.
+          const Failure = selection.mode === "automatic" ? Error : PermanentTitleError;
+          throw new Failure(`Sidebar title regeneration does not support ${service.displayName} yet`);
         }
         break;
       } catch (error) {
@@ -213,9 +220,9 @@ export function createTitleRegenerator(bb: BbPluginApi) {
     }
     const current = await bb.sdk.threads.get({ threadId });
     if (current.title !== original.title)
-      throw new Error("The title changed while generating. Your newer title was kept.");
+      throw new PermanentTitleError("The title changed while generating. Your newer title was kept.");
     if (options.onlyIfUntitled && (current.archivedAt !== null || current.deletedAt !== null))
-      throw new Error("The thread is no longer available for automatic naming");
+      throw new PermanentTitleError("The thread is no longer available for automatic naming");
     await bb.sdk.threads.update({ threadId, title });
     return { title };
   }
