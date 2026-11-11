@@ -10,6 +10,7 @@ import { AUTO_TITLE_RECOVERY_MIGRATION, createAutoTitleRecovery } from "./auto-t
 import { createServerSettings, INSTALL_DEFAULTS_MIGRATIONS } from "./server-settings";
 import { createServerLifecycle, LIFECYCLE_BACKFILLS_MIGRATION } from "./server-lifecycle";
 import { createServerProjectIcons } from "./server-project-icons";
+import { PROJECT_ICON_MISSING_HEADER } from "./project-icons";
 import { createServerProjectColors } from "./server-project-colors";
 import { createServerProjectManagement } from "./server-project-management";
 import { createServerSettleCleanup } from "./server-settle-cleanup";
@@ -158,7 +159,9 @@ export default async function plugin(bb: BbPluginApi) {
     } catch {
       return context.body(null, 503, { "cache-control": "no-store" });
     }
-    if (!icon) return context.body(null, 404, { "cache-control": "no-store" });
+    // Marked so the app can tell "this project has no icon" from a 404 bb
+    // answers while the plugin is still loading (see ProjectFavicon).
+    if (!icon) return context.body(null, 404, { "cache-control": "no-store", [PROJECT_ICON_MISSING_HEADER]: "1" });
     const body =
       icon.contentEncoding === "base64" ? Uint8Array.from(Buffer.from(icon.content, "base64")).buffer : icon.content;
     return new Response(body, {
