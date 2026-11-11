@@ -2,6 +2,8 @@ import type { PluginSidebarThreadIndicator } from "@get-bb/plugin-sdk";
 import type { AnimationEvent } from "react";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import { Icon } from "./components/Icon";
+import { unhandledIndicator } from "./child-status";
+import { StillThreadStatusGlyph } from "./StillThreadStatusGlyph";
 import { cn } from "./lib/utils";
 import { relativeTimeLabel } from "./relative-time";
 import { shortStatusLabel, statusToneClass, StatusOrTime, threadShortStatus, useThreadWithDraft } from "./StatusSlot";
@@ -34,8 +36,9 @@ import "./working-pulse.css";
  * "Working · 5m" carry the rest, and a spinner never said whether an agent was
  * alive anyway. See get-bb/bb#7233.
  *
- * An unrecognized indicator draws nothing: bb adds kinds over time, and a
- * plugin built today must not break on a kind shipped tomorrow.
+ * An indicator this sidebar has no shape for, such as a kind bb ships after
+ * this build, is drawn with bb's own glyph, held still: bb adds kinds over
+ * time, and users must not lose a status bb would show them.
  */
 
 /**
@@ -97,11 +100,39 @@ export function StatusGlyph({
           <span className="size-[5px] rounded-full bg-current" />
         </span>
       );
+    case "queued-failed":
+    case "queued-waiting":
+      // bb's own glyphs: the sidebar has no shape of its own for a queued send.
+      return <HostIndicatorGlyph indicator={indicator} label={aria} className={shared} />;
     case "none":
       return null;
     default:
-      return null;
+      return <HostIndicatorGlyph indicator={unhandledIndicator(indicator)} label={aria} className={shared} />;
   }
+}
+
+/**
+ * bb's glyph for an indicator this sidebar does not draw itself, held still
+ * like every other glyph here and sized to the same box.
+ */
+function HostIndicatorGlyph({
+  indicator,
+  label,
+  className,
+}: {
+  indicator: PluginSidebarThreadIndicator;
+  label: string | undefined;
+  className: string;
+}) {
+  return (
+    <span
+      aria-label={label}
+      role={label ? "img" : undefined}
+      className={cn("inline-flex items-center justify-center [&_svg]:size-full", className)}
+    >
+      <StillThreadStatusGlyph indicator={indicator} size="compact" />
+    </span>
+  );
 }
 
 function ActivityIcon({
