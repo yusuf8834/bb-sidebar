@@ -1,5 +1,8 @@
 const PROJECT_ICON_ROUTE = "/api/v1/plugins/bb-sidebar/http/project-icon";
 
+/** Set on the icon route's 404 when the project has no icon, as opposed to a route bb has not loaded yet. */
+export const PROJECT_ICON_MISSING_HEADER = "x-bb-sidebar-icon-missing";
+
 export const PROJECT_ICON_EXTENSIONS = [".svg", ".png", ".ico", ".jpg", ".jpeg", ".gif", ".avif", ".webp"] as const;
 
 // Mirrors T3 Code's useful, framework-agnostic candidates. The root icon

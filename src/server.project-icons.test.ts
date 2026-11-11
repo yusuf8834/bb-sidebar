@@ -231,6 +231,8 @@ describe("project icons", () => {
 
     const response = await harness.behavior.fetchHttp("GET", "/project-icon?projectId=proj_1");
     expect(response.status).toBe(404);
+    // The app waits an hour before asking again only when the 404 carries this mark.
+    expect(response.headers.get("x-bb-sidebar-icon-missing")).toBe("1");
   });
 
   it("does not cache a failed icon read as a missing icon", async () => {
@@ -260,6 +262,7 @@ describe("project icons", () => {
     const failed = await harness.behavior.fetchHttp("GET", "/project-icon?projectId=proj_1");
     expect(failed.status).toBe(503);
     expect(failed.headers.get("cache-control")).toBe("no-store");
+    expect(failed.headers.get("x-bb-sidebar-icon-missing")).toBeNull();
 
     hostReady = true;
     const recovered = await harness.behavior.fetchHttp("GET", "/project-icon?projectId=proj_1");
