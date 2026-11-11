@@ -146,18 +146,18 @@ describe("sidebar settings", () => {
     };
     const row = (title: string) => screen.getByText(title).closest("li")!;
     await waitFor(() => expect(row("Compact card").querySelector(".h-8")).not.toBeNull());
-    for (const display of ["all", "full", "grouped"]) {
+    for (const display of ["all", "full", "grouped", "none"]) {
       settings = { ...settings, projectColorDisplay: display };
       await rendered.emitRealtime("sidebar-settings", {});
       await waitFor(() => {
-        assertColor(group, true);
-        assertColor(row("Full card"), display !== "grouped");
+        assertColor(group, display !== "none");
+        assertColor(row("Full card"), display === "all" || display === "full");
         assertColor(row("Compact card"), display === "all");
         assertColor(row("Settled row"), display === "all");
       });
       expect(within(group).getByRole("list").querySelector("[data-project-stripe]")).toBeNull();
       fireEvent.click(within(group).getByRole("button", { name: "group (2)" }));
-      assertColor(group, display !== "full");
+      assertColor(group, display === "all" || display === "grouped");
       fireEvent.click(within(group).getByRole("button", { name: "group (2)" }));
     }
     fireEvent.keyDown(screen.getByRole("button", { name: /Sort active threads/ }), { key: "Enter" });
@@ -215,7 +215,7 @@ describe("sidebar settings", () => {
       within(colorDisplay)
         .getAllByRole("option")
         .map((option) => option.textContent),
-    ).toEqual(["Full and collapsed mode", "Full mode only", "Grouped projects only"]);
+    ).toEqual(["Full and collapsed mode", "Full mode only", "Grouped projects only", "No stripes"]);
     fireEvent.change(colorDisplay, { target: { value: "grouped" } });
     await act(async () => vi.advanceTimersByTimeAsync(500));
     expect(saved).toMatchObject({ projectColorsEnabled: true, projectColorDisplay: "grouped" });

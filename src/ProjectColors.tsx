@@ -72,7 +72,7 @@ export function useProjectColor(projectId: string | undefined) {
 export function useProjectStripeColor(projectId: string, view: ProjectStripeView = "full") {
   const context = useContext(ProjectColorsContext);
   const color = useProjectColor(projectId);
-  if (!context) return undefined;
+  if (!context || context.display === "none") return undefined;
   if (context.display === "full" && (view === "collapsed" || view === "group-collapsed")) return undefined;
   if (context.display === "grouped" && view !== "group-full" && view !== "group-collapsed") return undefined;
   return color;

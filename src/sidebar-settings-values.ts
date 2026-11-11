@@ -12,7 +12,7 @@ export type ChildThreadIconStyle = (typeof CHILD_THREAD_ICON_STYLES)[number];
 export const THREAD_DISPLAYS = ["full", "compact-working", "compact-all"] as const;
 export type ThreadDisplay = (typeof THREAD_DISPLAYS)[number];
 
-export const PROJECT_COLOR_DISPLAYS = ["all", "full", "grouped"] as const;
+export const PROJECT_COLOR_DISPLAYS = ["all", "full", "grouped", "none"] as const;
 export type ProjectColorDisplay = (typeof PROJECT_COLOR_DISPLAYS)[number];
 
 export interface ChildThreadSort {

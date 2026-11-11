@@ -16,7 +16,7 @@ A stable thread list for [bb](https://github.com/get-bb/bb). Threads stay where 
 - Pinned, Active, Inactive, Snoozed, Parked, and Settled shelves
 - Full cards, compact working threads, or compact all threads, with options to keep pinned or woken threads full
 - Searchable multi-project filtering, remembered per window across reloads
-- Optional project colors with per-project color selection. Names stay colored in every mode; show stripes in full and collapsed mode, full mode only, or grouped projects only
+- Optional project colors with per-project color selection. Names stay colored in every mode; show stripes in full and collapsed mode, full mode only, grouped projects only, or not at all
 - Automatic project icons with custom overrides
 - Expandable child-thread indicators with running and attention states, on shelf rows too
 - Live status, branch, pull request, and provider details, plus statuses set by other plugins

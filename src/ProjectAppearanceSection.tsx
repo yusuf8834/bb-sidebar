@@ -13,6 +13,7 @@ const PROJECT_COLOR_DISPLAY_LABELS: Record<ProjectColorDisplay, string> = {
   all: "Full and collapsed mode",
   full: "Full mode only",
   grouped: "Grouped projects only",
+  none: "No stripes",
 };
 
 export function ProjectAppearanceSection({ draft, update, status }: SettingsDraftSectionProps) {
@@ -33,7 +34,7 @@ export function ProjectAppearanceSection({ draft, update, status }: SettingsDraf
           <div className="border-l-2 border-border">
             <SettingRow
               title="Show stripes in"
-              description="Full mode includes cards and expanded groups. Grouped projects means combined blocks when sorting by Project."
+              description="Full mode includes cards and expanded groups. Grouped projects means combined blocks when sorting by Project. No stripes keeps the names colored without a stripe."
               control={
                 <SettingsSelect
                   aria-label="Show project stripes in"

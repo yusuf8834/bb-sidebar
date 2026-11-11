@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Project colors without stripes.** "Show stripes in" under Project appearance has a new choice, "No stripes": project names stay colored, but no stripe is drawn on cards, rows or grouped projects.
+
 ### Fixed
 
 - **`bb sidebar list` puts a child thread on its parent's shelf, as the sidebar does.** The sidebar draws a child inside its parent's row, so a settled or snoozed parent takes its children with it, but `list` read each child's own row and could call one Active that the sidebar showed under Settled or Snoozed. This happened to children of a snoozed parent, since snoozing writes only the parent's row, and to children of trees settled before Settle covered whole trees. `list` now places every thread by the same rule as the sidebar, across projects before `--state`, the project filter and paging apply, and gives a child of a snoozed parent the parent's wake time. It also follows three more of the sidebar's rules: a pinned thread is Active unless you settled, snoozed or parked it yourself, a child's question brings its whole tree back to Active, and a thread snoozed until its scheduled Continue stays Snoozed even though bb counts that Continue as a queued message. `resume` on a child whose parent carries it now names that parent instead of reporting the child as already active.
