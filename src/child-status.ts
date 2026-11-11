@@ -20,6 +20,45 @@ interface ChildStatusSummary {
   dominant: ChildStatusKind | null;
 }
 
+/**
+ * Every indicator this sidebar draws itself. bb adds kinds faster than the
+ * plugin ships: a kind missing here is drawn with bb's own glyph and label
+ * (see StatusGlyph and StatusOrTime), so users never lose a status bb shows.
+ * A test fails the build when the pinned SDK names a kind this list lacks.
+ */
+export const KNOWN_INDICATORS = [
+  "background-agent",
+  "background-command",
+  "draft",
+  "goal",
+  "none",
+  "plan-mode",
+  "queued-failed",
+  "queued-waiting",
+  "runtime",
+  "unread-error",
+  "unread-success",
+  "waiting-for-input",
+  "workflow",
+  "working-draft",
+] as const satisfies readonly PluginSidebarThreadIndicator[];
+
+const knownIndicators: ReadonlySet<string> = new Set(KNOWN_INDICATORS);
+
+/** Whether this sidebar has its own glyph and wording for the indicator. */
+export function isKnownIndicator(indicator: PluginSidebarThreadIndicator): boolean {
+  return knownIndicators.has(indicator);
+}
+
+/**
+ * The `default` branch of a switch over every indicator. Its `never`
+ * parameter fails typecheck when a new SDK kind has no case; at runtime it
+ * hands back the unknown kind, which callers pass to bb to draw.
+ */
+export function unhandledIndicator(indicator: never): PluginSidebarThreadIndicator {
+  return indicator;
+}
+
 export function isWorkingIndicator(indicator: PluginSidebarThreadIndicator): boolean {
   switch (indicator) {
     case "runtime":
@@ -30,7 +69,16 @@ export function isWorkingIndicator(indicator: PluginSidebarThreadIndicator): boo
     case "goal":
     case "working-draft":
       return true;
+    case "draft":
+    case "none":
+    case "queued-failed":
+    case "queued-waiting":
+    case "unread-error":
+    case "unread-success":
+    case "waiting-for-input":
+      return false;
     default:
+      unhandledIndicator(indicator);
       return false;
   }
 }

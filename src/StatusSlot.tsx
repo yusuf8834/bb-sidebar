@@ -7,7 +7,7 @@ import {
 } from "@get-bb/plugin-sdk/app";
 import { StillThreadStatusGlyph } from "./StillThreadStatusGlyph";
 import { useMemo } from "react";
-import { isWorkingIndicator } from "./child-status";
+import { isKnownIndicator, isWorkingIndicator, unhandledIndicator } from "./child-status";
 import { cn } from "./lib/utils";
 import { relativeTimeLabel } from "./relative-time";
 import { useWorkingSinceContext } from "./useWorkingSince";
@@ -67,6 +67,21 @@ export function StatusOrTime({
     );
   }
   const status = threadShortStatus(thread);
+  if (status === null && !isKnownIndicator(thread.indicator)) {
+    // A kind bb added after this build: bb's glyph and label, then the age.
+    return (
+      <span className="flex items-center gap-1">
+        <span
+          role={thread.indicatorLabel ? "img" : undefined}
+          aria-label={thread.indicatorLabel ?? undefined}
+          className="inline-flex"
+        >
+          <StillThreadStatusGlyph indicator={thread.indicator} size="compact" />
+        </span>
+        <span className="tabular-nums text-2xs text-muted-foreground">{relativeTimeLabel(thread.updatedAt, now)}</span>
+      </span>
+    );
+  }
   if (status !== null) {
     const label = shortStatusLabel(status, workingSince.get(thread.id), now);
     return (
@@ -181,19 +196,27 @@ function shortStatus(indicator: PluginSidebarThreadIndicator, indicatorLabel: st
       return { label: "Draft", className, showsDuration: false };
     case "working-draft":
       return { label: "Drafting", className, showsDuration: true };
+    case "queued-failed":
+    case "queued-waiting":
+      // Worded from `queuedWork` in threadShortStatus, which also covers a
+      // queued send bb ranks below another indicator.
+      return null;
     case "none":
       return null;
     default:
+      // A kind bb added after this build; StatusOrTime draws bb's glyph for it.
+      unhandledIndicator(indicator);
       return null;
   }
 }
 
 /**
  * A pending user interaction outranks any concurrently reported runtime, and a
- * message that failed to send outranks the rest: bb paints no indicator for
- * either queued state, so a row would otherwise look idle or merely busy.
- * A waiting message only shows on an otherwise quiet row; a running turn
- * already says more.
+ * message that failed to send outranks the rest. bb ranks its queued
+ * indicators below live work, and a waiting message below an unread result
+ * too, so this reads `queuedWork` itself rather than wait for the indicator;
+ * a row would otherwise look idle or merely busy. A waiting message only
+ * shows on an otherwise quiet row; a running turn already says more.
  */
 export function threadShortStatus(thread: PluginSidebarThread): ShortStatus | null {
   if (thread.hasPendingInteraction) {
@@ -258,9 +281,14 @@ export function statusToneClass(indicator: PluginSidebarThreadIndicator): string
       return "text-[color:var(--bb-sidebar-tone-working)]";
     case "draft":
     case "working-draft":
+    case "queued-waiting":
       return "text-[color:var(--bb-sidebar-tone-draft)]";
+    case "queued-failed":
+      return "text-[color:var(--bb-sidebar-tone-error)]";
     case "none":
+      return "text-muted-foreground";
     default:
+      unhandledIndicator(indicator);
       return "text-muted-foreground";
   }
 }

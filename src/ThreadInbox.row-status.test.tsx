@@ -87,3 +87,24 @@ describe("row statuses from other plugins", () => {
     expect(within(details).getByText(sandbox.label)).toBeDefined();
   });
 });
+
+describe("indicators bb adds after this build", () => {
+  it.each(["full", "compact-all"])("draws bb's glyph and label, then the age (%s)", async (display) => {
+    renderWithStatus(
+      [
+        thread({
+          id: "future",
+          title: "Future work",
+          indicator: "future-kind" as PluginSidebarThread["indicator"],
+          indicatorLabel: "Thread is doing something new",
+        }),
+      ],
+      [],
+      { threadDisplay: display },
+    );
+    await screen.findByRole("link", { name: /Future work/ });
+    const status = within(row("Future work")).getByRole("img", { name: "Thread is doing something new" });
+    expect(status.querySelector('[data-thread-status-glyph="future-kind"]')).not.toBeNull();
+    expect(status.querySelector(".bb-sidebar-still")).not.toBeNull();
+  });
+});
