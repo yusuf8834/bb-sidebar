@@ -177,20 +177,40 @@ describe("release lifecycle safety", () => {
   it("loads hidden nodes beyond the first page and refuses busy subtrees", async () => {
     const threads = [
       projectThread({ id: "root" }),
-      ...Array.from({ length: 100 }, (_, i) => projectThread({ id: `other${i}` })),
+      // A full first page of 500, so both hidden nodes arrive on the second.
+      ...Array.from({ length: 499 }, (_, i) => projectThread({ id: `other${i}` })),
       projectThread({ id: "hidden", parentThreadId: "root", visibility: "hidden", queuedWork: "failed" }),
       projectThread({ id: "grandchild", parentThreadId: "hidden", status: "active" }),
     ];
+    const byId = (id: string) => threads.find((thread) => thread.id === id)!;
     const h = await host(threads);
     await expect(h.behavior.callRpc("settle", { threadId: "root" })).rejects.toThrow("Cannot settle");
     expect(await h.behavior.callRpc("listLifecycle", {})).toEqual({ rows: [] });
     expect(h.inspection.sdk.callsTo("threads.stop")).toEqual([]);
-    threads[101]!.queuedWork = "none";
+    byId("hidden").queuedWork = "none";
     await expect(h.behavior.callRpc("settle", { threadId: "root" })).rejects.toThrow("Cannot settle");
-    threads[102]!.status = "idle";
+    byId("grandchild").status = "idle";
     await h.behavior.callRpc("settle", { threadId: "root" });
     const result = (await h.behavior.callRpc("listLifecycle", {})) as LifecycleListResult;
     expect(result.rows.map((r) => r.threadId).sort()).toEqual(["grandchild", "hidden", "root"]);
+  });
+
+  it("pages the full thread list 500 at a time", async () => {
+    const threads = [
+      projectThread({ id: "root" }),
+      ...Array.from({ length: 500 }, (_, i) => projectThread({ id: `other${i}` })),
+      projectThread({ id: "hidden", parentThreadId: "root", visibility: "hidden" }),
+    ];
+    const h = await host(threads);
+    await h.behavior.callRpc("settle", { threadId: "root" });
+    const reads = h.inspection.sdk.callsTo("threads.list") as Array<[{ threadIds?: string[] }]>;
+    const pages = reads.filter(([args]) => !args?.threadIds).map(([args]) => args);
+    expect(pages.slice(0, 2)).toEqual([
+      { archived: false, includeHidden: true, limit: 500, offset: 0 },
+      { archived: false, includeHidden: true, limit: 500, offset: 500 },
+    ]);
+    const result = (await h.behavior.callRpc("listLifecycle", {})) as LifecycleListResult;
+    expect(result.rows.map((r) => r.threadId).sort()).toEqual(["hidden", "root"]);
   });
 
   it.each([false, true])(

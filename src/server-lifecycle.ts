@@ -241,7 +241,8 @@ export function createServerLifecycle(ctx: ServerContext) {
       );
     }
     const byId = new Map<string, Awaited<ReturnType<typeof ctx.bb.sdk.threads.list>>[number]>();
-    const limit = 100;
+    // Same page size as port discovery; bb sets no upper bound on this list.
+    const limit = 500;
     for (let offset = 0; ; offset += limit) {
       const page = await ctx.bb.sdk.threads.list({ archived: false, includeHidden: true, limit, offset });
       for (const thread of page) {
