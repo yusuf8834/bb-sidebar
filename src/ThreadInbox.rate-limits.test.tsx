@@ -42,6 +42,7 @@ function mount({
   cancel,
   snoozed = false,
   overrides = {},
+  limits,
 }: {
   display?: string;
   child?: boolean;
@@ -50,6 +51,7 @@ function mount({
   cancel?: () => Promise<void>;
   snoozed?: boolean;
   overrides?: Partial<PluginSidebarThread>;
+  limits?: () => Promise<ThreadLimitState>;
 } = {}) {
   let state = initial;
   const scheduleCall = vi.fn(async () => {
@@ -86,7 +88,7 @@ function mount({
           ? [{ threadId: "limited", snoozedUntil: scheduled.scheduled!.sendAt, snoozedAt: Date.now(), settledAt: null }]
           : [],
       }),
-      getThreadLimits: () => ({ limited: state }),
+      getThreadLimits: limits ? async () => ({ limited: await limits() }) : () => ({ limited: state }),
       scheduleLimitContinue: scheduleCall,
       cancelLimitContinue: cancelCall,
       settle: settleCall,
@@ -260,6 +262,32 @@ describe("sidebar rate-limit recovery", () => {
     await waitFor(() => expect(toastMocks.error).toHaveBeenCalledTimes(2));
     expect(screen.getByText("Scheduled · 5pm")).toBeDefined();
     expect(screen.getByRole("button", { name: "Cancel scheduled Continue for Limited work" })).toBeDefined();
+  });
+
+  it("answers pings during a refresh with exactly one follow-up refresh, even after a failed one", async () => {
+    const answers: ReturnType<typeof deferred<ThreadLimitState>>[] = [];
+    const { slot } = mount({
+      limits: () => {
+        const answer = deferred<ThreadLimitState>();
+        answers.push(answer);
+        return answer.promise;
+      },
+    });
+    const lookups = () => slot.inspection.rpcCalls.filter((call) => call.method === "getThreadLimits").length;
+    await waitFor(() => expect(lookups()).toBeGreaterThan(0));
+    const initial = lookups();
+    for (let ping = 0; ping < 3; ping += 1) await slot.behavior.emitRealtime(RATE_LIMITS_CHANNEL, {});
+    expect(lookups()).toBe(initial);
+    await act(async () => answers.forEach((answer) => answer.reject(new Error("Plugin reloading"))));
+    await waitFor(() => expect(lookups()).toBe(initial + 1));
+    await act(async () => answers.at(-1)!.resolve(scheduled));
+    expect(await screen.findByText("Scheduled · 5pm")).toBeDefined();
+    await act(async () => {});
+    expect(lookups()).toBe(initial + 1);
+    await slot.behavior.emitRealtime(RATE_LIMITS_CHANNEL, {});
+    expect(lookups()).toBe(initial + 2);
+    await act(async () => answers.at(-1)!.resolve(warning));
+    expect(await screen.findByText("Limit reached")).toBeDefined();
   });
 
   it("allows choosing a time when the provider has no reset timestamp", async () => {

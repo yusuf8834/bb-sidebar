@@ -31,12 +31,17 @@ export function RateLimitsProvider({
       .map((thread) => [thread.id, thread.status, thread.queuedWork, thread.status === "error" ? thread.updatedAt : 0]),
   );
   const keys = useMemo(() => (JSON.parse(signature) as [string, ...unknown[]][]).map(([id]) => id), [signature]);
+  // A ping during a refresh waits for it and then runs one more, instead of adding a concurrent request.
+  const inFlight = useRef(0);
+  const pingQueued = useRef(false);
+  const latestRefresh = useRef<() => Promise<void>>(async () => {});
   const refresh = useCallback(async () => {
     const seq = ++request.current;
     if (keys.length === 0) {
       setRows({});
       return;
     }
+    inFlight.current += 1;
     try {
       const result: LimitRows = {};
       for (let offset = 0; offset < keys.length; offset += 1000) {
@@ -48,9 +53,16 @@ export function RateLimitsProvider({
         );
     } catch {
       // Preserve the last known warning through a plugin reload or transient disconnect.
+    } finally {
+      inFlight.current -= 1;
+      if (inFlight.current === 0 && pingQueued.current) {
+        pingQueued.current = false;
+        void latestRefresh.current();
+      }
     }
   }, [rpc, keys]);
   useEffect(() => {
+    latestRefresh.current = refresh;
     void refresh();
     const timer =
       keys.length > 0
@@ -60,11 +72,13 @@ export function RateLimitsProvider({
         : undefined;
     return () => {
       request.current += 1;
+      pingQueued.current = false;
       window.clearInterval(timer);
     };
   }, [refresh, keys]);
   useRealtime(RATE_LIMITS_CHANNEL, () => {
-    void refresh();
+    if (inFlight.current > 0) pingQueued.current = true;
+    else void refresh();
   });
   const previousConnection = useRef(connection);
   useEffect(() => {
