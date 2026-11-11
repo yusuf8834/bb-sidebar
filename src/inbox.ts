@@ -111,6 +111,35 @@ export function partitionPinned(threads: readonly PluginSidebarThread[]): {
   return { pinned, inbox };
 }
 
+interface TreeThread {
+  readonly id: string;
+  readonly parentThreadId: string | null;
+}
+
+/**
+ * The row that carries each thread in the sidebar: the thread itself when its
+ * parent is not in the list, else the row that carries its parent. Children
+ * have no row of their own while their parent is on screen; they live in the
+ * parent's header chip and go wherever the parent's row goes, so they share
+ * its shelf. A cycle has no row at all, and its threads map to null.
+ *
+ * The sidebar and `bb sidebar list` both place threads by this rule.
+ */
+export function shelfRowIds<T extends TreeThread>(threads: readonly T[]): ReadonlyMap<string, string | null> {
+  const byId = new Map(threads.map((thread) => [thread.id, thread] as const));
+  const rows = new Map<string, string | null>();
+  for (const thread of threads) {
+    const visited = new Set<string>();
+    let current: T | undefined = thread;
+    while (current && current.parentThreadId !== null && byId.has(current.parentThreadId)) {
+      visited.add(current.id);
+      current = visited.has(current.parentThreadId) ? undefined : byId.get(current.parentThreadId);
+    }
+    rows.set(thread.id, current?.id ?? null);
+  }
+  return rows;
+}
+
 /**
  * Child threads leave the flat list and live in their parent's header chip
  * instead — a flat inbox has nowhere to nest them.
@@ -119,9 +148,9 @@ export function partitionPinned(threads: readonly PluginSidebarThread[]): {
  * (parent archived, deleted, or filtered out by the project scope) stays in
  * the list, because hiding it would make it unreachable everywhere.
  */
-export function hideChildrenOfVisibleParents(threads: readonly PluginSidebarThread[]): PluginSidebarThread[] {
-  const visibleIds = new Set(threads.map((thread) => thread.id));
-  return threads.filter((thread) => thread.parentThreadId === null || !visibleIds.has(thread.parentThreadId));
+export function hideChildrenOfVisibleParents<T extends TreeThread>(threads: readonly T[]): T[] {
+  const rows = shelfRowIds(threads);
+  return threads.filter((thread) => rows.get(thread.id) === thread.id);
 }
 
 /**

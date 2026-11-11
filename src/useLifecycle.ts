@@ -11,7 +11,7 @@ import {
   canPark,
   formatSnoozeWakeTime,
   nextWakeDelayMs,
-  resolveShelf,
+  resolveRowShelf,
   resolveWakeReason,
   sidebarThreadSignals,
   type ThreadLifecycleRow,
@@ -308,20 +308,7 @@ export function useLifecycle(threads: readonly PluginSidebarThread[]): Lifecycle
       return true;
     };
     return {
-      shelfFor: (thread) => {
-        const row = rows.get(thread.id);
-        // Keep explicit shelf changes visible while the host's unpin update
-        // propagates. The pin RPC clears these rows when pinning succeeds.
-        if (
-          thread.isPinned &&
-          row?.settledOverride !== "settled" &&
-          row?.snoozedUntil == null &&
-          row?.parkedAt == null
-        ) {
-          return "active";
-        }
-        return resolveShelf(row, signalsFor(thread), now);
-      },
+      shelfFor: (thread) => resolveRowShelf(rows.get(thread.id), signalsFor(thread), now, thread.isPinned),
       canPark: (thread) => canPark(signalsFor(thread)),
       wakeAtFor: (thread) => rows.get(thread.id)?.snoozedUntil ?? null,
       parkedAtFor: (thread) => rows.get(thread.id)?.parkedAt ?? null,

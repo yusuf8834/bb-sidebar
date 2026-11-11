@@ -157,6 +157,26 @@ export function resolveShelf(
   return "active";
 }
 
+/**
+ * The shelf a thread's own sidebar row sits on.
+ *
+ * A pinned thread stays in Active unless the user filed it away explicitly:
+ * that keeps a shelf change visible while bb's unpin update propagates, and
+ * the pin RPC clears these rows when pinning succeeds. A child shown inside
+ * its parent's row takes the parent's shelf instead (see `shelfRowIds`).
+ */
+export function resolveRowShelf(
+  row: ThreadLifecycleRow | undefined,
+  signals: ThreadActivitySignals,
+  now: number,
+  isPinned: boolean,
+): ThreadShelf {
+  if (isPinned && row?.settledOverride !== "settled" && row?.snoozedUntil == null && row?.parkedAt == null) {
+    return "active";
+  }
+  return resolveShelf(row, signals, now);
+}
+
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;

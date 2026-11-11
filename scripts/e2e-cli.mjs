@@ -102,6 +102,22 @@ try {
     expect(result.code !== 0 && /cannot be pinned/i.test(result.stderr), result.stderr);
     await sidebar(["parent", "--clear", "--thread", c.id]);
   });
+  await step("a child is listed on its parent's shelf", async () => {
+    await sidebar(["parent", b.id, "--thread", c.id]);
+    expect((await sidebar(["snooze", "1h", "--thread", b.id])).code === 0, "snooze exit");
+    // Snooze writes only the parent's row; the child keeps its own Active one.
+    expect((await rows()).get(c.id)?.snoozedUntil == null, "snoozing the parent wrote the child's row");
+    const list = await shelves();
+    expect(list.get(c.id).shelf === "snoozed", `child: ${list.get(c.id).shelf}`);
+    expect(list.get(c.id).snoozedUntil === list.get(b.id).snoozedUntil, "child wake time differs");
+    const active = await sidebar(["list", "--all", "--state", "active"]);
+    expect(!active.stdout.includes(c.id), active.stdout);
+    const resume = await sidebar(["resume", "--thread", c.id]);
+    expect(resume.code !== 0 && resume.stderr.includes(b.id), resume.stderr);
+    expect((await sidebar(["resume", "--thread", b.id])).code === 0, "resume exit");
+    expect((await shelves()).get(c.id).shelf === "active", "child not back with its parent");
+    await sidebar(["parent", "--clear", "--thread", c.id]);
+  });
   await step("bad wake time is rejected with a hint", async () => {
     const result = await sidebar(["snooze", "soonish", "--thread", b.id]);
     expect(result.code !== 0 && /tomorrow@09:00/.test(result.stderr), result.stderr);

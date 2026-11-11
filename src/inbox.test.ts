@@ -13,6 +13,7 @@ import {
   sortSettledThreads,
   threadDisplayTitle,
   resolveThreadTitlesIn,
+  shelfRowIds,
   threadStoredTitle,
   threadTitleHasMentions,
   visibleInboxThreads,
@@ -227,6 +228,26 @@ describe("child threads", () => {
   it("keeps a child whose parent is not on screen", () => {
     const visible = hideChildrenOfVisibleParents([thread({ id: "child", parentThreadId: "archived-parent" })]);
     expect(visible.map((t) => t.id)).toEqual(["child"]);
+  });
+
+  it("files every descendant under the row that carries its tree", () => {
+    const rows = shelfRowIds([
+      thread({ id: "root" }),
+      thread({ id: "child", parentThreadId: "root" }),
+      thread({ id: "grandchild", parentThreadId: "child" }),
+      thread({ id: "orphan", parentThreadId: "archived-parent" }),
+      thread({ id: "loop-a", parentThreadId: "loop-b" }),
+      thread({ id: "loop-b", parentThreadId: "loop-a" }),
+    ]);
+    expect(Object.fromEntries(rows)).toEqual({
+      root: "root",
+      child: "root",
+      grandchild: "root",
+      orphan: "orphan",
+      // A cycle has no row: the sidebar hides both threads.
+      "loop-a": null,
+      "loop-b": null,
+    });
   });
 
   it("lists a thread's children oldest first", () => {

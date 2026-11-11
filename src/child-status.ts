@@ -176,10 +176,21 @@ export function threadAsksForInput(thread: PluginSidebarThread): boolean {
  * Walks up from each asking thread; archived ancestors and cycles stop it.
  */
 export function threadsWithAskingDescendants(threads: readonly PluginSidebarThread[]): ReadonlySet<string> {
+  return ancestorsOfAskingThreads(threads, threadAsksForInput);
+}
+
+/**
+ * The same walk over any thread shape, given what counts as asking. The
+ * server's thread lists have no row indicator, so `bb sidebar list` asks with
+ * `hasPendingInteraction` alone.
+ */
+export function ancestorsOfAskingThreads<
+  T extends { readonly id: string; readonly parentThreadId: string | null; readonly isArchived?: boolean },
+>(threads: readonly T[], asks: (thread: T) => boolean): ReadonlySet<string> {
   const result = new Set<string>();
-  let byId: ReadonlyMap<string, PluginSidebarThread> | undefined;
+  let byId: ReadonlyMap<string, T> | undefined;
   for (const thread of threads) {
-    if (thread.isArchived || thread.parentThreadId === null || !threadAsksForInput(thread)) continue;
+    if (thread.isArchived || thread.parentThreadId === null || !asks(thread)) continue;
     byId ??= new Map(threads.map((candidate) => [candidate.id, candidate]));
     const visited = new Set([thread.id]);
     let parent = byId.get(thread.parentThreadId);
