@@ -6,6 +6,10 @@ meaning intact.
 Contributor lists are for people only. Do not list AI tools, models, or agents
 as contributors or add `Co-authored-by` commit trailers crediting them.
 
+Pull requests follow `.github/pull_request_template.md`, including when the body
+is passed to `gh pr create`. A PR that changes anything a user can see includes
+before and after screenshots; `npm run e2e` starts a scratch bb to take them.
+
 Inbox layout: `src/inbox-layout.ts`; shelves: `ThreadInboxShelves.tsx`.
 Inbox hooks use `src/use*.ts`; gesture helpers use `src/drag-*.ts`.
 Inbox rendering: `src/ThreadInboxView.tsx` and `src/ThreadInboxEmptyStates.tsx`.
