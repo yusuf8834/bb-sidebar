@@ -148,7 +148,7 @@ export default async function plugin(bb: BbPluginApi) {
     { icons, colors, projects, settle },
   );
   const { resolveProjectIcon } = icons;
-  const { wakeAncestors, clearSettlingState, clear } = lifecycle;
+  const { wakeAncestors, clearSettlingState, clear, settleUnarchivedTree } = lifecycle;
   ctx.bb.http.route("GET", "/project-icon", async (context) => {
     const projectId = context.req.query("projectId")?.trim();
     const environmentId = context.req.query("environmentId")?.trim() || null;
@@ -188,6 +188,12 @@ export default async function plugin(bb: BbPluginApi) {
   ctx.bb.events.on("thread.active", async ({ thread }) => {
     clearSettlingState(thread.id);
     await wakeAncestors(thread);
+  });
+
+  // Archived threads miss a tree Settle. One that comes back inside a settled
+  // tree is filed with it rather than waking the tree.
+  ctx.bb.events.on("thread.unarchived", async ({ thread }) => {
+    await settleUnarchivedTree(thread.id);
   });
 
   // A deleted thread must not leave a row behind that would park a future

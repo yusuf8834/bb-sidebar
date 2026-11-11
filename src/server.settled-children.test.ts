@@ -168,6 +168,115 @@ describe("children of older parent-only settles", () => {
   });
 });
 
+const insertLifecycle = (
+  bb: ReturnType<typeof createFakePluginHost>["bb"],
+  threadId: string,
+  row: { settledAt?: number; settledOverride?: string; parkedAt?: number; snoozedUntil?: number; snoozedAt?: number },
+) =>
+  bb.storage
+    .database()
+    .prepare(
+      `INSERT INTO thread_lifecycle
+      (thread_id, settled_at, settled_override, parked_at, snoozed_until, snoozed_at)
+      VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      threadId,
+      row.settledAt ?? null,
+      row.settledOverride ?? null,
+      row.parkedAt ?? null,
+      row.snoozedUntil ?? null,
+      row.snoozedAt ?? null,
+    );
+
+describe("children whose own row leaves them Active inside a settled tree", () => {
+  const settledRow = {
+    parkedAt: null,
+    settledAt: 100,
+    settledOverride: "settled",
+    snoozedUntil: null,
+    snoozedAt: null,
+  };
+
+  it("files them with the tree once, even after the first repair ran", async () => {
+    const future = Date.now() + 60 * 60_000;
+    const threads = [
+      projectThread({ id: "parent", latestAttentionAt: 50 }),
+      projectThread({ id: "woken", parentThreadId: "parent", latestAttentionAt: 30 }),
+      projectThread({ id: "returned", parentThreadId: "parent", latestAttentionAt: 20 }),
+      projectThread({ id: "snoozed", parentThreadId: "parent", latestAttentionAt: 20 }),
+      projectThread({ id: "parked", parentThreadId: "parent", latestAttentionAt: 20 }),
+    ];
+    const { bb, harness } = await loadWith(() => threads);
+    bb.storage.database().prepare("INSERT INTO lifecycle_backfills (name) VALUES ('settled-child-rows')").run();
+    insertRow(bb, "parent");
+    insertLifecycle(bb, "woken", { snoozedUntil: 60, snoozedAt: 25 });
+    insertLifecycle(bb, "returned", { settledOverride: "active" });
+    insertLifecycle(bb, "snoozed", { snoozedUntil: future, snoozedAt: 40 });
+    insertLifecycle(bb, "parked", { parkedAt: 40 });
+
+    await harness.behavior.callRpc("evaluateAutoSettle", {});
+    const rows = new Map((await rowsOf(harness)).map((row) => [row.threadId, row]));
+    expect(rows.get("woken")).toEqual({ threadId: "woken", ...settledRow });
+    expect(rows.get("returned")).toEqual({ threadId: "returned", ...settledRow });
+    expect(rows.get("snoozed")).toMatchObject({ snoozedUntil: future, settledAt: null });
+    expect(rows.get("parked")).toMatchObject({ parkedAt: 40, settledAt: null });
+  });
+
+  it("follows the tree's top row, not a settled thread in the middle", async () => {
+    const threads = [
+      projectThread({ id: "root", latestAttentionAt: 50 }),
+      projectThread({ id: "middle", parentThreadId: "root", latestAttentionAt: 50 }),
+      projectThread({ id: "leaf", parentThreadId: "middle", latestAttentionAt: 50 }),
+    ];
+    const { bb, harness } = await loadWith(() => threads);
+    insertRow(bb, "middle");
+    await harness.behavior.callRpc("evaluateAutoSettle", {});
+    expect((await rowsOf(harness)).map((row) => row.threadId)).toEqual(["middle"]);
+  });
+});
+
+describe("a thread back from the archive", () => {
+  it("is settled with the settled tree it returns to, with its subtree", async () => {
+    let archived = true;
+    const threads = () => [
+      projectThread({ id: "parent", latestAttentionAt: 50 }),
+      ...(archived
+        ? []
+        : [
+            projectThread({ id: "child", parentThreadId: "parent", latestAttentionAt: 40 }),
+            projectThread({ id: "grandchild", parentThreadId: "child", latestAttentionAt: 40 }),
+          ]),
+      projectThread({ id: "other", latestAttentionAt: 40 }),
+      projectThread({ id: "other-child", parentThreadId: "other", latestAttentionAt: 40 }),
+    ];
+    const { bb, harness } = await loadWith(threads);
+    // The first policy pass runs the one-time repair before the child returns.
+    await harness.behavior.callRpc("evaluateAutoSettle", {});
+    insertRow(bb, "parent");
+    archived = false;
+
+    await harness.behavior.emitThreadEvent("thread.unarchived", {
+      thread: makeThreadResponse({ id: "child", parentThreadId: "parent" }),
+    });
+    await harness.behavior.emitThreadEvent("thread.unarchived", {
+      thread: makeThreadResponse({ id: "other-child", parentThreadId: "other" }),
+    });
+    const inherited = {
+      parkedAt: null,
+      settledAt: 100,
+      settledOverride: "settled",
+      snoozedUntil: null,
+      snoozedAt: null,
+    };
+    expect(await rowsOf(harness)).toEqual([
+      { threadId: "parent", ...inherited },
+      { threadId: "child", ...inherited },
+      { threadId: "grandchild", ...inherited },
+    ]);
+  });
+});
+
 describe("moving a thread under a settled parent", () => {
   async function setup(moved: { settled: boolean }) {
     const harness = await loadPlugin();

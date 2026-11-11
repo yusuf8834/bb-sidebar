@@ -2,14 +2,18 @@ import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import type { ServerContext } from "./server-context";
 import type { SettledOverride } from "./auto-settle";
 import { LIFECYCLE_CHANNEL } from "./contract";
-import { canPark, hasLiveWork, isTurnInFlight, resolveShelf } from "./lifecycle";
+import { canPark, hasLiveWork, isTurnInFlight, resolveRowShelf } from "./lifecycle";
 import { threadTreeIds } from "./thread-tree";
+import { shelfRowIds } from "./inbox";
 
 /** One-time data repairs that need bb's thread tree, which SQL cannot see. */
 export const LIFECYCLE_BACKFILLS_MIGRATION = `CREATE TABLE IF NOT EXISTS lifecycle_backfills (
   name TEXT PRIMARY KEY
 )`;
-const SETTLED_CHILD_ROWS_BACKFILL = "settled-child-rows";
+// The first repair ("settled-child-rows") reached only children with no row.
+// This one also reaches children whose own row leaves them Active, so it runs
+// once more on installs that already ran the first.
+const SETTLED_CHILD_ROWS_BACKFILL = "settled-child-rows-v2";
 
 export interface StoredLifecycleRow {
   threadId: string;
@@ -286,47 +290,75 @@ export function createServerLifecycle(ctx: ServerContext) {
 
   const loadSettleTree = async (threadId: string) => settleTree(await loadPolicyThreads(true), threadId);
 
-  // Settle wrote only the root's row before it covered whole trees. Those older
-  // children sit inside a settled parent in the sidebar but count as Active on
-  // the server, where they protect a shared workspace from cleanup forever.
-  // Give each one its nearest settled ancestor's row, once, unless it has
-  // something newer to say than that settle.
+  // A child's own row that does not shelve it: none, an explicit Active, or a
+  // snooze that has run out. A live snooze or a park is the user's choice.
+  const leavesChildActive = (row: StoredLifecycleRow | null, now: number) =>
+    row === null ||
+    (row.settledAt === null && row.parkedAt == null && (row.snoozedUntil === null || row.snoozedUntil <= now));
+
+  /**
+   * Rows that file quiet children inside a settled tree with that tree, as a
+   * tree Settle does. The sidebar already draws such a child inside its
+   * settled parent; without the row the server counts it as Active, where it
+   * protects a shared workspace from cleanup forever. The tree's row is the
+   * one the sidebar places it by: its top thread's. A child with something
+   * newer to say than that settle keeps its own row.
+   */
+  const settledTreeRows = (
+    threads: readonly CleanupThread[],
+    candidates: readonly CleanupThread[],
+    now: number,
+  ): StoredLifecycleRow[] => {
+    const byId = new Map(threads.map((thread) => [thread.id, thread] as const));
+    const rowIds = shelfRowIds(threads);
+    return candidates.flatMap((thread) => {
+      const topId = rowIds.get(thread.id);
+      if (thread.pinnedAt !== null || !topId || topId === thread.id) return [];
+      const top = byId.get(topId)!;
+      const topRow = readOne(topId);
+      if (!topRow || resolveRowShelf(topRow, threadSignals(top), now, top.pinnedAt !== null) !== "settled") return [];
+      if (!leavesChildActive(readOne(thread.id), now) || !canPark(threadSignals(thread))) return [];
+      if (thread.latestAttentionAt > topRow.settledAt!) return [];
+      return [
+        {
+          threadId: thread.id,
+          settledAt: topRow.settledAt,
+          settledOverride: topRow.settledOverride,
+          snoozedUntil: null,
+          snoozedAt: null,
+          parkedAt: null,
+        },
+      ];
+    });
+  };
+
+  // Settle wrote only the root's row before it covered whole trees, and a
+  // child archived when its tree settled came back from the archive without
+  // one. Repair those trees once.
   const backfillSettledChildRows = (threads: readonly CleanupThread[], now = Date.now()): string[] => {
     const done = ctx.db.prepare(`SELECT 1 FROM lifecycle_backfills WHERE name = ?`);
     if (done.get(SETTLED_CHILD_ROWS_BACKFILL)) return [];
-    const byId = new Map(threads.map((thread) => [thread.id, thread] as const));
-    const settledAncestorRow = (thread: CleanupThread) => {
-      const visited = new Set([thread.id]);
-      let parentId = thread.parentThreadId;
-      while (parentId !== null && !visited.has(parentId)) {
-        visited.add(parentId);
-        const parent = byId.get(parentId);
-        if (!parent) return null;
-        const row = readOne(parent.id);
-        if (row) {
-          return parent.pinnedAt === null && resolveShelf(row, threadSignals(parent), now) === "settled" ? row : null;
-        }
-        parentId = parent.parentThreadId;
-      }
-      return null;
-    };
     const written = ctx.db.transaction(() => {
-      const rows: StoredLifecycleRow[] = [];
-      for (const thread of threads) {
-        if (thread.parentThreadId === null || thread.pinnedAt !== null || readOne(thread.id) !== null) continue;
-        if (!canPark(threadSignals(thread))) continue;
-        const ancestor = settledAncestorRow(thread);
-        if (!ancestor || thread.latestAttentionAt > ancestor.settledAt!) continue;
-        rows.push({
-          threadId: thread.id,
-          settledAt: ancestor.settledAt,
-          settledOverride: ancestor.settledOverride,
-          snoozedUntil: null,
-          snoozedAt: null,
-        });
-      }
+      const rows = settledTreeRows(threads, threads, now);
       for (const row of rows) write(row, false);
       ctx.db.prepare(`INSERT OR IGNORE INTO lifecycle_backfills (name) VALUES (?)`).run(SETTLED_CHILD_ROWS_BACKFILL);
+      return rows.map((row) => row.threadId);
+    })();
+    publishLifecycleChanges(written);
+    return written;
+  };
+
+  /** A thread back from the archive inside a settled tree is settled with it, with its subtree. */
+  const settleUnarchivedTree = async (threadId: string, now = Date.now()): Promise<string[]> => {
+    const threads = await loadPolicyThreads(true);
+    const ids = new Set(threadTreeIds(threads, threadId));
+    const written = ctx.db.transaction(() => {
+      const rows = settledTreeRows(
+        threads,
+        threads.filter((thread) => ids.has(thread.id)),
+        now,
+      );
+      for (const row of rows) write(row, false);
       return rows.map((row) => row.threadId);
     })();
     publishLifecycleChanges(written);
@@ -353,6 +385,7 @@ export function createServerLifecycle(ctx: ServerContext) {
     settleTree,
     loadSettleTree,
     backfillSettledChildRows,
+    settleUnarchivedTree,
   };
 }
 
