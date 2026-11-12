@@ -5,7 +5,7 @@ import type { createThreadPortActions } from "./thread-ports";
 import type { z } from "zod";
 import type { cleanupIssueSchema, cleanupPreviewSchema, cleanupResultSchema, ownedPortTargetSchema } from "./contract";
 import { randomUUID } from "node:crypto";
-import { canPark, hasLiveWork, isTurnInFlight } from "./lifecycle";
+import { canPark, hasLiveWork, isTurnInFlight, rowActivity } from "./lifecycle";
 import { EMPTY_RECLAIM, planTerminalReclaim, type ReclaimSummary } from "./reclaim";
 import { runThreadTasks } from "./thread-tasks";
 
@@ -54,19 +54,10 @@ export function createServerSettleCleanup(
       thread.latestAttentionAt > row.settledAt
     )
       return false;
-    const activity = thread.activity;
     return canPark({
       hasPendingInteraction: thread.hasPendingInteraction,
       hasQueuedWork: thread.queuedWork !== "none",
-      isWorking: hasLiveWork(
-        {
-          workflows: activity.activeWorkflowCount,
-          backgroundAgents: activity.activeBackgroundAgentCount,
-          backgroundCommands: activity.activeBackgroundCommandCount,
-          planMode: activity.activePlanModeCount,
-        },
-        isTurnInFlight(thread.status),
-      ),
+      isWorking: hasLiveWork(rowActivity(thread.activity), isTurnInFlight(thread.status)),
     });
   };
 

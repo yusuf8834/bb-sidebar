@@ -1,4 +1,4 @@
-import { canPark, hasLiveWork, isTurnInFlight } from "./lifecycle";
+import { canPark, hasLiveWork, isTurnInFlight, rowActivity, type ThreadRowActivity } from "./lifecycle";
 
 export const MIN_AUTO_SETTLE_AFTER_DAYS = 1;
 export const MAX_AUTO_SETTLE_AFTER_DAYS = 90;
@@ -15,12 +15,7 @@ export interface AutoSettleLifecycleState {
 
 /** The fields of a bb project-thread row that the policy reads. */
 export interface AutoSettleThread {
-  activity: {
-    activeBackgroundAgentCount: number;
-    activeBackgroundCommandCount: number;
-    activePlanModeCount: number;
-    activeWorkflowCount: number;
-  };
+  activity: ThreadRowActivity;
   createdAt: number;
   hasPendingInteraction: boolean;
   latestAttentionAt: number;
@@ -48,16 +43,7 @@ type AutoSettleDecision = "keep" | "settle" | "unsettle";
 
 /** The same live work that blocks a manual settle in the sidebar. */
 function isWorking(thread: AutoSettleThread): boolean {
-  const { activity } = thread;
-  return hasLiveWork(
-    {
-      workflows: activity.activeWorkflowCount,
-      backgroundAgents: activity.activeBackgroundAgentCount,
-      backgroundCommands: activity.activeBackgroundCommandCount,
-      planMode: activity.activePlanModeCount,
-    },
-    isTurnInFlight(thread.status),
-  );
+  return hasLiveWork(rowActivity(thread.activity), isTurnInFlight(thread.status));
 }
 
 // Settling also stops the thread's runtime, so anything the sidebar would

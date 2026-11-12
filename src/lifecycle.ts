@@ -98,6 +98,27 @@ export function hasLiveWork(activity: PluginSidebarThreadActivity, turnInFlight:
   );
 }
 
+/** The activity counts on bb's project-thread row, which server code reads. */
+export interface ThreadRowActivity {
+  activeBackgroundAgentCount: number;
+  activeBackgroundCommandCount: number;
+  activePlanModeCount: number;
+  activeWorkflowCount: number;
+}
+
+/**
+ * A project-thread row's counts in the sidebar view's activity shape, so
+ * server code and the sidebar judge live work over the same fields.
+ */
+export function rowActivity(activity: ThreadRowActivity): PluginSidebarThreadActivity {
+  return {
+    workflows: activity.activeWorkflowCount,
+    backgroundAgents: activity.activeBackgroundAgentCount,
+    backgroundCommands: activity.activeBackgroundCommandCount,
+    planMode: activity.activePlanModeCount,
+  };
+}
+
 /** Any live work at all, which blocks parking and wakes a parked thread. */
 export function isThreadWorking(thread: PluginSidebarThread): boolean {
   // The turn status as well as the indicator: bb paints attention before
