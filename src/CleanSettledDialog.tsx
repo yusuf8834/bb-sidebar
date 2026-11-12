@@ -7,6 +7,7 @@ import { usePortalScopeProps } from "./lib/portal-scope";
 import type { bbSidebarRpcContract, SettledCleanupPreview, SettledCleanupResult } from "./contract";
 import { useSidebarThreads } from "./bb-sdk";
 import { resolveThreadTitlesIn, threadDisplayTitle } from "./inbox";
+import { announcePortsClosed } from "./OpenPorts";
 
 export function CleanSettledDialog({ threadIds, onNavigate }: { threadIds: string[]; onNavigate: () => void }) {
   const rpc = useRpc<typeof bbSidebarRpcContract>();
@@ -60,6 +61,13 @@ export function CleanSettledDialog({ threadIds, onNavigate }: { threadIds: strin
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
       setBusy(false);
+      // Only the workspaces whose ports this Clean tried to close.
+      const environmentOf = new Map(threads.map((thread) => [thread.id, thread.environment?.id]));
+      const touched = preview.threads.flatMap((thread) => {
+        const environmentId = thread.ports.length > 0 ? environmentOf.get(thread.threadId) : undefined;
+        return environmentId ? [environmentId] : [];
+      });
+      announcePortsClosed([...new Set(touched)]);
     }
   };
 

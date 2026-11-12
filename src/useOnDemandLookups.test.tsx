@@ -75,3 +75,31 @@ it("expires an answer after the bounded time", async () => {
   act(() => vi.advanceTimersByTime(1));
   expect(hook.result.current.values.size).toBe(0);
 });
+
+it("forgets the named keys at once, ignores their late answers, and lets the next look through", async () => {
+  const { fetch, answers, hook } = setup(new Set(["a", "b", "c"]));
+  act(() => {
+    hook.result.current.lookUp("a");
+    hook.result.current.lookUp("b");
+  });
+  await act(async () => answers[0]!.resolve("open"));
+  act(() => hook.result.current.lookUp("c"));
+  let forgotten: string[] = [];
+  act(() => {
+    forgotten = hook.result.current.forget(["a", "c", "unknown"]);
+  });
+  expect(forgotten).toEqual(["a", "c"]);
+  expect(hook.result.current.values.has("a")).toBe(false);
+  await act(async () => answers[2]!.resolve("stale"));
+  expect(hook.result.current.values.has("c")).toBe(false);
+  act(() => hook.result.current.lookUp("c"));
+  expect(fetch).toHaveBeenCalledTimes(4);
+  await act(async () => answers[3]!.resolve("fresh"));
+  await act(async () => answers[1]!.resolve("untouched"));
+  expect(hook.result.current.values).toEqual(
+    new Map([
+      ["c", "fresh"],
+      ["b", "untouched"],
+    ]),
+  );
+});

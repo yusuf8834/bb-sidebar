@@ -10,14 +10,21 @@ const REUSE_MS = 30_000;
  * user looks at one. One request per key at a time; a result is reused for
  * 30s and dropped after `ON_DEMAND_TTL_MS`, or as soon as its key leaves
  * `eligible` (deleted, archived, or no longer settled), so a stale result
- * cannot sit on a row.
+ * cannot sit on a row. `forget` drops keys at once, answers in flight included,
+ * after the thing they describe changed (ports closed), and returns the keys
+ * that had anything to drop.
  */
 export function useOnDemandLookups<T>(
   fetch: (key: string) => Promise<T>,
   eligible: ReadonlySet<string>,
-): { values: ReadonlyMap<string, T>; lookUp: (key: string, force?: boolean) => void } {
+): {
+  values: ReadonlyMap<string, T>;
+  lookUp: (key: string, force?: boolean) => void;
+  forget: (keys: readonly string[]) => string[];
+} {
   const [entries, setEntries] = useState<ReadonlyMap<string, { value: T; at: number }>>(new Map());
-  const inFlight = useRef(new Set<string>());
+  // Each look's own token: a forgotten one cannot store or clear a newer look.
+  const inFlight = useRef(new Map<string, object>());
   const latest = useRef({ entries, eligible, fetch });
   latest.current = { entries, eligible, fetch };
 
@@ -26,18 +33,33 @@ export function useOnDemandLookups<T>(
     if (!eligible.has(key) || inFlight.current.has(key)) return;
     const entry = entries.get(key);
     if (!force && entry && Date.now() - entry.at < REUSE_MS) return;
-    inFlight.current.add(key);
+    const token = {};
+    inFlight.current.set(key, token);
     fetch(key)
       .then(
         (value) => {
-          if (latest.current.eligible.has(key))
+          if (inFlight.current.get(key) === token && latest.current.eligible.has(key))
             setEntries((previous) => new Map(previous).set(key, { value, at: Date.now() }));
         },
         () => {
           void 0; // A failed look leaves the row as it was; the next look retries.
         },
       )
-      .finally(() => inFlight.current.delete(key));
+      .finally(() => {
+        if (inFlight.current.get(key) === token) inFlight.current.delete(key);
+      });
+  }, []);
+
+  const forget = useCallback((keys: readonly string[]) => {
+    const dropped = keys.filter((key) => latest.current.entries.has(key) || inFlight.current.has(key));
+    if (dropped.length === 0) return dropped;
+    for (const key of dropped) inFlight.current.delete(key);
+    setEntries((previous) => {
+      const next = new Map(previous);
+      for (const key of dropped) next.delete(key);
+      return next;
+    });
+    return dropped;
   }, []);
 
   useEffect(() => {
@@ -60,5 +82,5 @@ export function useOnDemandLookups<T>(
     () => new Map([...entries].filter(([key]) => eligible.has(key)).map(([key, entry]) => [key, entry.value])),
     [entries, eligible],
   );
-  return { values, lookUp };
+  return { values, lookUp, forget };
 }

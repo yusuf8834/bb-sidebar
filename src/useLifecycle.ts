@@ -5,6 +5,7 @@ import { toast } from "./lib/toast";
 import type { bbSidebarRpcContract } from "./contract";
 import { describeReclaim } from "./reclaim";
 import { promptToCloseSettledPorts } from "./settled-port-prompt";
+import { announcePortsClosed } from "./OpenPorts";
 import {
   canPark,
   formatSnoozeWakeTime,
@@ -207,7 +208,12 @@ export function useLifecycle(threads: readonly PluginSidebarThread[], lifecycleR
         void promptToCloseSettledPorts(
           threadId,
           () => rpc.call("getThreadPorts", { threadId }),
-          (ports) => rpc.call("closeThreadPorts", { threadId, ports }),
+          // Whatever the answer, the row's plug may now be stale.
+          (ports) =>
+            rpc.call("closeThreadPorts", { threadId, ports }).finally(() => {
+              const environmentId = latestThreads.current.find((thread) => thread.id === threadId)?.environment?.id;
+              if (environmentId) announcePortsClosed([environmentId]);
+            }),
           () => portPromptVersions.current.get(threadId) === portPromptVersion,
         );
         // Undo restores lifecycle rows captured by this action, including the

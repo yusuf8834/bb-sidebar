@@ -11,6 +11,7 @@ import {
 } from "react";
 import { UrlLink, useRpc, type PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import { toast } from "./lib/toast";
+import { BROWSER_EVENTS } from "./lib/browser-events";
 import type { bbSidebarRpcContract, OpenPort, PortSnapshot } from "./contract";
 import { portsByEnvironment } from "./open-ports";
 import { Icon } from "./components/Icon";
@@ -33,6 +34,18 @@ const OpenPortsActionsContext = createContext<{
 const PORT_POLL_INTERVAL_MS = 30_000;
 // Mirrors the contract's cap on environment ids per call.
 const ENVIRONMENTS_PER_CALL = 500;
+// Closing ports only signals their processes, so the workspaces are scanned
+// once more after this, longer than the 750 ms the server's Clean waits.
+const PORTS_CLOSED_RECHECK_MS = 1_000;
+
+/**
+ * Tells the ports provider that ports in these workspaces were just asked to
+ * close. Callers outside the provider (the settle prompt) reach it this way.
+ */
+export function announcePortsClosed(environmentIds: readonly string[]) {
+  if (environmentIds.length > 0)
+    window.dispatchEvent(new CustomEvent(BROWSER_EVENTS.portsClosed, { detail: environmentIds }));
+}
 
 /** The workspaces the poll covers, and those only settled threads use; null until the shelves are known. */
 export type PortScanScope = { live: readonly string[]; settledOnly: ReadonlySet<string> } | null;
@@ -72,13 +85,13 @@ export function OpenPortsProvider({ scope, children }: { scope: PortScanScope; c
     [rpc],
   );
   const onDemand = useOnDemandLookups<readonly OpenPort[]>(fetchOne, scope?.settledOnly ?? NO_SETTLED_WORKSPACES);
-  const { lookUp: lookUpOne } = onDemand;
-  const settledOnly = useRef(scope?.settledOnly);
-  settledOnly.current = scope?.settledOnly;
+  const { lookUp: lookUpOne, forget } = onDemand;
+  const latestScope = useRef(scope);
+  latestScope.current = scope;
   const actions = useMemo(
     () => ({
       refresh: (environmentId?: string) => {
-        if (environmentId && settledOnly.current?.has(environmentId)) lookUpOne(environmentId, true);
+        if (environmentId && latestScope.current?.settledOnly.has(environmentId)) lookUpOne(environmentId, true);
         else refreshRef.current();
       },
       lookUp: (environmentId: string | undefined) => {
@@ -87,6 +100,30 @@ export function OpenPortsProvider({ scope, children }: { scope: PortScanScope; c
     }),
     [lookUpOne],
   );
+
+  // After ports close, a settled-only workspace's answer is dropped at once;
+  // then the touched workspaces are checked one more time, never again.
+  useEffect(() => {
+    const timers = new Set<ReturnType<typeof setTimeout>>();
+    function portsClosed(event: Event) {
+      const environmentIds = (event as CustomEvent<readonly string[]>).detail;
+      const current = latestScope.current;
+      const dropped = forget(environmentIds.filter((id) => current?.settledOnly.has(id)));
+      const live = environmentIds.some((id) => current?.live.includes(id));
+      if (dropped.length === 0 && !live) return;
+      const timer = setTimeout(() => {
+        timers.delete(timer);
+        for (const environmentId of dropped) lookUpOne(environmentId, true);
+        if (live) refreshRef.current();
+      }, PORTS_CLOSED_RECHECK_MS);
+      timers.add(timer);
+    }
+    window.addEventListener(BROWSER_EVENTS.portsClosed, portsClosed);
+    return () => {
+      window.removeEventListener(BROWSER_EVENTS.portsClosed, portsClosed);
+      for (const timer of timers) clearTimeout(timer);
+    };
+  }, [forget, lookUpOne]);
 
   useEffect(() => {
     if (liveKey === null) return;
