@@ -85,6 +85,23 @@ export function autoSettleNeedsPullRequest(
   return lifecycle?.settledOverride == null && !cannotAutoSettle(lifecycle, thread);
 }
 
+/** Settled by the policy itself, not by the user. */
+export function isAutoSettled(lifecycle: AutoSettleLifecycleState | null): boolean {
+  return lifecycle?.settledAt != null && lifecycle.settledOverride == null;
+}
+
+/**
+ * An ordinary pass leaves a thread the policy settled alone. Only the checks
+ * that need no PR lookup can return it to Active: anything that would keep a
+ * live thread out of policy reach, such as a pin or running work.
+ */
+export function decideAutoSettledThread(
+  lifecycle: AutoSettleLifecycleState | null,
+  thread: AutoSettleThread,
+): AutoSettleDecision {
+  return cannotAutoSettle(lifecycle, thread) ? "unsettle" : "keep";
+}
+
 /** Invalid settings disable inactivity settling instead of hiding work. */
 export function parseAutoSettleAfterDays(enabled: boolean, rawDays: string): number | null {
   if (!enabled) return null;

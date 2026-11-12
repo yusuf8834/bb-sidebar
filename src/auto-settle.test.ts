@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   autoSettleNeedsPullRequest,
   decideAutoSettle,
+  decideAutoSettledThread,
+  isAutoSettled,
   parseAutoSettleAfterDays,
   type AutoSettleLifecycleState,
   type AutoSettleThread,
@@ -52,6 +54,28 @@ describe("automatic settle policy", () => {
     expect(autoSettleNeedsPullRequest(null, { ...quietThread, pinnedAt: NOW })).toBe(false);
     expect(autoSettleNeedsPullRequest(lifecycle({ settledOverride: "active" }), quietThread)).toBe(false);
     expect(autoSettleNeedsPullRequest(lifecycle({ snoozedUntil: NOW + DAY }), quietThread)).toBe(false);
+  });
+
+  it("tells a policy settle from the user's", () => {
+    expect(isAutoSettled(null)).toBe(false);
+    expect(isAutoSettled(lifecycle({ settledAt: NOW }))).toBe(true);
+    expect(isAutoSettled(lifecycle({ settledAt: NOW, settledOverride: "settled" }))).toBe(false);
+    expect(isAutoSettled(lifecycle({ snoozedUntil: NOW + DAY }))).toBe(false);
+  });
+
+  it("returns a policy-settled thread without a PR only when it is out of policy reach", () => {
+    const settled = lifecycle({ settledAt: NOW });
+    expect(decideAutoSettledThread(settled, quietThread)).toBe("keep");
+    // Newer activity alone does not reopen it; bb's activity event does.
+    expect(decideAutoSettledThread(settled, { ...quietThread, updatedAt: NOW })).toBe("keep");
+    expect(decideAutoSettledThread(settled, { ...quietThread, pinnedAt: NOW })).toBe("unsettle");
+    expect(decideAutoSettledThread(settled, { ...quietThread, status: "active" })).toBe("unsettle");
+    expect(decideAutoSettledThread(settled, { ...quietThread, hasPendingInteraction: true })).toBe("unsettle");
+    expect(decideAutoSettledThread(settled, { ...quietThread, queuedWork: "waiting" })).toBe("unsettle");
+    expect(decideAutoSettledThread(lifecycle({ settledAt: NOW, parkedAt: NOW }), quietThread)).toBe("unsettle");
+    expect(decideAutoSettledThread(lifecycle({ settledAt: NOW, snoozedUntil: NOW + DAY }), quietThread)).toBe(
+      "unsettle",
+    );
   });
 
   it("keeps a pending thread available", () => {

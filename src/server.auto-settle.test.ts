@@ -157,22 +157,22 @@ describe("automatic settle evaluation", () => {
     },
   );
 
-  it("reopens an already settled parent when its child's PR reopens", async () => {
+  it("reopens an already settled parent when its child's PR reopens, on the first pass after a restart", async () => {
     const old = Date.now() - 4 * 86400000;
     const quiet = { createdAt: old, updatedAt: old, latestAttentionAt: old };
     let prOpen = false;
+    const batches: string[][] = [];
+    const threads = [
+      projectThread({ id: "parent", ...quiet }),
+      projectThread({ id: "child", parentThreadId: "parent", environmentId: "env_child", ...quiet }),
+    ];
+    // A reload keeps only these options, so the thread listing is passed here.
     const { bb, harness } = createFakePluginHost({
       pluginId: "bb-sidebar",
       sdk: {
-        projects: {
-          list: async () =>
-            projectsWith([
-              projectThread({ id: "parent", ...quiet }),
-              projectThread({ id: "child", parentThreadId: "parent", environmentId: "env_child", ...quiet }),
-            ]),
-        },
-        threads: { get: async ({ threadId }) => makeThreadResponse({ id: threadId }) },
-        plugins: { callRpc: pullRequestStatus(() => availablePullRequest(prOpen ? "open" : "merged")) },
+        projects: { list: async () => projectsWith(threads) },
+        threads: { get: async ({ threadId }) => makeThreadResponse({ id: threadId }), list: async () => threads },
+        plugins: { callRpc: pullRequestStatus(() => availablePullRequest(prOpen ? "open" : "merged"), batches) },
       },
     });
     await plugin(bb);
@@ -181,14 +181,19 @@ describe("automatic settle evaluation", () => {
       changedThreadIds: ["parent", "child"],
     });
     prOpen = true;
-    await expect(harness.behavior.callRpc("evaluateAutoSettle", {})).resolves.toEqual({
+    // A settled tree is done: an ordinary pass does not look its PR up again.
+    await expect(harness.behavior.callRpc("evaluateAutoSettle", {})).resolves.toEqual({ changedThreadIds: [] });
+    expect(batches).toEqual([["env_child"]]);
+    const reloaded = (await harness.lifecycle.reload(plugin)).harness;
+    disposers.push(() => reloaded.lifecycle.dispose());
+    await expect(reloaded.behavior.callRpc("evaluateAutoSettle", {})).resolves.toEqual({
       changedThreadIds: ["child", "parent"],
     });
-    await expect(harness.behavior.callRpc("evaluateAutoSettle", {})).resolves.toEqual({ changedThreadIds: [] });
-    await expect(harness.behavior.callRpc("listLifecycle", {})).resolves.toEqual({ rows: [] });
+    await expect(reloaded.behavior.callRpc("evaluateAutoSettle", {})).resolves.toEqual({ changedThreadIds: [] });
+    await expect(reloaded.behavior.callRpc("listLifecycle", {})).resolves.toEqual({ rows: [] });
   });
 
-  it("does not settle a parent while a child's PR is reopening", async () => {
+  it("does not settle a parent while a child's PR is reopening after a settings change", async () => {
     const old = Date.now() - 4 * 86400000;
     const quiet = { createdAt: old, updatedAt: old, latestAttentionAt: old };
     let parentPinned = true;
@@ -204,15 +209,30 @@ describe("automatic settle evaluation", () => {
             ]),
         },
         threads: { get: async ({ threadId }) => makeThreadResponse({ id: threadId }) },
-        plugins: { callRpc: pullRequestStatus(() => availablePullRequest(prOpen ? "open" : "merged")) },
+        plugins: {
+          callRpc: pullRequestStatus(async () => {
+            await held?.promise;
+            return availablePullRequest(prOpen ? "open" : "merged");
+          }),
+        },
       },
     });
+    let held: ReturnType<typeof deferred<void>> | null = null;
     await plugin(bb);
     disposers.push(() => harness.lifecycle.dispose());
     await expect(harness.behavior.callRpc("evaluateAutoSettle", {})).resolves.toEqual({ changedThreadIds: ["child"] });
     parentPinned = false;
     prOpen = true;
-    await expect(harness.behavior.callRpc("evaluateAutoSettle", {})).resolves.toEqual({ changedThreadIds: ["child"] });
+    // The settings change starts a full pass; holding its lookup makes this
+    // call join it.
+    held = deferred<void>();
+    const settings = (await harness.behavior.callRpc("getSidebarSettings", {})) as Record<string, unknown>;
+    await harness.behavior.callRpc("updateSidebarSettings", { ...settings, autoSettleAfterDays: 2 });
+    const full = harness.behavior.callRpc("evaluateAutoSettle", {});
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    held.resolve();
+    await expect(full).resolves.toEqual({ changedThreadIds: ["child"] });
+    await expect(harness.behavior.callRpc("evaluateAutoSettle", {})).resolves.toEqual({ changedThreadIds: [] });
     await expect(harness.behavior.callRpc("listLifecycle", {})).resolves.toEqual({ rows: [] });
   });
 
@@ -589,9 +609,11 @@ describe("automatic settle evaluation", () => {
     expect(batches).toEqual([]);
   });
 
-  it("returns a policy-settled thread when its PR reopens", async () => {
+  it("returns a policy-settled thread whose PR reopened only once a rule changes", async () => {
     const recent = Date.now() - 60_000;
     let pullRequestState: "merged" | "open" = "merged";
+    const batches: string[][] = [];
+    let held: ReturnType<typeof deferred<void>> | null = null;
     const { bb, harness } = createFakePluginHost({
       pluginId: "bb-sidebar",
       sdk: {
@@ -609,7 +631,10 @@ describe("automatic settle evaluation", () => {
             ]),
         },
         plugins: {
-          callRpc: pullRequestStatus(() => availablePullRequest(pullRequestState)),
+          callRpc: pullRequestStatus(async () => {
+            await held?.promise;
+            return availablePullRequest(pullRequestState);
+          }, batches),
           getSettings: async () => ({ ok: true as const, schema: {}, values: { autoSettleOnMerge: true } }),
         },
       },
@@ -619,7 +644,17 @@ describe("automatic settle evaluation", () => {
 
     await expect(harness.behavior.callRpc("evaluateAutoSettle", {})).resolves.toEqual({ changedThreadIds: ["thr_pr"] });
     pullRequestState = "open";
-    await expect(harness.behavior.callRpc("evaluateAutoSettle", {})).resolves.toEqual({ changedThreadIds: ["thr_pr"] });
+    await expect(harness.behavior.callRpc("evaluateAutoSettle", {})).resolves.toEqual({ changedThreadIds: [] });
+    expect(batches).toEqual([["env_pr"]]);
+    const settings = (await harness.behavior.callRpc("getSidebarSettings", {})) as Record<string, unknown>;
+    // Holding the settings change's lookup makes this call join that pass.
+    held = deferred<void>();
+    await harness.behavior.callRpc("updateSidebarSettings", { ...settings, autoSettleAfterDays: 4 });
+    const full = harness.behavior.callRpc("evaluateAutoSettle", {});
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    held.resolve();
+    await expect(full).resolves.toEqual({ changedThreadIds: ["thr_pr"] });
+    expect(batches[1]).toEqual(["env_pr"]);
     await expect(harness.behavior.callRpc("listLifecycle", {})).resolves.toEqual({ rows: [] });
   });
 

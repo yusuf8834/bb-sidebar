@@ -7,6 +7,8 @@ import type { createServerSettleCleanup } from "./server-settle-cleanup";
 import {
   autoSettleNeedsPullRequest,
   decideAutoSettle,
+  decideAutoSettledThread,
+  isAutoSettled,
   parseAutoSettleAfterDays,
   type AutoSettlePullRequest,
 } from "./auto-settle";
@@ -140,6 +142,19 @@ export function createServerPolicy(
 
   let policySettingsRevision = 0;
 
+  // A settled thread is done. Ordinary passes only re-decide live threads; one
+  // the policy settled is looked at again only after a rule changes, or on the
+  // first pass after the server starts, when the rules may have changed while
+  // it was down. The flag stays set until such a pass completes at the current
+  // rules, so a failed or superseded pass cannot leave threads settled under
+  // rules the user turned off.
+  let fullRecheckPending = true;
+  // Policy-settled threads a re-check could not decide because their PR lookup
+  // had no answer. Each is looked up on later passes until one answers. Holding
+  // the flag instead would keep every pass full while a removed workspace keeps
+  // reporting `unavailable`.
+  let unansweredThreadIds = new Set<string>();
+
   const evaluatePolicies = (): Promise<string[]> => {
     if (policyEvaluation !== null) {
       policyEvaluationQueued = true;
@@ -147,6 +162,15 @@ export function createServerPolicy(
     }
     const evaluation = (async () => {
       const settingsRevision = policySettingsRevision;
+      const fullRecheck = fullRecheckPending;
+      const rechecks = (threadId: string) => fullRecheck || unansweredThreadIds.has(threadId);
+      let unanswered = new Set<string>();
+      // Only a completed pass at the rules it read updates either record.
+      const finishRecheck = () => {
+        if (settingsRevision !== policySettingsRevision) return;
+        if (fullRecheck) fullRecheckPending = false;
+        unansweredThreadIds = unanswered;
+      };
       const configured = readSidebarSettings();
       let threads = await loadPolicyThreads(true);
       // Repair older trees before any decision reads their children's rows.
@@ -163,9 +187,11 @@ export function createServerPolicy(
         ? [
             ...new Set(
               threads.flatMap((thread) => {
+                const row = lifecycleByThreadId.get(thread.id) ?? null;
                 if (
                   thread.environmentId === null ||
-                  !autoSettleNeedsPullRequest(lifecycleByThreadId.get(thread.id) ?? null, thread)
+                  (!rechecks(thread.id) && isAutoSettled(row)) ||
+                  !autoSettleNeedsPullRequest(row, thread)
                 ) {
                   return [];
                 }
@@ -176,26 +202,31 @@ export function createServerPolicy(
         : [];
       const pullRequests = await loadPullRequests(environmentIds);
       const now = Date.now();
-      const decide = (keepThreadIds: ReadonlySet<string>) =>
-        threads.flatMap((thread) => {
+      const decide = (keepThreadIds: ReadonlySet<string>) => {
+        unanswered = new Set();
+        return threads.flatMap((thread) => {
           if (keepThreadIds.has(thread.id) || (thread.visibility === "hidden" && thread.parentThreadId === null))
             return [];
           // Re-read after every lookup so a concurrent Park action wins.
           const row = readOne(thread.id);
-          const decision = decideAutoSettle({
-            lifecycle: row,
-            now,
-            pullRequest:
-              thread.environmentId === null || !readsPullRequests
-                ? { outcome: "absent" }
-                : (pullRequests.get(thread.environmentId) ?? {
-                    outcome: "unknown",
-                  }),
-            settings: policySettings,
-            thread,
-          });
+          // Decided per thread: PR rows are keyed by environment, so a settled
+          // thread sharing a workspace with a live one would otherwise be
+          // re-decided from the live thread's lookup.
+          if (!rechecks(thread.id) && isAutoSettled(row)) {
+            const decision = decideAutoSettledThread(row, thread);
+            return decision === "keep" ? [] : [{ decision, row, threadId: thread.id }];
+          }
+          const pullRequest: AutoSettlePullRequest =
+            thread.environmentId === null || !readsPullRequests
+              ? { outcome: "absent" }
+              : (pullRequests.get(thread.environmentId) ?? { outcome: "unknown" });
+          const decision = decideAutoSettle({ lifecycle: row, now, pullRequest, settings: policySettings, thread });
+          if (decision === "keep" && pullRequest.outcome === "unknown" && isAutoSettled(row)) {
+            unanswered.add(thread.id);
+          }
           return decision === "keep" ? [] : [{ decision, row, threadId: thread.id }];
         });
+      };
       let changes = decide(new Set());
       // Settling stops the runtime, which kills what its agent left running in
       // the background, and bb cannot see that work when the provider does not
@@ -235,7 +266,10 @@ export function createServerPolicy(
       );
       // Settings can change while PRs or ports are loading. The queued pass
       // uses the latest rules; this older pass must not move or stop threads.
-      if (settingsRevision !== policySettingsRevision || changes.length === 0) return backfilled;
+      if (settingsRevision !== policySettingsRevision || changes.length === 0) {
+        finishRecheck();
+        return backfilled;
+      }
       applyPolicyChanges(changes, now);
       const cleanupRows = new Map(changes.map((change) => [change.threadId, readOne(change.threadId)]));
       const changedThreadIds = new Set(changes.map((change) => change.threadId));
@@ -276,6 +310,7 @@ export function createServerPolicy(
         },
         4,
       );
+      finishRecheck();
       return [...changedThreadIds];
     })();
     const settledEvaluation = evaluation.finally(() => {
@@ -294,6 +329,7 @@ export function createServerPolicy(
   };
   const settingsChanged = () => {
     policySettingsRevision += 1;
+    fullRecheckPending = true;
   };
 
   return { evaluatePolicies, settingsChanged };
