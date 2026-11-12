@@ -51,6 +51,15 @@ test("vitest counts and the first error lines come out of real output", () => {
     },
   );
   assert.equal(parseTestCounts("no summary"), null);
+  assert.deepEqual(
+    parseTestCounts("✔ a\nℹ tests 35\nℹ suites 0\nℹ pass 34\nℹ fail 1\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\n"),
+    {
+      passed: 34,
+      failed: 1,
+      skipped: 0,
+      total: 35,
+    },
+  );
   const tsc =
     "> tsc --noEmit\n\nsrc/lifecycle.ts(12,3): error TS2339: Property 'goals' does not exist on type 'PluginSidebarThreadActivity'.\n";
   assert.deepEqual(firstErrorLines(tsc), [

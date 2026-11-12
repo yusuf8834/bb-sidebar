@@ -58,17 +58,35 @@ export function bumpSteps(packageJson) {
   ];
 }
 
-/** Vitest's summary line, e.g. "Tests  2 failed | 1187 passed (1189)". */
+/**
+ * Test counts from Vitest's summary ("Tests  2 failed | 1187 passed (1189)")
+ * or node:test's ("ℹ tests 35", "ℹ pass 35", ...).
+ */
 export function parseTestCounts(output) {
   const lines = stripAnsi(output).split("\n");
   const line = lines.findLast((candidate) => /^\s*Tests\s+.*\(\d+\)\s*$/.test(candidate));
-  if (!line) return null;
+  if (!line) return nodeTestCounts(lines);
   const count = (word) => Number(new RegExp(`(\\d+) ${word}`).exec(line)?.[1] ?? 0);
   return {
     passed: count("passed"),
     failed: count("failed"),
     skipped: count("skipped") + count("todo"),
     total: Number(/\((\d+)\)\s*$/.exec(line)[1]),
+  };
+}
+
+function nodeTestCounts(lines) {
+  const count = (word) => {
+    const line = lines.findLast((candidate) => new RegExp(`^ℹ ${word} \\d+$`).test(candidate.trim()));
+    return line === undefined ? null : Number(line.trim().split(" ")[2]);
+  };
+  const total = count("tests");
+  if (total === null) return null;
+  return {
+    passed: count("pass") ?? 0,
+    failed: count("fail") ?? 0,
+    skipped: (count("skipped") ?? 0) + (count("todo") ?? 0),
+    total,
   };
 }
 
