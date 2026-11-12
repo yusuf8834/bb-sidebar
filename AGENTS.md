@@ -15,14 +15,40 @@ Inbox hooks use `src/use*.ts`; gesture helpers use `src/drag-*.ts`.
 Inbox rendering: `src/ThreadInboxView.tsx` and `src/ThreadInboxEmptyStates.tsx`.
 Inbox context: `src/InboxContext.tsx` shares environment, actions, and activity.
 
+## Live threads: polls and scheduled work skip Settled
+
+A settled thread is done, practically archived. Any automatic, recurring work
+you add (poll, scheduled pass, scan, background lookup) must cover only threads
+that are not settled. Look a settled thread up on demand instead: when its
+hover card opens, when the thread is open, or when it returns to Active (it is
+live again). Snoozed, Parked and Inactive-shelf threads stay live.
+
+- App: `useLiveThreads`, over shared `src/live-threads.ts`, gives `settled`;
+  it is null until lifecycle rows load, so start nothing before then.
+  On-demand lookups use `useOnDemandLookups`, fired from
+  `ThreadDetailsTooltip.tsx`.
+- `ThreadInbox` reads rows with `useLifecycleRows` above `RateLimitsProvider`;
+  `useLifecycle(threads, lifecycleRows)` classifies.
+- `RateLimitsProvider` and `OpenPortsProvider` poll live threads only. Ports
+  go by workspace: one shared with a live thread is still polled.
+- `getOpenPorts` takes `{ environmentIds }` (1-500, strict) and rejects `{}`;
+  the app sends live workspaces and splits longer lists.
+- Server: `server-policy` passes (run by the 5-minute `auto-settle` schedule,
+  among others) skip PR lookups for policy-settled threads; only
+  `cannotAutoSettle` in `src/auto-settle.ts` can return them to Active. A
+  full re-check is pending from server start and from each auto-settle
+  settings change until a pass completes; unanswered lookups retry each pass.
+  New server jobs decide "settled" with `resolveRowShelf` or `resolveShelf`
+  from shared `src/lifecycle.ts`.
+
 ## Runtimes and imports
 
 - Browser entry: `app.tsx`. App code includes `src/*.tsx`, `src/components/**`,
   `src/lib/**`, `src/use*.ts`, and the browser modules listed below.
-  React, DOM APIs, and SDK app APIs belong here. No imports of `server` or
-  `ports-host`, even for types. No value imports of Node built-ins with or
-  without `node:`, or `better-sqlite3`, even dynamically. Type-only imports of
-  other Node modules are allowed.
+  React, DOM APIs, and SDK app APIs belong here. No imports of `server`,
+  `server-*`, or `ports-host`, even for types or side effects. No value
+  imports of Node built-ins with or without `node:`, or `better-sqlite3`, even
+  dynamically. Type-only imports of other Node modules are allowed.
 - Node server entry: `src/server.ts`. Node host entry: `src/ports-host.ts`.
   Flat `src/server-*.ts` modules share `ServerContext` explicitly.
   Their other supporting Node modules are `port-scan`, `auto-title`,
@@ -38,15 +64,17 @@ Inbox context: `src/InboxContext.tsx` shares environment, actions, and activity.
   `settled-port-prompt`, and `bb-sdk`. `project-colors.ts` uses React's
   `CSSProperties` type and `title-generation-state.ts` uses
   `useSyncExternalStore` intentionally.
-- Shared modules today are all other top-level `src/*.ts`, excluding
-  `server-*.ts`, `use*.ts`, `*.test.ts`, `*.d.ts`, and `test-*.ts`.
-  They must not import React, React DOM, Node built-ins, Node entries, TSX,
-  browser `.ts` modules, `use*` hooks, `lib/**`, or `components/**`, even for
-  types, or value-import SQLite.
-  This is a dependency boundary; these modules are not necessarily free of
-  side effects or DOM access. Tests retain their runtime's boundaries;
-  top-level `.ts` tests and test helpers may use Node test tooling. Keep the
-  ordered classifications in `biome.json` in sync.
+- Shared modules are all other top-level `src/*.ts`, excluding `server-*.ts`,
+  `use*.ts`, `*.test.ts`, `*.d.ts`, and `test-*.ts`. They must not import
+  React, React DOM, Node built-ins, Node entries, TSX, browser `.ts` modules,
+  `use*` hooks, `lib/**`, or `components/**`, even for types, or value-import
+  SQLite. This is a dependency boundary; these modules are not necessarily
+  free of side effects or DOM access.
+- Tests keep their runtime's boundaries; top-level `.ts` tests and test
+  helpers may use Node test tooling.
+- These classifications are the ordered overrides in `biome.json` (type
+  imports, app, shared, Node). A new browser `.ts` or Node module goes in its
+  override's `includes` and in the shared override's exclusions.
 
 App experimental SDK hooks use stable names from `src/bb-sdk.ts`.
 Pin to the SDK the latest stable bb-app ships; migrate experimental_* breaks
@@ -84,28 +112,24 @@ port contract lives in `src/port-scan-contract.ts`.
 - `server-project-management`: project names, paths, and removal.
 - `server-settle-cleanup`: cleanup previews, cleanup, and runtime reclaim.
 - `server-settle-actions`: tree settle, return to Active, and Undo snapshots.
-- `server-policy`: automatic settle evaluation and settings revisions.
+- `server-policy`: automatic settle passes and settings revisions.
 - `server-rate-limits`: provider-limit reads and scheduled Continue queue actions.
 - `server-rate-limit-details`: failed-turn classification and provider reset times.
 - `server-handlers`: RPC handlers assembled from the modules.
 - `server-cli`: the `bb sidebar` agent command over those handlers. Keep it to
   a few subcommands; each one adds a line to the `plugin-commands` skill.
-- `server.ts`: migrations, context creation, wiring, HTTP, CLI, and events.
+- `server.ts`: migrations, context, wiring, `auto-settle` schedule, HTTP, CLI,
+  events.
 
-The Node override uses `src/server-*.ts`; shared modules exclude that pattern.
-Browser/shared imports of those modules are forbidden, including types.
-
-Settings live in the single `sidebar_settings.settings_json` column. The
-server derives per-field fallbacks from `DEFAULT_SIDEBAR_SETTINGS`, except that
-installs marked in `install_defaults` (data before that migration) keep
-`autoSettleOnMerge` on until they save settings. It validates
-with `sidebarSettingsSchema`, and keeps strict RPC input validation. The
-migration copies old columns into camelCase JSON with real boolean values.
-Old columns remain unused after migration and can be dropped with a table
-rebuild in a later major. A compatibility row satisfies their original
-NOT NULL constraints; NULL JSON still permits the legacy SDK settings import.
-The app reads server settings or the existing cache. Do not load zod or
-contract schemas in browser code; cache validation uses codecs in `src/lib/`.
+Settings live in the single `sidebar_settings.settings_json` column, validated
+with `sidebarSettingsSchema`; RPC input validation stays strict. Per-field
+fallbacks come from `DEFAULT_SIDEBAR_SETTINGS`, except that installs marked in
+`install_defaults` keep `autoSettleOnMerge` on until they save settings. The
+old columns are unused: a compatibility row satisfies their NOT NULL
+constraints, NULL JSON still permits the legacy SDK settings import, and
+dropping them needs a table rebuild in a later major. The app reads server
+settings or the existing cache. Do not load zod or contract schemas in browser
+code; cache validation uses codecs in `src/lib/`.
 
 ## Browser persistence
 
@@ -120,81 +144,77 @@ access are checked by `src/storage-keys.test.ts`.
 
 ## Size and style budgets
 
-SB-14 split SidebarSettings.tsx into section components; keep draft and save logic centralized.
-
-- Production files and `scripts/**/*.mjs`: at most 500 physical lines. Tests get
-  1,000. `scripts/check-file-sizes.mjs` records ceilings for two production
-  files. Growth fails; shrinkage also fails until the ceiling is lowered.
-  Remove entries once within the default budget. `SubagentsChip.test.tsx` is
-  within 1,000 and needs no exception.
-- Biome: two spaces, double quotes, semicolons, trailing commas, width 120.
-  Markdown and YAML are no longer formatted. Biome has no line-count warnings;
-  the physical gate still applies to tests; SB-3 splits large tests.
-- Biome's `noRestrictedImports` enforces Node/shared restrictions and bans
-  browser imports of Node entries, including types and bare side effects.
-  `useImportType` is an error. `jsxRuntime: reactClassic` preserves the old
-  linter's treatment of React namespace imports in JSX files; it does not
-  change TypeScript's `react-jsx` compilation.
-- Biome lacks `allowTypeImports`. `scripts/check-import-boundaries.mjs` enforces
-  browser Node entry bans, value-only restrictions for other Node modules,
-  and shared Node built-in bans, including dynamic imports. It permits browser
-  type imports of other Node modules, bans shared imports of local browser
-  modules, and checks the Node/shared TSX names for drift.
-  It bans `import()` type annotations except in `ports-host.test.ts`, where
-  Vitest's `importOriginal` needs them. Regular imports there still require
-  type-only syntax when used only as types.
+- Production files and `scripts/**/*.mjs`: at most 500 physical lines; tests
+  get 1,000. `scripts/check-file-sizes.mjs` records a ceiling for one file,
+  `src/ThreadCard.tsx`. Growth fails; shrinkage also fails until the ceiling
+  is lowered. Remove the entry once the file is within 500.
+- `SidebarSettings.tsx` renders section components; keep draft and save logic
+  centralized there.
+- Biome does not format Markdown or YAML. `useImportType` is an error.
+  `jsxRuntime: reactClassic` affects linting only; TypeScript still compiles
+  with `react-jsx`.
+- Biome's `noRestrictedImports` enforces the import rules above. Biome lacks
+  `allowTypeImports`, so `scripts/check-import-boundaries.mjs` enforces the
+  type-only, dynamic-import and Node built-in parts. It also checks the
+  Node/shared TSX name lists for drift, requires named imports from
+  `@get-bb/plugin-sdk/app` with `experimental_*` only in `src/bb-sdk.ts`, and
+  bans `import()` type annotations except in `ports-host.test.ts` (Vitest's
+  `importOriginal`; regular imports there still need type-only syntax when
+  used only as types).
 
 ## Checks
 
-E2E: `env -i PATH="$PATH" HOME="$HOME" npm run e2e`; quick: `e2e:smoke`;
-`bb sidebar` CLI against the scratch server: `e2e:cli`.
-Only drive/install/seed on the runner's scratch server; never the live host.
-macOS: `npm run e2e -- --update-snapshots` with the same clean environment.
-Review `e2e/__snapshots__/` diffs; see `e2e/README.md`. Outside `npm run check`.
-Before releases on macOS: `npm run e2e`; CI: `gh workflow run "Browser e2e"`.
+A fresh checkout or worktree must run `npm ci` before its first commit: it
+installs lefthook, and the pre-commit hook runs the local Biome binary.
 
-Run `npm ci`, then `npm run check` before and after changes. CI runs the same
-lint, format check, Knip, typecheck, Vitest suite, BB plugin build, and the
-browser bundle guard against `ZodError`, plus
-`npx --no-install bb plugin types --check`. Typecheck includes `knip.ts`.
-
-Test timeouts are centralized: Testing Library gets 5s in `test-setup.ts`;
-Vitest gets 30s in `vitest.config.ts`. App tests retain file isolation.
-`test-app-setup.ts` resets state, and cleanup hooks register per file.
-Vitest loads real icon data through `test-icon-data.ts` leaf exports. Keep
-them in sync with `components/Icon.tsx`; `hugeicons.test.ts` checks their SVG
-data against the package's full ESM entry.
-New module-level mutable app state (`Map`/`Set`/`let`) needs a `*ForTests`
-reset wired into `test-app-setup.ts`. Existing resets:
-
-- `resetProjectFaviconsForTests` in `ProjectFavicon.tsx`;
-- `resetTitleGenerationForTests` in `title-generation-state.ts`;
-- `resetWorkingEmptyLineForTests` in `working-empty-lines.ts`.
+Run `npm run check` before and after changes; once before a commit is enough.
+CI runs it plus `npx --no-install bb plugin types --check`. `npm run format`
+writes formatting; `npm run lint`, `npm run format:check`, and `npm run knip`
+run individually.
 
 `npm run test:stress` is manual only. Do not run it unless the user asks:
-it pins every CPU core for minutes. `npm run check` once before a commit is
-enough. The stress CI job also runs only when triggered by hand.
+it pins every CPU core for minutes. The stress CI job also runs only when
+triggered by hand.
 
-A fresh checkout or worktree must run `npm ci` before its first commit
-because the pre-commit hook runs the local Biome binary.
+Hooks (`lefthook.yml`) are installed into the common `.git/hooks` for every
+worktree; branches without `lefthook.yml` skip them. They check without
+applying fixes. Commit-msg runs `scripts/strip-ai-attribution.mjs`.
 
-Use `npm run format` to format the repository. `npm run lint`,
-`npm run format:check`, and `npm run knip` can run individually.
-`npm ci` installs lefthook via `prepare` into the common `.git/hooks` for the
-main checkout and every worktree; branches without `lefthook.yml` skip these
-checks. Pre-commit runs Biome check and import boundaries on staged files,
-plus the size gate. Pre-push runs `npm run check`. Hooks check files without
-applying fixes. Commit-msg runs `scripts/strip-ai-attribution.mjs`, which
-removes coding-agent co-author trailers and "Generated with" lines. Cursor adds
-its trailer even with attribution turned off.
-If Knip says unused and bb plugin types did not pin it, remove it.
-`npm run knip` checks unused exports and exported types in every file,
-without per-file or issue-type exceptions. `knip.ts` preserves only SDK
-peer dependencies and the `tsc` binary ignore for the TypeScript alias.
+Knip: if it says unused and bb plugin types did not pin it, remove it.
+`npm run knip` checks unused exports and exported types in every file, without
+per-file or issue-type exceptions. `knip.ts` preserves only SDK peer
+dependencies and the `tsc` binary ignore for the TypeScript alias.
 
-`src/test-wired.ts` wires real app/server SDK RPC; `flush()` sends realtime.
-Fixtures in `src/fixtures/` have hashes; release data comes from pinned tags.
-Generate with `npm run fixture:db -- <new-path> [git-ref]`. The default remains
-pinned v0.2.34. An explicit tag or commit SHA generates a new schema snapshot
-from a temporary git worktree using that checkout's `server.ts`.
-Future schema changes add versions; never edit or overwrite old fixtures.
+### Tests
+
+- Timeouts are centralized in `test-setup.ts` (Testing Library) and
+  `vitest.config.ts` (Vitest). App tests retain file isolation.
+- `test-app-setup.ts` resets state, and cleanup hooks register per file.
+  New module-level mutable app state (`Map`/`Set`/`let`) needs a `*ForTests`
+  reset wired into it. Existing resets: `resetProjectFaviconsForTests` in
+  `ProjectFavicon.tsx`, `resetTitleGenerationForTests` in
+  `title-generation-state.ts`, `resetWorkingEmptyLineForTests` in
+  `working-empty-lines.ts`. State inside hooks or providers needs none.
+- Vitest loads real icon data through `test-icon-data.ts` leaf exports. Keep
+  them in sync with `components/Icon.tsx`; `hugeicons.test.ts` checks their SVG
+  data against the package's full ESM entry.
+- `src/test-wired.ts` wires real app/server SDK RPC; `flush()` sends realtime.
+- `harness.lifecycle.reload(plugin)` rebuilds the host from the original
+  `createFakePluginHost` options (stored data survives). Stubs added through
+  `inspection.sdk.stub`, including `test-server.ts`'s default `threads.list`,
+  are dropped, so reload tests pass `threads.list` in the options.
+- Fixtures in `src/fixtures/` have hashes; release data comes from pinned tags.
+  Generate with `npm run fixture:db -- <new-path> [git-ref]`. The default is
+  v0.2.34. An explicit tag or commit SHA generates a new schema
+  snapshot from a temporary git worktree using that checkout's `server.ts`.
+  Future schema changes add versions; never edit or overwrite old fixtures.
+
+### Browser e2e
+
+Outside `npm run check`; see `e2e/README.md`. Full:
+`env -i PATH="$PATH" HOME="$HOME" npm run e2e`; quick: `e2e:smoke`; `bb sidebar`
+CLI against the scratch server: `e2e:cli`. Only drive/install/seed on the
+runner's scratch server; never the live host. macOS snapshots:
+`npm run e2e -- --update-snapshots` with the same clean environment; review
+`e2e/__snapshots__/` diffs. Before releases on macOS: `npm run e2e`; CI:
+`gh workflow run "Browser e2e"`.
