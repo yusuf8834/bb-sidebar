@@ -3,6 +3,7 @@ import { useRealtime, useRealtimeConnectionState, useRpc, type PluginSidebarThre
 import type { bbSidebarRpcContract, ThreadLimitState } from "./contract";
 import { RATE_LIMITS_CHANNEL } from "./realtime-channels";
 import { toast } from "./lib/toast";
+import { useOnDemandLookups } from "./useOnDemandLookups";
 
 type LimitRows = Record<string, ThreadLimitState | null>;
 const RateLimitsContext = createContext<{
@@ -10,13 +11,28 @@ const RateLimitsContext = createContext<{
   pending: ReadonlySet<string>;
   schedule: (threadId: string, sendAt?: number) => Promise<boolean>;
   cancel: (threadId: string, queuedMessageId: string) => Promise<boolean>;
+  /** Looks up a settled thread, which the recurring refresh skips. */
+  lookUp: (threadId: string) => void;
 } | null>(null);
 
+function mayHaveLimit(thread: PluginSidebarThread) {
+  return !thread.isArchived && (thread.status === "error" || thread.queuedWork !== "none");
+}
+
+/**
+ * Provider limits for threads that are errored or have queued work. The 30s
+ * poll, realtime pings and reconnects cover live threads only; a settled one
+ * is looked up when the user looks at it. `settledThreadIds` is null until
+ * the lifecycle rows are known, and nothing recurs before then, because every
+ * thread would otherwise count as live for one full lookup.
+ */
 export function RateLimitsProvider({
   threads,
+  settledThreadIds,
   children,
 }: {
   threads: readonly PluginSidebarThread[];
+  settledThreadIds: ReadonlySet<string> | null;
   children: ReactNode;
 }) {
   const rpc = useRpc<typeof bbSidebarRpcContract>();
@@ -26,11 +42,28 @@ export function RateLimitsProvider({
   const mutations = useRef(new Set<string>());
   const request = useRef(0);
   const signature = JSON.stringify(
-    threads
-      .filter((thread) => !thread.isArchived && (thread.status === "error" || thread.queuedWork !== "none"))
-      .map((thread) => [thread.id, thread.status, thread.queuedWork, thread.status === "error" ? thread.updatedAt : 0]),
+    settledThreadIds === null
+      ? []
+      : threads
+          .filter((thread) => mayHaveLimit(thread) && !settledThreadIds.has(thread.id))
+          .map((thread) => [
+            thread.id,
+            thread.status,
+            thread.queuedWork,
+            thread.status === "error" ? thread.updatedAt : 0,
+          ]),
   );
   const keys = useMemo(() => (JSON.parse(signature) as [string, ...unknown[]][]).map(([id]) => id), [signature]);
+  const settledKey = threads
+    .filter((thread) => mayHaveLimit(thread) && settledThreadIds?.has(thread.id))
+    .map((thread) => thread.id)
+    .join("\n");
+  const settledKeys = useMemo(() => new Set(settledKey === "" ? [] : settledKey.split("\n")), [settledKey]);
+  const fetchOne = useCallback(
+    async (threadId: string) => (await rpc.call("getThreadLimits", { keys: [threadId] }))[threadId] ?? null,
+    [rpc],
+  );
+  const onDemand = useOnDemandLookups(fetchOne, settledKeys);
   // A ping during a refresh waits for it and then runs one more, instead of adding a concurrent request.
   const inFlight = useRef(0);
   const pingQueued = useRef(false);
@@ -129,14 +162,22 @@ export function RateLimitsProvider({
       }),
     [rpc, mutate, refresh],
   );
-  const value = useMemo(() => ({ rows, pending, schedule, cancel }), [rows, pending, schedule, cancel]);
+  const merged = useMemo(
+    () => (onDemand.values.size === 0 ? rows : { ...Object.fromEntries(onDemand.values), ...rows }),
+    [onDemand.values, rows],
+  );
+  const { lookUp } = onDemand;
+  const value = useMemo(
+    () => ({ rows: merged, pending, schedule, cancel, lookUp }),
+    [merged, pending, schedule, cancel, lookUp],
+  );
   return <RateLimitsContext.Provider value={value}>{children}</RateLimitsContext.Provider>;
 }
 
 export function useThreadLimit(thread: PluginSidebarThread) {
   const context = useContext(RateLimitsContext);
   const limit = context?.rows[thread.id] ?? null;
-  if (thread.isArchived || (thread.status !== "error" && thread.queuedWork === "none")) return null;
+  if (!mayHaveLimit(thread)) return null;
   return limit;
 }
 

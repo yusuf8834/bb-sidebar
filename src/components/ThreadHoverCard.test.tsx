@@ -125,3 +125,18 @@ it.each([false, true])(
     expect(document.activeElement).not.toBe(first);
   },
 );
+
+it("never opens from a touch: a tap moves, presses, focuses and clicks without a hover", async () => {
+  vi.useFakeTimers();
+  render(<Card />);
+  const row = screen.getByRole("link", { name: "Thread" });
+  fireEvent.pointerMove(row, { pointerType: "touch" });
+  fireEvent.pointerDown(row, { pointerType: "touch" });
+  act(() => row.focus());
+  fireEvent.pointerUp(document, { pointerType: "touch" });
+  fireEvent.click(row);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(400);
+  });
+  expect(screen.queryByRole("dialog")).toBeNull();
+});

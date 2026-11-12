@@ -26,6 +26,8 @@ import { createInboxThreadRenderer } from "./InboxThreadRenderer";
 import { childThreadsByParent, collapsedChildThreads } from "./ChildThreadList";
 import { useChildThreadDisplayValue } from "./ChildThreadDisplay";
 import { useLifecycle } from "./useLifecycle";
+import { useLifecycleRows, type LifecycleRows } from "./useLifecycleRows";
+import { settledThreadIds } from "./live-threads";
 import type { createDragPreview } from "./drag-preview";
 import { usePinnedReorder } from "./usePinnedReorder";
 import { useCollapseChildrenOnSettle } from "./useCollapseChildrenOnSettle";
@@ -57,9 +59,15 @@ type ActiveShelfKind = "pinned" | "inbox";
  */
 export function ThreadInbox(props: PluginThreadListProps) {
   const snapshot = useSidebarThreads();
+  // Read above the limit provider: it skips settled threads, and the inbox
+  // below reads its limit rows to place snoozed ones.
+  const lifecycleRows = useLifecycleRows();
+  const { threads } = snapshot;
+  const { loaded, rows } = lifecycleRows;
+  const settled = useMemo(() => (loaded ? settledThreadIds(threads, rows, Date.now()) : null), [loaded, rows, threads]);
   return (
-    <RateLimitsProvider threads={snapshot.threads}>
-      <ThreadInboxContent {...props} snapshot={snapshot} />
+    <RateLimitsProvider threads={threads} settledThreadIds={settled}>
+      <ThreadInboxContent {...props} snapshot={snapshot} lifecycleRows={lifecycleRows} />
     </RateLimitsProvider>
   );
 }
@@ -69,15 +77,17 @@ function ThreadInboxContent({
   onNavigate,
   isCompactViewport,
   snapshot,
+  lifecycleRows,
 }: PluginThreadListProps & {
   snapshot: ReturnType<typeof useSidebarThreads>;
+  lifecycleRows: LifecycleRows;
 }) {
   const { status, threads, projects } = snapshot;
   const workingSince = useWorkingSince(threads, status);
   const { providers } = useProviders();
   const navigate = useBbNavigate();
   const sidebarSettings = useSidebarSettings();
-  const lifecycle = useLifecycle(threads);
+  const lifecycle = useLifecycle(threads, lifecycleRows);
   const projectIconRevision = useProjectIconRevision();
   const listAnimationController = useMemo(() => createListAnimationController(!isCompactViewport), [isCompactViewport]);
   const attachShelvesMotionRef = useListMotion<HTMLDivElement>(listAnimationController);

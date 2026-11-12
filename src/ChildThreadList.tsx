@@ -376,7 +376,7 @@ function ChildThreadRow({
           isActive && (variant === "header" ? "bg-accent" : "bg-sidebar-accent hover:bg-sidebar-accent"),
         )}
       >
-        <ThreadDetailsTooltip thread={thread} disabled={isRenaming}>
+        <ThreadDetailsTooltip thread={thread} disabled={isRenaming} isOpen={isActive}>
           <RowAction
             data-child-thread-id={thread.id}
             href={isRenaming ? undefined : thread.href}

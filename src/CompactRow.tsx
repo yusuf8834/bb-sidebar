@@ -69,7 +69,7 @@ export function CompactRow({
     >
       {beforeContent}
       {showProject && projectName ? <ProjectStripe projectId={thread.projectId} view="collapsed" /> : null}
-      <ThreadDetailsTooltip thread={thread} disabled={isRenaming || isDragging}>
+      <ThreadDetailsTooltip thread={thread} disabled={isRenaming || isDragging} isOpen={isActive}>
         <a
           // Both attributes, or bb's nine thread shortcuts stop finding rows.
           data-sidebar-thread-shortcut-target=""

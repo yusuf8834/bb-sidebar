@@ -1,5 +1,5 @@
 import { useProviders, useSidebarThreadSplit, useSidebarThreads } from "./bb-sdk";
-import { useEffect, useId, useState, type ReactElement } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ReactElement } from "react";
 import { useRpc, useRealtime, type PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import type { bbSidebarRpcContract } from "./contract";
 import { PROJECT_ICONS_CHANNEL } from "./realtime-channels";
@@ -16,16 +16,19 @@ import { OpenPortDetails } from "./OpenPorts";
 import { ThreadPullRequestDetails } from "./ThreadPullRequests";
 import { compareChildThreads, useChildThreadDisplay } from "./ChildThreadDisplay";
 import { cn } from "./lib/utils";
-import { useThreadLimit } from "./RateLimits";
+import { useLimitActions, useThreadLimit } from "./RateLimits";
 import { limitDescription, limitStatus } from "./rate-limit-labels";
 
 export function ThreadDetailsTooltip({
   thread,
   disabled,
+  isOpen = false,
   children,
 }: {
   thread: PluginSidebarThread;
   disabled: boolean;
+  /** The thread is open in bb. That also looks it up: touch screens never open the card. */
+  isOpen?: boolean;
   children: ReactElement;
 }) {
   const { providers } = useProviders();
@@ -80,6 +83,23 @@ export function ThreadDetailsTooltip({
       cancelled = true;
     };
   }, [call, thread.id, visible]);
+
+  // A settled thread is skipped by the recurring lookups, so looking at it
+  // asks once. Keyed on the open state alone: a context update mid-open must
+  // not ask again. Live threads make this a no-op.
+  const lookUpLimit = useLimitActions()?.lookUp;
+  const lookUps = useRef({ lookUpLimit });
+  lookUps.current = { lookUpLimit };
+  const lookUp = useCallback(
+    (looking: boolean) => {
+      if (looking) lookUps.current.lookUpLimit?.(thread.id);
+    },
+    [thread.id],
+  );
+  // Each trigger on its own: hovering the open thread still asks again once
+  // the last answer is older than 30s.
+  useEffect(() => lookUp(visible), [lookUp, visible]);
+  useEffect(() => lookUp(isOpen), [lookUp, isOpen]);
 
   const { sort: childSort } = useChildThreadDisplay();
   const statusThread = useThreadWithDraft(thread);
