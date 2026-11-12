@@ -3,9 +3,15 @@ import { makeThreadResponse } from "@get-bb/plugin-sdk/testing";
 import { loadPlugin } from "./test-server";
 
 describe("lifecycle RPC", () => {
-  it("returns no ports when no threads have environments", async () => {
+  it("rejects the empty input an older app bundle sends, and returns no ports for a workspace that is not ready", async () => {
     const harness = await loadPlugin();
-    await expect(harness.behavior.callRpc("getOpenPorts", {})).resolves.toEqual({
+    await expect(harness.behavior.callRpc("getOpenPorts", {})).rejects.toThrow();
+    await expect(harness.behavior.callRpc("getOpenPorts", { environmentIds: [] })).rejects.toThrow();
+    await expect(
+      harness.behavior.callRpc("getOpenPorts", { environmentIds: Array.from({ length: 501 }, (_, i) => `env_${i}`) }),
+    ).rejects.toThrow();
+    harness.inspection.sdk.stub("environments.list", async () => []);
+    await expect(harness.behavior.callRpc("getOpenPorts", { environmentIds: ["env_gone"] })).resolves.toEqual({
       groups: [],
     });
   });

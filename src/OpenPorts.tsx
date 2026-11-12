@@ -1,20 +1,41 @@
-import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { UrlLink, useRpc, type PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import { toast } from "./lib/toast";
-import type { bbSidebarRpcContract, OpenPort } from "./contract";
+import type { bbSidebarRpcContract, OpenPort, PortSnapshot } from "./contract";
 import { portsByEnvironment } from "./open-ports";
 import { Icon } from "./components/Icon";
 import { cn } from "./lib/utils";
 import { portBrowserUrl } from "./port-links";
 import { usePortLinkHost } from "./PortLinkSettings";
+import { useOnDemandLookups } from "./useOnDemandLookups";
 
 const OpenPortsContext = createContext<ReadonlyMap<string, readonly OpenPort[]>>(new Map());
-// Separate from the ports, so a consumer that only asks for a rescan never
-// rerenders when the list changes.
-const RefreshOpenPortsContext = createContext<() => void>(() => {});
+// Separate from the ports, so a consumer that only asks for a rescan or a
+// lookup never rerenders when the list changes.
+const OpenPortsActionsContext = createContext<{
+  /** Rescans now; a settled-only workspace is looked up again instead. */
+  refresh: (environmentId?: string) => void;
+  /** Looks up a workspace only settled threads use, which the poll skips. */
+  lookUp: (environmentId: string | undefined) => void;
+}>({ refresh: () => {}, lookUp: () => {} });
 // getOpenPorts answers from a 30s server cache, so polling faster only
 // fetches the same snapshot again.
 const PORT_POLL_INTERVAL_MS = 30_000;
+// Mirrors the contract's cap on environment ids per call.
+const ENVIRONMENTS_PER_CALL = 500;
+
+/** The workspaces the poll covers, and those only settled threads use; null until the shelves are known. */
+export type PortScanScope = { live: readonly string[]; settledOnly: ReadonlySet<string> } | null;
 
 function samePorts(left: ReadonlyMap<string, readonly OpenPort[]>, right: ReadonlyMap<string, readonly OpenPort[]>) {
   if (left.size !== right.size) return false;
@@ -33,13 +54,43 @@ function samePorts(left: ReadonlyMap<string, readonly OpenPort[]>, right: Readon
   });
 }
 
-export function OpenPortsProvider({ children }: { children: ReactNode }) {
+const NO_SETTLED_WORKSPACES: ReadonlySet<string> = new Set();
+
+/**
+ * Polls the workspaces of live threads every 30s. A workspace only settled
+ * threads use is scanned when one of them is looked at, and its ports show
+ * until that answer expires. Nothing polls before the shelves are known.
+ */
+export function OpenPortsProvider({ scope, children }: { scope: PortScanScope; children: ReactNode }) {
   const rpc = useRpc<typeof bbSidebarRpcContract>();
   const [ports, setPorts] = useState<ReadonlyMap<string, readonly OpenPort[]>>(new Map());
   const refreshRef = useRef<() => void>(() => {});
-  const refreshNow = useCallback(() => refreshRef.current(), []);
+  const liveKey = scope === null ? null : scope.live.join("\n");
+  const fetchOne = useCallback(
+    async (environmentId: string) =>
+      portsByEnvironment(await rpc.call("getOpenPorts", { environmentIds: [environmentId] })).get(environmentId) ?? [],
+    [rpc],
+  );
+  const onDemand = useOnDemandLookups<readonly OpenPort[]>(fetchOne, scope?.settledOnly ?? NO_SETTLED_WORKSPACES);
+  const { lookUp: lookUpOne } = onDemand;
+  const settledOnly = useRef(scope?.settledOnly);
+  settledOnly.current = scope?.settledOnly;
+  const actions = useMemo(
+    () => ({
+      refresh: (environmentId?: string) => {
+        if (environmentId && settledOnly.current?.has(environmentId)) lookUpOne(environmentId, true);
+        else refreshRef.current();
+      },
+      lookUp: (environmentId: string | undefined) => {
+        if (environmentId) lookUpOne(environmentId);
+      },
+    }),
+    [lookUpOne],
+  );
 
   useEffect(() => {
+    if (liveKey === null) return;
+    const environmentIds = liveKey === "" ? [] : liveKey.split("\n");
     let disposed = false;
     let inFlight = false;
     const isHidden = () => document.visibilityState === "hidden";
@@ -49,10 +100,18 @@ export function OpenPortsProvider({ children }: { children: ReactNode }) {
     }
     async function refresh() {
       if (disposed || inFlight || isHidden()) return;
+      if (environmentIds.length === 0) {
+        publish(new Map());
+        return;
+      }
       inFlight = true;
       try {
-        const snapshot = await rpc.call("getOpenPorts", {});
-        publish(portsByEnvironment(snapshot));
+        const groups: PortSnapshot["groups"] = [];
+        for (let offset = 0; offset < environmentIds.length; offset += ENVIRONMENTS_PER_CALL) {
+          const chunk = environmentIds.slice(offset, offset + ENVIRONMENTS_PER_CALL);
+          groups.push(...(await rpc.call("getOpenPorts", { environmentIds: chunk })).groups);
+        }
+        publish(portsByEnvironment({ groups }));
       } catch {
         // An unavailable scanner must not leave stale indicators behind.
         publish(new Map());
@@ -77,13 +136,25 @@ export function OpenPortsProvider({ children }: { children: ReactNode }) {
       clearTimeout(timer);
       document.removeEventListener("visibilitychange", visibilityChanged);
     };
-  }, [rpc]);
+  }, [rpc, liveKey]);
 
-  return (
-    <RefreshOpenPortsContext.Provider value={refreshNow}>
-      <OpenPortsContext.Provider value={ports}>{children}</OpenPortsContext.Provider>
-    </RefreshOpenPortsContext.Provider>
+  const merged = useMemo(
+    () =>
+      onDemand.values.size === 0
+        ? ports
+        : new Map([...[...onDemand.values].filter(([, found]) => found.length > 0), ...ports]),
+    [onDemand.values, ports],
   );
+  return (
+    <OpenPortsActionsContext.Provider value={actions}>
+      <OpenPortsContext.Provider value={merged}>{children}</OpenPortsContext.Provider>
+    </OpenPortsActionsContext.Provider>
+  );
+}
+
+/** Looks a settled thread's workspace up; a no-op for live workspaces and outside the provider. */
+export function useLookUpOpenPorts() {
+  return useContext(OpenPortsActionsContext).lookUp;
 }
 
 function useThreadPorts(thread: PluginSidebarThread) {
@@ -157,7 +228,12 @@ export function OpenPortDetails({ thread }: { thread: PluginSidebarThread }) {
                   </div>
                 </div>
                 {port.source === "process" && port.pid && port.pid > 1 ? (
-                  <StopPortButton threadId={thread.id} port={port.port} pid={port.pid} />
+                  <StopPortButton
+                    threadId={thread.id}
+                    environmentId={thread.environment?.id ?? undefined}
+                    port={port.port}
+                    pid={port.pid}
+                  />
                 ) : null}
               </div>
             );
@@ -174,9 +250,19 @@ const CONFIRM_WINDOW_MS = 4_000;
  * Stopping a process is not undoable, so the first press only arms the button
  * and a second press within a few seconds sends the shutdown request.
  */
-function StopPortButton({ threadId, port, pid }: { threadId: string; port: number; pid: number }) {
+function StopPortButton({
+  threadId,
+  environmentId,
+  port,
+  pid,
+}: {
+  threadId: string;
+  environmentId: string | undefined;
+  port: number;
+  pid: number;
+}) {
   const rpc = useRpc<typeof bbSidebarRpcContract>();
-  const refreshPorts = useContext(RefreshOpenPortsContext);
+  const { refresh: refreshPorts } = useContext(OpenPortsActionsContext);
   const [state, setState] = useState<"idle" | "confirm" | "stopping">("idle");
   useEffect(() => {
     if (state !== "confirm") return;
@@ -205,7 +291,7 @@ function StopPortButton({ threadId, port, pid }: { threadId: string; port: numbe
       });
     } finally {
       setState("idle");
-      refreshPorts();
+      refreshPorts(environmentId);
     }
   }
 

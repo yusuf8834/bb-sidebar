@@ -1,6 +1,10 @@
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import { portScanContract, type PortRoot } from "./port-scan-contract";
-import type { PortSnapshot } from "./contract";
+import type { OpenPort, PortSnapshot } from "./contract";
+
+const CACHE_MS = 30_000;
+// A host whose backoff ran out this long ago starts over at its first step.
+const FAILURE_MEMORY_MS = 300_000;
 
 async function forEachConcurrent<T>(items: T[], limit: number, visit: (item: T) => Promise<void>) {
   let next = 0;
@@ -11,52 +15,55 @@ async function forEachConcurrent<T>(items: T[], limit: number, visit: (item: T) 
   );
 }
 
+// Hosts that scan are macOS or Linux, so environment paths use "/".
+const isNestedUnder = (path: string, root: string) => path.startsWith(`${root.replace(/\/+$/, "")}/`);
+
+/**
+ * Open ports for the workspaces the app names. The app knows which threads
+ * are live; bb has no notion of a settled thread, so the server no longer
+ * lists threads to find workspaces. Results are cached per workspace for 30s,
+ * and a workspace already being scanned is shared with later callers.
+ *
+ * `ownerThreadId` is passed through as the host reported it. The app marks a
+ * thread only when the owner is that thread and the port is in that thread's
+ * own workspace, which is the check the thread listing used to make here.
+ */
 export function createPortDiscovery(bb: BbPluginApi) {
   const host = bb.hosts.experimental_client({ contract: portScanContract });
   const controller = new AbortController();
   bb.onDispose(() => controller.abort());
-  let cached: PortSnapshot = { groups: [] };
-  let scannedAt = -Infinity;
-  let pending: Promise<PortSnapshot> | null = null;
+  const cache = new Map<string, { ports: OpenPort[]; at: number }>();
+  const pending = new Map<string, Promise<ReadonlyMap<string, OpenPort[]>>>();
   let generation = 0;
   const failures = new Map<string, { attempts: number; retryAt: number }>();
 
-  async function scan(): Promise<PortSnapshot> {
-    const ids = new Set<string>();
-    const threadEnvironment = new Map<string, string>();
-    for (let offset = 0; ; offset += 500) {
-      const threads = await bb.sdk.threads.list({
-        archived: false,
-        includeHidden: true,
-        limit: 500,
-        offset,
-        signal: controller.signal,
-      });
-      for (const thread of threads)
-        if (thread.environmentId) {
-          ids.add(thread.environmentId);
-          threadEnvironment.set(thread.id, thread.environmentId);
-        }
-      if (threads.length < 500) break;
-    }
+  async function scan(environmentIds: readonly string[]): Promise<ReadonlyMap<string, OpenPort[]>> {
+    const found = new Map(environmentIds.map((id) => [id, [] as OpenPort[]]));
     // One bulk status read instead of one get per environment: thread rows keep a stale path during teardown.
     const ready = new Map<string, { path: string; hostId: string }>();
-    for (let offset = 0; ids.size; offset += 500) {
+    for (let offset = 0; ; offset += 500) {
       const page = await bb.sdk.environments.list({ status: "ready", limit: 500, offset, signal: controller.signal });
       for (const env of page)
         if (env.status === "ready" && env.path) ready.set(env.id, { path: env.path, hostId: env.hostId });
       if (page.length < 500) break;
     }
     const byHost = new Map<string, PortRoot[]>();
-    for (const environmentId of ids) {
+    for (const environmentId of environmentIds) {
       const env = ready.get(environmentId);
       if (!env) continue;
-      const roots = byHost.get(env.hostId) ?? [];
-      roots.push({ environmentId, path: env.path });
-      byHost.set(env.hostId, roots);
+      byHost.set(env.hostId, [...(byHost.get(env.hostId) ?? []), { environmentId, path: env.path }]);
     }
-    for (const hostId of failures.keys()) if (!byHost.has(hostId)) failures.delete(hostId);
-    const groups: PortSnapshot["groups"] = [];
+    // A listener belongs to the deepest workspace that contains it. A ready
+    // workspace nested inside a requested one keeps its own listeners even
+    // when nobody asked for it, so they are not moved up to the parent. The
+    // nesting is judged on bb's paths; the host compares resolved paths.
+    for (const [environmentId, env] of ready) {
+      const roots = byHost.get(env.hostId);
+      if (found.has(environmentId) || !roots?.some((root) => isNestedUnder(env.path, root.path))) continue;
+      roots.push({ environmentId, path: env.path });
+    }
+    const now = Date.now();
+    for (const [hostId, failure] of failures) if (failure.retryAt + FAILURE_MEMORY_MS < now) failures.delete(hostId);
     await forEachConcurrent([...byHost], 4, async ([hostId, roots]) => {
       controller.signal.throwIfAborted();
       if (Date.now() < (failures.get(hostId)?.retryAt ?? 0)) return;
@@ -70,17 +77,7 @@ export function createPortDiscovery(bb: BbPluginApi) {
           },
         );
         failures.delete(hostId);
-        for (const root of roots) {
-          const ports = result.ports
-            .filter((port) => port.environmentId === root.environmentId)
-            .map(({ environmentId: _, ownerThreadId, ...port }) => ({
-              ...port,
-              ...(ownerThreadId && threadEnvironment.get(ownerThreadId) === root.environmentId
-                ? { ownerThreadId }
-                : {}),
-            }));
-          if (ports.length) groups.push({ environmentId: root.environmentId, ports });
-        }
+        for (const { environmentId: owner, ...port } of result.ports) found.get(owner)?.push(port);
       } catch (error) {
         controller.signal.throwIfAborted();
         const attempts = Math.min((failures.get(hostId)?.attempts ?? 0) + 1, 5);
@@ -88,29 +85,45 @@ export function createPortDiscovery(bb: BbPluginApi) {
         bb.log.debug(`Port scan failed on ${hostId}: ${String(error)}`);
       }
     });
-    return { groups };
+    return found;
   }
 
-  const discover = () => {
-    if (pending) return pending;
+  const discover = async ({ environmentIds }: { environmentIds: readonly string[] }): Promise<PortSnapshot> => {
     controller.signal.throwIfAborted();
-    if (Date.now() - scannedAt < 30_000) return Promise.resolve(cached);
-    const scanGeneration = generation;
-    pending = scan()
-      .then((snapshot) => {
-        cached = snapshot;
-        scannedAt = scanGeneration === generation ? Date.now() : -Infinity;
-        return snapshot;
-      })
-      .finally(() => {
-        pending = null;
-      });
-    return pending;
+    const now = Date.now();
+    for (const [id, entry] of cache) if (now - entry.at >= CACHE_MS) cache.delete(id);
+    const wanted = [...new Set(environmentIds)];
+    const missing = wanted.filter((id) => !cache.has(id) && !pending.has(id));
+    if (missing.length) {
+      const scanGeneration = generation;
+      const run = scan(missing)
+        .then((found) => {
+          // A scan that started before an invalidation answers its callers but is not reused.
+          if (scanGeneration === generation) {
+            const at = Date.now();
+            for (const [id, ports] of found) cache.set(id, { ports, at });
+          }
+          return found;
+        })
+        .finally(() => {
+          for (const id of missing) if (pending.get(id) === run) pending.delete(id);
+        });
+      for (const id of missing) pending.set(id, run);
+    }
+    // Awaited together, so a joined scan that fails cannot leave this call's own scan unobserved.
+    const found = await Promise.all(
+      wanted.map(async (id) => cache.get(id)?.ports ?? (await pending.get(id)!).get(id) ?? []),
+    );
+    return {
+      groups: wanted.flatMap((environmentId, index) =>
+        found[index]!.length ? [{ environmentId, ports: found[index]! }] : [],
+      ),
+    };
   };
   return Object.assign(discover, {
     invalidate() {
       generation++;
-      scannedAt = -Infinity;
+      cache.clear();
     },
   });
 }

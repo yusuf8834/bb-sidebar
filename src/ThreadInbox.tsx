@@ -27,7 +27,8 @@ import { childThreadsByParent, collapsedChildThreads } from "./ChildThreadList";
 import { useChildThreadDisplayValue } from "./ChildThreadDisplay";
 import { useLifecycle } from "./useLifecycle";
 import { useLifecycleRows, type LifecycleRows } from "./useLifecycleRows";
-import { settledThreadIds } from "./live-threads";
+import { useLiveThreads } from "./useLiveThreads";
+import type { PortScanScope } from "./OpenPorts";
 import type { createDragPreview } from "./drag-preview";
 import { usePinnedReorder } from "./usePinnedReorder";
 import { useCollapseChildrenOnSettle } from "./useCollapseChildrenOnSettle";
@@ -62,12 +63,10 @@ export function ThreadInbox(props: PluginThreadListProps) {
   // Read above the limit provider: it skips settled threads, and the inbox
   // below reads its limit rows to place snoozed ones.
   const lifecycleRows = useLifecycleRows();
-  const { threads } = snapshot;
-  const { loaded, rows } = lifecycleRows;
-  const settled = useMemo(() => (loaded ? settledThreadIds(threads, rows, Date.now()) : null), [loaded, rows, threads]);
+  const { settled, portScope } = useLiveThreads(snapshot.threads, lifecycleRows);
   return (
-    <RateLimitsProvider threads={threads} settledThreadIds={settled}>
-      <ThreadInboxContent {...props} snapshot={snapshot} lifecycleRows={lifecycleRows} />
+    <RateLimitsProvider threads={snapshot.threads} settledThreadIds={settled}>
+      <ThreadInboxContent {...props} snapshot={snapshot} lifecycleRows={lifecycleRows} portScope={portScope} />
     </RateLimitsProvider>
   );
 }
@@ -78,9 +77,11 @@ function ThreadInboxContent({
   isCompactViewport,
   snapshot,
   lifecycleRows,
+  portScope,
 }: PluginThreadListProps & {
   snapshot: ReturnType<typeof useSidebarThreads>;
   lifecycleRows: LifecycleRows;
+  portScope: PortScanScope;
 }) {
   const { status, threads, projects } = snapshot;
   const workingSince = useWorkingSince(threads, status);
@@ -452,6 +453,7 @@ function ThreadInboxContent({
       listAnimationController={listAnimationController}
       workingSince={workingSince}
       childDisplay={childDisplay}
+      portScope={portScope}
     >
       <ThreadInboxView
         shelves={{

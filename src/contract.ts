@@ -211,8 +211,13 @@ export const bbSidebarRpcContract = defineRpcContract({
     input: threadIdSchema.extend({ port: ownedPortTargetSchema }).strict(),
     output: closePortsResultSchema,
   },
+  // The app names the workspaces to scan: those of live threads on its poll,
+  // or one settled thread's when the user looks at it, 500 per call (the app
+  // splits longer lists). An app bundle older than the backend still sends
+  // `{}`; that is rejected like any bad input, and its catch clears the port
+  // badges until the new bundle loads.
   getOpenPorts: {
-    input: z.object({}).strict(),
+    input: z.object({ environmentIds: z.array(z.string().trim().min(1)).min(1).max(500) }).strict(),
     output: portSnapshotSchema,
   },
   getThreadPullRequests: {

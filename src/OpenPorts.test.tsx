@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
-import { Profiler } from "react";
+import { Profiler, type ReactNode } from "react";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 const mocks = vi.hoisted(() => ({ rpc: { call: vi.fn() } }));
 vi.mock("@get-bb/plugin-sdk/app", () => ({ useRpc: () => mocks.rpc, UrlLink: "a" }));
-import { OpenPortsProvider, OpenPortsIndicator } from "./OpenPorts";
+import { OpenPortsProvider, OpenPortsIndicator, type PortScanScope } from "./OpenPorts";
 const thread = { id: "thr_a", environment: { id: "env_a" } } as PluginSidebarThread;
 const snapshot = (ownerThreadId = "thr_a") => ({
   groups: [{ environmentId: "env_a", ports: [{ port: 3000, ownerThreadId }] }],
@@ -22,18 +22,25 @@ afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
-async function show() {
+const live = (...environmentIds: string[]): PortScanScope => ({ live: environmentIds, settledOnly: new Set() });
+async function show(scope: PortScanScope = live("env_a")) {
   const commits = vi.fn();
+  const tree = (current: PortScanScope): ReactNode => (
+    <OpenPortsProvider scope={current}>
+      <Profiler id="indicator" onRender={commits}>
+        <OpenPortsIndicator thread={thread} />
+      </Profiler>
+    </OpenPortsProvider>
+  );
+  let view!: ReturnType<typeof render>;
   await act(async () => {
-    render(
-      <OpenPortsProvider>
-        <Profiler id="indicator" onRender={commits}>
-          <OpenPortsIndicator thread={thread} />
-        </Profiler>
-      </OpenPortsProvider>,
-    );
+    view = render(tree(scope));
   });
-  return commits;
+  return Object.assign(commits, {
+    rescope: async (next: PortScanScope) => {
+      await act(async () => view.rerender(tree(next)));
+    },
+  });
 }
 async function tick(ms = 30_000) {
   await act(async () => {
@@ -122,5 +129,34 @@ describe("port polling", () => {
     await changeVisibility("visible");
     await tick(60_000);
     expect(mocks.rpc.call).toHaveBeenCalledTimes(2);
+  });
+
+  it("scans nothing until the shelves are known, then only the live workspaces", async () => {
+    const view = await show(null);
+    await tick(60_000);
+    expect(mocks.rpc.call).not.toHaveBeenCalled();
+    await view.rescope(live("env_a", "env_b"));
+    expect(mocks.rpc.call).toHaveBeenCalledWith("getOpenPorts", { environmentIds: ["env_a", "env_b"] });
+    // A workspace joining the live set (a thread returned to Active) is scanned at once.
+    await view.rescope(live("env_a", "env_b", "env_c"));
+    expect(mocks.rpc.call).toHaveBeenCalledTimes(2);
+    expect(mocks.rpc.call).toHaveBeenLastCalledWith("getOpenPorts", { environmentIds: ["env_a", "env_b", "env_c"] });
+    await view.rescope(live());
+    await tick(60_000);
+    expect(mocks.rpc.call).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("img")).toBeNull();
+  });
+
+  it("splits a long workspace list into calls of 500", async () => {
+    await show(live(...Array.from({ length: 1001 }, (_, i) => `env_${i}`)));
+    expect(mocks.rpc.call.mock.calls.map(([, input]) => input.environmentIds.length)).toEqual([500, 500, 1]);
+  });
+
+  it("marks no thread for a port it owns in another thread's workspace", async () => {
+    mocks.rpc.call.mockImplementation(async () => ({
+      groups: [{ environmentId: "env_other", ports: [{ port: 3000, ownerThreadId: "thr_a" }] }],
+    }));
+    await show(live("env_a", "env_other"));
+    expect(screen.queryByRole("img")).toBeNull();
   });
 });

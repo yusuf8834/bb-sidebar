@@ -12,7 +12,7 @@ import { useThreadRowStatus, useThreadWithDraft } from "./StatusSlot";
 import { StillThreadStatusGlyph } from "./StillThreadStatusGlyph";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { projectIconUrl } from "./project-icons";
-import { OpenPortDetails } from "./OpenPorts";
+import { OpenPortDetails, useLookUpOpenPorts } from "./OpenPorts";
 import { ThreadPullRequestDetails } from "./ThreadPullRequests";
 import { compareChildThreads, useChildThreadDisplay } from "./ChildThreadDisplay";
 import { cn } from "./lib/utils";
@@ -88,11 +88,14 @@ export function ThreadDetailsTooltip({
   // asks once. Keyed on the open state alone: a context update mid-open must
   // not ask again. Live threads make this a no-op.
   const lookUpLimit = useLimitActions()?.lookUp;
-  const lookUps = useRef({ lookUpLimit });
-  lookUps.current = { lookUpLimit };
+  const lookUpPorts = useLookUpOpenPorts();
+  const lookUps = useRef({ lookUpLimit, lookUpPorts, environmentId: thread.environment?.id });
+  lookUps.current = { lookUpLimit, lookUpPorts, environmentId: thread.environment?.id };
   const lookUp = useCallback(
     (looking: boolean) => {
-      if (looking) lookUps.current.lookUpLimit?.(thread.id);
+      if (!looking) return;
+      lookUps.current.lookUpLimit?.(thread.id);
+      lookUps.current.lookUpPorts(lookUps.current.environmentId ?? undefined);
     },
     [thread.id],
   );

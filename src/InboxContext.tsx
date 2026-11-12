@@ -19,7 +19,7 @@ import { ProjectColorsProvider } from "./ProjectColors";
 import { WorkingSinceContext } from "./useWorkingSince";
 import type { WorkingSince } from "./working-since";
 import { ChildThreadDisplayContext, type ChildThreadDisplay } from "./ChildThreadDisplay";
-import { OpenPortsProvider } from "./OpenPorts";
+import { OpenPortsProvider, type PortScanScope } from "./OpenPorts";
 import type { ActiveSortMode } from "./inbox-layout";
 import type { useRenamingShelfLocks } from "./useRenamingShelfLocks";
 
@@ -137,12 +137,14 @@ export function InboxProvider({
   listAnimationController,
   workingSince,
   childDisplay,
+  portScope,
   children,
 }: {
   value: InboxValues;
   listAnimationController: ListAnimationController;
   workingSince: WorkingSince;
   childDisplay: ChildThreadDisplay;
+  portScope: PortScanScope;
   children: ReactNode;
 }) {
   const { sidebarSettings, projects } = value.environment;
@@ -156,7 +158,7 @@ export function InboxProvider({
       >
         <WorkingSinceContext.Provider value={workingSince}>
           <ChildThreadDisplayContext.Provider value={childDisplay}>
-            <OpenPortsProvider>
+            <OpenPortsProvider scope={portScope}>
               <InboxEnvironmentContext.Provider value={value.environment}>
                 <InboxActionsContext.Provider value={value.actions}>
                   <InboxActivityContext.Provider value={value.activity}>{children}</InboxActivityContext.Provider>
