@@ -19,7 +19,6 @@ export function createPortDiscovery(bb: BbPluginApi) {
   let scannedAt = -Infinity;
   let pending: Promise<PortSnapshot> | null = null;
   let generation = 0;
-  const environments = new Map<string, { root: PortRoot; hostId: string; expiresAt: number }>();
   const failures = new Map<string, { attempts: number; retryAt: number }>();
 
   async function scan(): Promise<PortSnapshot> {
@@ -40,27 +39,22 @@ export function createPortDiscovery(bb: BbPluginApi) {
         }
       if (threads.length < 500) break;
     }
-    for (const id of environments.keys()) if (!ids.has(id)) environments.delete(id);
+    // One bulk status read instead of one get per environment: thread rows keep a stale path during teardown.
+    const ready = new Map<string, { path: string; hostId: string }>();
+    for (let offset = 0; ids.size; offset += 500) {
+      const page = await bb.sdk.environments.list({ status: "ready", limit: 500, offset, signal: controller.signal });
+      for (const env of page)
+        if (env.status === "ready" && env.path) ready.set(env.id, { path: env.path, hostId: env.hostId });
+      if (page.length < 500) break;
+    }
     const byHost = new Map<string, PortRoot[]>();
-    await forEachConcurrent([...ids], 8, async (environmentId) => {
-      controller.signal.throwIfAborted();
-      try {
-        let entry = environments.get(environmentId);
-        if (!entry || Date.now() >= entry.expiresAt) {
-          environments.delete(environmentId);
-          const env = await bb.sdk.environments.get({ environmentId });
-          if (env.status !== "ready" || !env.path) return;
-          entry = { root: { environmentId, path: env.path }, hostId: env.hostId, expiresAt: Date.now() + 60_000 };
-          environments.set(environmentId, entry);
-        }
-        const roots = byHost.get(entry.hostId) ?? [];
-        roots.push(entry.root);
-        byHost.set(entry.hostId, roots);
-      } catch {
-        controller.signal.throwIfAborted();
-        // Deleted or inaccessible environment.
-      }
-    });
+    for (const environmentId of ids) {
+      const env = ready.get(environmentId);
+      if (!env) continue;
+      const roots = byHost.get(env.hostId) ?? [];
+      roots.push({ environmentId, path: env.path });
+      byHost.set(env.hostId, roots);
+    }
     for (const hostId of failures.keys()) if (!byHost.has(hostId)) failures.delete(hostId);
     const groups: PortSnapshot["groups"] = [];
     await forEachConcurrent([...byHost], 4, async ([hostId, roots]) => {
