@@ -19,7 +19,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { cleanEnv, parseArgs, run, runOk } from "./lib.mjs";
+import { assertPackageName, assertPinRange, assertSemver, cleanEnv, parseArgs, run, runOk } from "./lib.mjs";
 import { guardWorkingTree, pinsFromResolved } from "./pins.mjs";
 import {
   bumpBranch,
@@ -79,6 +79,35 @@ function ghEnv() {
   return cleanEnv(extra);
 }
 
+const CHANNELS = ["floor", "stable", "nightly"];
+
+/**
+ * The artifact came from a job that ran the new bb, so the values that reach
+ * titles are checked again here; a result that fails counts as failed.
+ */
+function checkedResult(result) {
+  try {
+    for (const value of [result.bbApp, result.sdk, result.pinned?.bbApp, result.pinned?.sdk]) {
+      if (value !== undefined) assertSemver(value);
+    }
+    for (const [name, range] of Object.entries(result.shimPins ?? {})) {
+      assertPackageName(name);
+      assertPinRange(range);
+    }
+    if (!Array.isArray(result.steps) || !result.steps.length) throw new Error("no steps");
+    for (const step of result.steps) {
+      if (!/^[\w :.-]{1,60}$/.test(String(step.name)) || !["pass", "fail", "skipped"].includes(step.status)) {
+        throw new Error(`unexpected step ${JSON.stringify(step.name)}`);
+      }
+    }
+    return { ...result, ok: result.steps.every((step) => step.status === "pass") };
+  } catch (error) {
+    const invalid = missingResult(result.channel);
+    invalid.steps[0].errors = [`results.json failed validation: ${error.message.slice(0, 200)}`];
+    return invalid;
+  }
+}
+
 /** Reads every results.json under dir; channels with none count as failed. */
 export function loadChannelResults(dir) {
   const found = {};
@@ -88,12 +117,13 @@ export function loadChannelResults(dir) {
       if (entry.isDirectory()) walk(path);
       else if (entry.name === "results.json") {
         const result = JSON.parse(readFileSync(path, "utf8"));
-        if (result.kind === "channel") found[result.channel] = result;
+        if (result.kind === "channel" && CHANNELS.includes(result.channel))
+          found[result.channel] = checkedResult(result);
       }
     }
   };
   if (existsSync(dir)) walk(dir);
-  return ["floor", "stable", "nightly"].map((channel) => found[channel] ?? missingResult(channel));
+  return CHANNELS.map((channel) => found[channel] ?? missingResult(channel));
 }
 
 /** Opens, updates or closes one issue per group, found by its label. */
@@ -299,6 +329,10 @@ async function main() {
     !/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/actions\/runs\/\d+(?:\/attempts\/\d+)?$/.test(runUrl)
   ) {
     throw new Error(`--run-url must be a GitHub Actions run URL, got ${JSON.stringify(runUrl)}`);
+  }
+  // A live run from another ref would publish that ref's code and pins.
+  if (args.live === true && process.env.GITHUB_REF !== "refs/heads/main") {
+    throw new Error(`--live runs only on refs/heads/main, not ${JSON.stringify(process.env.GITHUB_REF ?? "(unset)")}`);
   }
   const github = createGitHub({ live: args.live === true });
   console.log(

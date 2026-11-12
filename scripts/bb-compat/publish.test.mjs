@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
+import { run } from "./lib.mjs";
 import { setDevDependencyPins } from "./pins.mjs";
 import { BOT, createGitHub, loadChannelResults, publishIssues, publishPullRequest } from "./publish.mjs";
 
@@ -19,11 +20,12 @@ const temp = (prefix) => {
 };
 
 /** A fake gh/git runner: answers reads from `responses`, records every call. */
-function fakeGitHub({ live, responses = {} }) {
+function fakeGitHub({ live, responses = {}, realGit = false }) {
   const calls = [];
   const logs = [];
-  const runner = async (command, args) => {
+  const runner = async (command, args, options) => {
     calls.push([command, ...args]);
+    if (realGit && command === "git") return run(command, args, options);
     const key = `${command} ${args.slice(0, 2).join(" ")}`;
     return { code: 0, stdout: responses[key] ?? "", stderr: "" };
   };
@@ -94,10 +96,13 @@ test("a new failure creates the label and one issue; passing with nothing open d
   assert.match(create[create.indexOf("--title") + 1], /^Warning: unreleased bb nightly/);
 });
 
-test("missing channel results count as failures", () => {
+test("missing or invalid channel results count as failures", () => {
   const dir = temp("bb-compat-results-");
   mkdirSync(join(dir, "bb-compat-stable"));
   writeFileSync(join(dir, "bb-compat-stable", "results.json"), JSON.stringify(result("stable", true)));
+  mkdirSync(join(dir, "bb-compat-nightly"));
+  const forged = { ...result("nightly", true), bbApp: "1.0.0 @owner please merge" };
+  writeFileSync(join(dir, "bb-compat-nightly", "results.json"), JSON.stringify(forged));
   const results = loadChannelResults(dir);
   assert.deepEqual(
     results.map((entry) => [entry.channel, entry.ok, Boolean(entry.missing)]),
@@ -107,6 +112,8 @@ test("missing channel results count as failures", () => {
       ["nightly", false, true],
     ],
   );
+  assert.match(results[2].steps[0].errors[0], /results\.json failed validation: .*strict semver/);
+  assert.equal(results[2].bbApp, undefined);
 });
 
 const git = (cwd, ...args) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
@@ -244,4 +251,77 @@ test("a tampered bundle fails the guard before anything is committed or pushed",
   );
   assert.deepEqual(calls, []);
   assert.equal(git(work, "rev-parse", "HEAD"), before);
+});
+
+test("a bot-only branch is not pushed again for the same change, and is leased on its old head when main moves", async () => {
+  const { origin, work, bundle, root } = bumpFixture();
+  const branch = "bb-bump/bb-app-9.9.0";
+  const remoteHead = () => git(root, "--git-dir", origin, "rev-parse", `refs/heads/${branch}`);
+  const first = fakeGitHub({ live: true, realGit: true, responses: { "gh pr list": "[]" } });
+  await inDir(work, () => publishPullRequest(first.github, bundle, { runUrl }));
+  const pushed = remoteHead();
+  assert.equal(git(root, "--git-dir", origin, "log", "-1", "--format=%ae", pushed), BOT.email);
+
+  // Same main, same pins: nothing to push, only the pull request body.
+  git(work, "reset", "--quiet", "--hard", "origin/main");
+  const open = '[{"number":3,"state":"OPEN","isDraft":true,"url":"u"}]';
+  const again = fakeGitHub({ live: true, realGit: true, responses: { "gh pr list": open } });
+  await inDir(work, () => publishPullRequest(again.github, bundle, { runUrl }));
+  assert.deepEqual(
+    writes(again.calls).map((call) => call.slice(0, 3)),
+    [["gh", "pr", "edit"]],
+  );
+  assert.equal(remoteHead(), pushed);
+
+  // main moved: the bot rebuilds on it and replaces its own branch, leased on the old head.
+  const other = join(root, "other");
+  git(root, "clone", "--quiet", origin, other);
+  writeFileSync(join(other, "README.md"), "moved\n");
+  git(other, "add", ".");
+  git(
+    other,
+    "-c",
+    "user.name=Owner",
+    "-c",
+    "user.email=owner@example.com",
+    "commit",
+    "--quiet",
+    "--no-verify",
+    "-m",
+    "move main",
+  );
+  git(other, "push", "--quiet", "origin", "HEAD:refs/heads/main");
+  git(work, "fetch", "--quiet", "origin");
+  git(work, "reset", "--quiet", "--hard", "origin/main");
+  const moved = fakeGitHub({ live: true, realGit: true, responses: { "gh pr list": open } });
+  await inDir(work, () => publishPullRequest(moved.github, bundle, { runUrl }));
+  const push = writes(moved.calls).find((call) => call[1] === "push");
+  assert.equal(push[2], `--force-with-lease=refs/heads/${branch}:${pushed}`);
+  assert.notEqual(remoteHead(), pushed);
+  assert.equal(
+    git(root, "--git-dir", origin, "rev-parse", `refs/heads/${branch}^`),
+    git(work, "rev-parse", "origin/main"),
+  );
+});
+
+test("an empty lease refuses to create a branch someone else just created", async () => {
+  const { origin, work, root } = bumpFixture();
+  const branch = "refs/heads/bb-bump/bb-app-9.9.0";
+  git(root, "--git-dir", origin, "update-ref", branch, git(work, "rev-parse", "HEAD"));
+  git(
+    work,
+    "-c",
+    "user.name=t",
+    "-c",
+    "user.email=t@example.com",
+    "commit",
+    "--quiet",
+    "--no-verify",
+    "--allow-empty",
+    "-m",
+    "next",
+  );
+  const result = await run("git", ["push", `--force-with-lease=${branch}:`, "origin", `HEAD:${branch}`], { cwd: work });
+  assert.notEqual(result.code, 0);
+  assert.match(result.stderr, /stale info|rejected/);
 });

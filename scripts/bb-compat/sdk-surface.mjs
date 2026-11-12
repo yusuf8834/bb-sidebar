@@ -117,6 +117,7 @@ function describeType(checker, type, location) {
 
 // One level deeper, so a changed field reports what changed inside it: the
 // members of a literal union, or the fields of an object (nullable or not).
+// Deeper changes show only as a changed type string.
 function describeParts(checker, type, location) {
   const parts = type.isUnion() ? type.types : [type];
   const nonNull = parts.filter((part) => !(part.flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined)));
@@ -196,8 +197,9 @@ function diffType(was, now) {
   for (const [field, info] of Object.entries(now.fields)) {
     const old = was.fields[field];
     if (!old) added.push({ name: field, optional: info.optional, type: info.type });
-    else if (old.optional !== info.optional || old.type !== info.type)
-      changed.push({ name: field, from: old, to: info });
+    // Compare the parts too: a field typed by a named interface or alias
+    // prints as the same name even when that type gained or lost a member.
+    else if (JSON.stringify(old) !== JSON.stringify(info)) changed.push({ name: field, from: old, to: info });
   }
   const removed = Object.keys(was.fields).filter((field) => !now.fields[field]);
   return { status: "compared", added, removed, changed };

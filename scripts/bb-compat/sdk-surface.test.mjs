@@ -37,6 +37,7 @@ interface PluginSidebarThread {
   id: string;
   indicator: PluginSidebarThreadIndicator;
   environment: { id: string; path: string } | null;
+  activity: PluginSidebarThreadActivity;
 }
 interface PluginComposerThreadRowStatus { label: string; }
 type PluginSidebarThreadRowStatus = PluginComposerThreadRowStatus;
@@ -49,11 +50,12 @@ export type { PluginSidebarThread, PluginSidebarThreadActivity, PluginSidebarThr
 const NEW_APP = `
 type ThreadParentNotifications = "auto" | "stuck" | "off";
 type PluginSidebarThreadIndicator = "none" | "draft";
-interface PluginSidebarThreadActivity { workflows: number; }
+interface PluginSidebarThreadActivity { workflows: number; agents: number; }
 interface PluginSidebarThread {
   id: string;
   indicator: PluginSidebarThreadIndicator;
   environment: { id: string; path: string; kind?: string } | null;
+  activity: PluginSidebarThreadActivity;
   parentNotifications: ThreadParentNotifications;
   note?: string;
 }
@@ -93,6 +95,10 @@ test("reports added and removed exports, fields and union members", () => {
   });
   assert.deepEqual(diff.types.PluginSidebarThreadActivity.removed, ["goals"]);
   assert.deepEqual(
+    diff.types.PluginSidebarThreadActivity.added.map(({ name, optional }) => [name, optional]),
+    [["agents", false]],
+  );
+  assert.deepEqual(
     diff.types.PluginSidebarThread.added.map(({ name, optional }) => ({ name, optional })),
     [
       { name: "parentNotifications", optional: false },
@@ -109,6 +115,8 @@ test("reports added and removed exports, fields and union members", () => {
   assert.match(markdown, /`note` \(optional: `string \| undefined`\)/);
   assert.match(markdown, /changed `indicator`: members removed `"goal"`/);
   assert.match(markdown, /changed `environment`: fields added `kind` \(`\?string \| undefined`\)/);
+  // A named interface prints as its name; its member changes must still show.
+  assert.match(markdown, /changed `activity`: fields added `agents` \(`number`\); fields removed `goals`/);
   assert.match(markdown, /`server thread row`:\n {2}- changed `activity`: fields removed `activeGoalCount`/);
   assert.match(markdown, /`PluginSidebarThreadRowStatus`: unchanged\./);
 });
