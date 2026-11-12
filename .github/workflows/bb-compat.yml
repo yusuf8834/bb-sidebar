@@ -1,0 +1,120 @@
+name: bb compatibility
+
+# Daily: install the minimum bb (floor), the latest stable bb and the nightly,
+# each with the SDK it ships, and run the sidebar's checks against it.
+# Floor or stable failures open or update one issue (label bb-compat); a
+# nightly failure only warns (label bb-compat-nightly). Logic lives in
+# scripts/bb-compat/; see AGENTS.md.
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Print the issue changes instead of making them
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bb-compat
+  cancel-in-progress: false
+
+jobs:
+  channel:
+    name: ${{ matrix.channel }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    # These jobs run the installed bb and its dependencies: read-only token,
+    # and no credentials left in .git/config.
+    permissions:
+      contents: read
+    continue-on-error: ${{ matrix.channel == 'nightly' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        channel: [floor, stable, nightly]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install fixture provider CLI
+        run: npm install --global @openai/codex@0.162.1
+
+      - name: Install only Playwright Chromium and its Linux dependencies
+        run: npx --no-install playwright install --with-deps chromium
+
+      - name: Install process inspection tools
+        run: sudo apt-get update && sudo apt-get install -y lsof procps
+
+      - name: Install this channel's bb and SDK, then run its checks
+        env:
+          CHANNEL: ${{ matrix.channel }}
+          RESULTS: ${{ runner.temp }}/compat-results
+        run: node scripts/bb-compat/channel.mjs --channel "$CHANNEL" --out "$RESULTS"
+
+      - name: Confirm no tracked file changed
+        if: ${{ !cancelled() }}
+        run: git diff --exit-code --stat
+
+      - name: Save results and logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: bb-compat-${{ matrix.channel }}
+          path: ${{ runner.temp }}/compat-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  report:
+    needs: channel
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Runs only scripts/bb-compat (Node built-ins, no npm install).
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Download channel results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: bb-compat-*
+          path: ${{ runner.temp }}/compat-results
+
+      - name: Write the summary and open, update or close issues
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          # Scheduled runs are live; manual runs are dry unless dry_run is unticked.
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+          RESULTS: ${{ runner.temp }}/compat-results
+        run: |
+          set --
+          if [ "$DRY_RUN" = "false" ]; then set -- --live; fi
+          node scripts/bb-compat/publish.mjs issues --results-dir "$RESULTS" --run-url "$RUN_URL" "$@"

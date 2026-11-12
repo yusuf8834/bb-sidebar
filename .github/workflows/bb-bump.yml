@@ -1,0 +1,118 @@
+name: bb bump
+
+# Daily: when bb-app@latest is newer than the pinned bb-app, set the bb-app,
+# SDK and runtime-shim pins on branch bb-bump/bb-app-X.Y.Z, run every check,
+# and open or update a pull request with the results. Never merges, approves,
+# tags, or pushes to main. Logic lives in scripts/bb-compat/; see AGENTS.md.
+
+on:
+  schedule:
+    - cron: "47 6 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Print the branch and pull request changes instead of making them
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bb-bump
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Installs and runs the new bb: read-only token, no credentials kept.
+    permissions:
+      contents: read
+    outputs:
+      needed: ${{ steps.plan.outputs.needed }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compare bb-app@latest with the pinned bb-app
+        id: plan
+        env:
+          OUT: ${{ runner.temp }}/bump
+        run: node scripts/bb-compat/bump.mjs plan --out "$OUT"
+
+      - name: Install fixture provider CLI
+        if: steps.plan.outputs.needed == 'true'
+        run: npm install --global @openai/codex@0.162.1
+
+      - name: Install only Playwright Chromium and its Linux dependencies
+        if: steps.plan.outputs.needed == 'true'
+        run: npx --no-install playwright install --with-deps chromium
+
+      - name: Install process inspection tools
+        if: steps.plan.outputs.needed == 'true'
+        run: sudo apt-get update && sudo apt-get install -y lsof procps
+
+      - name: Set the pins, update the lockfile, guard the change, run every check
+        if: steps.plan.outputs.needed == 'true'
+        env:
+          OUT: ${{ runner.temp }}/bump
+        run: node scripts/bb-compat/bump.mjs prepare --out "$OUT"
+
+      - name: Save the prepared files, results and logs
+        if: ${{ !cancelled() && steps.plan.outputs.needed == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: bb-bump
+          path: ${{ runner.temp }}/bump/
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    needs: prepare
+    # Runs only when prepare succeeded, so a failed guard pushes nothing.
+    if: needs.prepare.outputs.needed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Runs only scripts/bb-compat (Node built-ins and git, no npm install).
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Download the prepared files
+        uses: actions/download-artifact@v4
+        with:
+          name: bb-bump
+          path: ${{ runner.temp }}/bump
+
+      - name: Guard again, then push the branch and open or update the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          # Scheduled runs are live; manual runs are dry unless dry_run is unticked.
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+          BUNDLE: ${{ runner.temp }}/bump
+        run: |
+          set --
+          if [ "$DRY_RUN" = "false" ]; then set -- --live; fi
+          node scripts/bb-compat/publish.mjs pr --bundle "$BUNDLE" --run-url "$RUN_URL" "$@"

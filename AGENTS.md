@@ -77,8 +77,9 @@ live again). Snoozed, Parked and Inactive-shelf threads stay live.
   override's `includes` and in the shared override's exclusions.
 
 App experimental SDK hooks use stable names from `src/bb-sdk.ts`.
-Pin to the SDK the latest stable bb-app ships; migrate experimental_* breaks
-through `src/bb-sdk.ts`. The minimum host is bb 0.49.0 with SDK 0.6.132.
+Pin to the SDK the latest stable bb-app ships (the bump pull request below
+does it); migrate experimental_* breaks through `src/bb-sdk.ts`. The minimum
+host is `engines.bb` with `engines.bbPluginSdk`, now bb 0.49.0 with SDK 0.6.132.
 Pull request data comes from the bundled GitHub PR Status plugin
 (`src/github-pr-status.ts`): rows through `useEnvironmentPullRequest` in
 `src/bb-sdk.ts`, and `plugins.callRpc` in `server-policy`. A failed or
@@ -161,6 +162,36 @@ access are checked by `src/storage-keys.test.ts`.
   bans `import()` type annotations except in `ports-host.test.ts` (Vitest's
   `importOriginal`; regular imports there still need type-only syntax when
   used only as types).
+
+## bb versions: daily check and bump pull request
+
+bb ships a stable release about weekly and a nightly daily. Two scheduled
+workflows follow it. Their logic is in `scripts/bb-compat/` (tested by
+`npm run test:scripts`, part of `npm run check`); the YAML only calls it.
+
+- `bb-compat.yml` installs each channel's bb-app with the SDK it ships, in one
+  `npm install --no-save`. Floor is the minimum in `engines.bb`: tests, build,
+  bundle guard and `e2e:smoke`, no typecheck (code compiles against the pinned
+  SDK but must run on the floor). Stable (`bb-app@latest`) and nightly
+  (`bb-app@nightly`) also typecheck. A floor or stable failure opens or
+  updates one `bb-compat` issue; nightly only warns, in a `bb-compat-nightly`
+  issue. A passing run closes them. The summary and issues carry the "what bb
+  changed" report from `sdk-surface.mjs`; read its additions, since a
+  typecheck cannot see a new status or a new required field.
+- `bb-bump.yml` runs when `bb-app@latest` is newer than the pin: it sets the
+  bb-app, SDK and shim pins on `bb-bump/bb-app-X.Y.Z`, updates the lockfile,
+  runs `npm run check` and `e2e:smoke`, and opens or updates a pull request
+  with the results, as a DO NOT MERGE draft if anything failed. `pins.mjs`
+  fails the job unless only `devDependencies` in package.json and
+  package-lock.json changed. It never merges, approves, or pushes to main.
+  Manual runs of either workflow default to `dry_run`.
+- Floor rule: the bot keeps the pins on the latest stable bb; `engines` moves
+  only by a human decision. The floor channel keeps that minimum honest.
+- New SDK features go through `src/bb-sdk.ts`. While the floor is older than
+  the bb that added one, guard it with an existence check: a missing SDK
+  export is `undefined` at runtime, not a load error. Say in a comment at
+  which bb the fallback can be deleted, e.g. `// Fallback: delete when
+  engines.bb reaches >=0.50.0.`
 
 ## Checks
 
