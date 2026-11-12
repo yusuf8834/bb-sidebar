@@ -30,7 +30,6 @@ export const KNOWN_INDICATORS = [
   "background-agent",
   "background-command",
   "draft",
-  "goal",
   "none",
   "plan-mode",
   "queued-failed",
@@ -66,7 +65,6 @@ export function isWorkingIndicator(indicator: PluginSidebarThreadIndicator): boo
     case "background-agent":
     case "background-command":
     case "plan-mode":
-    case "goal":
     case "working-draft":
       return true;
     case "draft":

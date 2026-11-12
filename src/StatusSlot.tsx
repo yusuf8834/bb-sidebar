@@ -190,8 +190,6 @@ function shortStatus(indicator: PluginSidebarThreadIndicator, indicatorLabel: st
       return { label: "Command", className, showsDuration: true };
     case "plan-mode":
       return { label: "Planning", className, showsDuration: true };
-    case "goal":
-      return { label: "Goal", className, showsDuration: true };
     case "draft":
       return { label: "Draft", className, showsDuration: false };
     case "working-draft":
@@ -277,7 +275,6 @@ export function statusToneClass(indicator: PluginSidebarThreadIndicator): string
     case "background-agent":
     case "background-command":
     case "plan-mode":
-    case "goal":
       return "text-[color:var(--bb-sidebar-tone-working)]";
     case "draft":
     case "working-draft":

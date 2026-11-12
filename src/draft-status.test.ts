@@ -9,14 +9,7 @@ describe("withDraftIndicator", () => {
 
   it("marks a quiet thread as a draft and a busy one as working with a draft", () => {
     expect(withDraftIndicator("none", true)).toBe("draft");
-    for (const busy of [
-      "runtime",
-      "workflow",
-      "background-agent",
-      "background-command",
-      "plan-mode",
-      "goal",
-    ] as const) {
+    for (const busy of ["runtime", "workflow", "background-agent", "background-command", "plan-mode"] as const) {
       expect(withDraftIndicator(busy, true)).toBe("working-draft");
     }
   });

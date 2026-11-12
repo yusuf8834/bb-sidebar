@@ -86,8 +86,6 @@ export function StatusGlyph({
       return <ActivityIcon name="Terminal" label={aria} className={cn(shared, statusToneClass(indicator))} />;
     case "plan-mode":
       return <ActivityIcon name="ListTodo" label={aria} className={cn(shared, statusToneClass(indicator))} />;
-    case "goal":
-      return <ActivityIcon name="Target" label={aria} className={cn(shared, statusToneClass(indicator))} />;
     case "draft":
     case "working-draft":
       return <Icon name="Edit" aria-label={aria} className={cn(shared, statusToneClass(indicator))} />;
@@ -140,7 +138,7 @@ function ActivityIcon({
   label,
   className,
 }: {
-  name: "Workflow" | "UserRoundPlus" | "Terminal" | "ListTodo" | "Target";
+  name: "Workflow" | "UserRoundPlus" | "Terminal" | "ListTodo";
   label: string | undefined;
   className: string;
 }) {

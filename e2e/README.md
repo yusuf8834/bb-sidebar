@@ -25,7 +25,7 @@ and failure screenshots/traces. `e2e:cli` seeds three idle threads and runs each
 `bb sidebar` subcommand through the scratch CLI, checking the result with
 `bb sidebar list --json` and the plugin RPC; its command transcript is saved to
 `e2e-artifacts/cli-transcript.log`. All three commands use `scripts/e2e/server.mjs` and
-bb-app 0.47.0. Neither runs as part of `npm run check`. Run e2e separately from
+bb-app 0.49.0. Neither runs as part of `npm run check`. Run e2e separately from
 Vitest; the scratch server and Chromium compete with the unit suite for CPU.
 Before releases on macOS: `npm run e2e`; CI: `gh workflow run "Browser e2e"`.
 

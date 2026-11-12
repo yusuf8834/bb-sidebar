@@ -18,7 +18,6 @@ export interface AutoSettleThread {
   activity: {
     activeBackgroundAgentCount: number;
     activeBackgroundCommandCount: number;
-    activeGoalCount: number;
     activePlanModeCount: number;
     activeWorkflowCount: number;
   };
@@ -56,7 +55,6 @@ function isWorking(thread: AutoSettleThread): boolean {
       backgroundAgents: activity.activeBackgroundAgentCount,
       backgroundCommands: activity.activeBackgroundCommandCount,
       planMode: activity.activePlanModeCount,
-      goals: activity.activeGoalCount,
     },
     isTurnInFlight(thread.status),
   );

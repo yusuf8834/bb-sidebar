@@ -27,7 +27,7 @@ export interface ThreadActivitySignals {
   hasPendingInteraction: boolean;
   /** A message waits to be sent, or one failed to send. */
   hasQueuedWork: boolean;
-  /** Any live work: runtime, workflows, background agents, plan, goals. */
+  /** Any live work: runtime, workflows, background agents, plan. */
   isWorking: boolean;
   isUnread: boolean;
   /** Newest attention timestamp bb reports for the thread. */
@@ -65,8 +65,8 @@ export function resolveWakeReason(
  * automatic settle share.
  *
  * bb has more kinds of live work than a single session status — workflows,
- * background agents, background commands, plan mode, goals — and every one of
- * them must block parking. Hiding a thread that is still working is the one
+ * background agents, background commands, plan mode — and every one of them
+ * must block parking. Hiding a thread that is still working is the one
  * failure this feature cannot afford. A queued message is work about to
  * start, and a failed one is something the user has not seen go nowhere yet.
  */
@@ -94,8 +94,7 @@ export function hasLiveWork(activity: PluginSidebarThreadActivity, turnInFlight:
     activity.workflows > 0 ||
     activity.backgroundAgents > 0 ||
     activity.backgroundCommands > 0 ||
-    activity.planMode > 0 ||
-    activity.goals > 0
+    activity.planMode > 0
   );
 }
 

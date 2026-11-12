@@ -29,7 +29,6 @@ export { default as Pulse01Icon } from "@hugeicons/core-free-icons/Pulse01Icon";
 export { default as PulseRectangle01Icon } from "@hugeicons/core-free-icons/PulseRectangle01Icon";
 export { default as Search01Icon } from "@hugeicons/core-free-icons/Search01Icon";
 export { default as StopCircleIcon } from "@hugeicons/core-free-icons/StopCircleIcon";
-export { default as Target02Icon } from "@hugeicons/core-free-icons/Target02Icon";
 export { default as Tick02Icon } from "@hugeicons/core-free-icons/Tick02Icon";
 export { default as UserAdd01Icon } from "@hugeicons/core-free-icons/UserAdd01Icon";
 export { default as WorkflowCircle03Icon } from "@hugeicons/core-free-icons/WorkflowCircle03Icon";

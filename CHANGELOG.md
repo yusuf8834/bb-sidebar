@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Requires bb 0.49.0 or later, and is built against plugin SDK 0.6.132, the version in bb 0.49.0. Version 0.3.10 is the last release for bb 0.48.
+- **The Goal status is gone.** bb no longer reports goals, so the sidebar drops the Goal status label, its icon, and the goal count from the live work that keeps a thread from being parked or settled.
+
 ## [0.3.10] - 2026-11-12
 
 ### Added

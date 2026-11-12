@@ -26,7 +26,7 @@ function working(id: string): PluginSidebarThread {
     originPluginId: null,
     providerId: "codex",
     hasPendingInteraction: false,
-    activity: { workflows: 0, backgroundAgents: 0, backgroundCommands: 0, planMode: 0, goals: 0 },
+    activity: { workflows: 0, backgroundAgents: 0, backgroundCommands: 0, planMode: 0 },
     indicator: "runtime",
     indicatorLabel: null,
     isUnread: false,

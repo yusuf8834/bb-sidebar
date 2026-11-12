@@ -24,7 +24,6 @@ function lifecycle(overrides: Partial<AutoSettleLifecycleState> = {}): AutoSettl
 const idleActivity = {
   activeBackgroundAgentCount: 0,
   activeBackgroundCommandCount: 0,
-  activeGoalCount: 0,
   activePlanModeCount: 0,
   activeWorkflowCount: 0,
 };
@@ -98,7 +97,6 @@ describe("automatic settle policy", () => {
     ["a background agent", { activity: { ...idleActivity, activeBackgroundAgentCount: 1 } }],
     ["a background command", { activity: { ...idleActivity, activeBackgroundCommandCount: 1 } }],
     ["plan mode", { activity: { ...idleActivity, activePlanModeCount: 1 } }],
-    ["a goal", { activity: { ...idleActivity, activeGoalCount: 1 } }],
   ])("never settles an idle thread with %s, and returns one it settled", (_, overrides) => {
     const thread = { ...quietThread, ...overrides };
     const merged = {

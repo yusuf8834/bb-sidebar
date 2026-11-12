@@ -64,7 +64,6 @@ describe("parking threads", () => {
               backgroundAgents: 0,
               backgroundCommands: 0,
               planMode: 0,
-              goals: 0,
             },
           }),
         ],
@@ -299,7 +298,7 @@ describe("parking threads", () => {
           thread({
             id: "agent",
             title: "Agent parent",
-            activity: { workflows: 0, backgroundAgents: 1, backgroundCommands: 0, planMode: 0, goals: 0 },
+            activity: { workflows: 0, backgroundAgents: 1, backgroundCommands: 0, planMode: 0 },
           }),
           thread({ id: "done", title: "Done parent" }),
           thread({ id: "done-child", parentThreadId: "done", title: "Done child" }),
@@ -339,7 +338,6 @@ describe("parking threads", () => {
         backgroundAgents: 1,
         backgroundCommands: 0,
         planMode: 0,
-        goals: 0,
       },
     });
     expect(isWorkingTree(askingParent, [], new Map())).toBe(false);

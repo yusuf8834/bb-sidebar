@@ -8,6 +8,7 @@ import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 export const idleSidebarThreadFields = {
   displayTitle: "",
   lifecycleOwnerThreadId: null,
+  parentNotifications: "auto",
   sourceThreadId: null,
   status: "idle",
   runtimeStatus: "idle",

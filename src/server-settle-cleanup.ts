@@ -64,7 +64,6 @@ export function createServerSettleCleanup(
           backgroundAgents: activity.activeBackgroundAgentCount,
           backgroundCommands: activity.activeBackgroundCommandCount,
           planMode: activity.activePlanModeCount,
-          goals: activity.activeGoalCount,
         },
         isTurnInFlight(thread.status),
       ),

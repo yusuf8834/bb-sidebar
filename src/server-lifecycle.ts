@@ -272,7 +272,6 @@ export function createServerLifecycle(ctx: ServerContext) {
         backgroundAgents: thread.activity.activeBackgroundAgentCount,
         backgroundCommands: thread.activity.activeBackgroundCommandCount,
         planMode: thread.activity.activePlanModeCount,
-        goals: thread.activity.activeGoalCount,
       },
       isTurnInFlight(thread.status),
     ),

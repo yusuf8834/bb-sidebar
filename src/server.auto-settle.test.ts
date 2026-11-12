@@ -305,7 +305,6 @@ describe("automatic settle evaluation", () => {
     const idleActivity = {
       activeBackgroundAgentCount: 0,
       activeBackgroundCommandCount: 0,
-      activeGoalCount: 0,
       activePlanModeCount: 0,
       activeWorkflowCount: 0,
     };

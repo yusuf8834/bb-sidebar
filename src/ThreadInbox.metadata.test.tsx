@@ -197,7 +197,6 @@ describe("card metadata", () => {
           backgroundAgents: 2,
           backgroundCommands: 0,
           planMode: 0,
-          goals: 1,
         },
       }),
     ]);

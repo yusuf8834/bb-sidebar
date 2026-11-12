@@ -5,7 +5,7 @@ import { threadShortStatus } from "./StatusSlot";
 
 /**
  * Whether a thread, or anything under it, still has work running: its own
- * turn, its background agents, commands, workflows, and goals, and any
+ * turn, its background agents, commands, and workflows, and any
  * working descendant. The badge can prioritize unread success over a live
  * turn, so inspect activity as well as its displayed status.
  *
