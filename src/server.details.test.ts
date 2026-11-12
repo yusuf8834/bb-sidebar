@@ -16,6 +16,21 @@ describe("lifecycle RPC", () => {
     });
   });
 
+  it("rejects an environment id longer than 255 characters before scanning", async () => {
+    const harness = await loadPlugin();
+    const list = vi.fn(async () => []);
+    harness.inspection.sdk.stub("environments.list", list);
+    await expect(harness.behavior.callRpc("getOpenPorts", { environmentIds: ["e".repeat(256)] })).rejects.toThrow();
+    await expect(
+      harness.behavior.callRpc("getOpenPorts", { environmentIds: ["env_ok", "e".repeat(5_000_000)] }),
+    ).rejects.toThrow();
+    expect(list).not.toHaveBeenCalled();
+    await expect(harness.behavior.callRpc("getOpenPorts", { environmentIds: ["e".repeat(255)] })).resolves.toEqual({
+      groups: [],
+    });
+    expect(list).toHaveBeenCalledTimes(1);
+  });
+
   it("returns only model and reasoning details, including unset options", async () => {
     const harness = await loadPlugin();
     harness.inspection.sdk.stub("threads.defaultExecutionOptions", async () => ({
