@@ -1,13 +1,16 @@
 import {
   useSidebarThreadDraft,
   useSidebarThreadRowStatus,
+  useSidebarThreadRowStatuses,
   type PluginSidebarThread,
   type PluginSidebarThreadIndicator,
   type PluginSidebarThreadRowStatus,
 } from "@get-bb/plugin-sdk/app";
 import { StillThreadStatusGlyph } from "./StillThreadStatusGlyph";
-import { useMemo } from "react";
-import { isKnownIndicator, isWorkingIndicator, unhandledIndicator } from "./child-status";
+import { useCallback, useMemo } from "react";
+import { resolveThreadStatus } from "./bb-sdk";
+import { isKnownIndicator, unhandledIndicator, type ThreadWorking } from "./child-status";
+import { isThreadWorkingForDisplay } from "./working-tree";
 import { cn } from "./lib/utils";
 import { relativeTimeLabel } from "./relative-time";
 import { useWorkingSinceContext } from "./useWorkingSince";
@@ -102,59 +105,63 @@ export function StatusOrTime({
   );
 }
 
-const ROW_STATUS_YIELDS_TO = new Set<PluginSidebarThreadIndicator>(["runtime", "unread-error", "waiting-for-input"]);
-
 /**
  * A status another plugin set on the row, such as a drafts or sandbox marker.
- * As on bb's own row, it replaces every status except live work, a failure,
- * or a raised hand, including this plugin's failed-send warning.
+ * bb's resolver decides where it shows: in place of every status except live
+ * work, a failure, or a raised hand. On top of that, the sidebar's provider
+ * limit, a pending interaction, and its failed-send warning replace it too.
  */
 export function useThreadRowStatus(thread: PluginSidebarThread): PluginSidebarThreadRowStatus | null {
-  const rowStatus = useSidebarThreadRowStatus(thread.id);
-  const limit = useThreadLimit(thread);
-  if (
-    !rowStatus ||
-    limit ||
-    thread.hasPendingInteraction ||
-    thread.queuedWork === "failed" ||
-    ROW_STATUS_YIELDS_TO.has(thread.indicator)
-  )
-    return null;
-  return rowStatus;
+  return threadRowStatus(thread, useSidebarThreadRowStatus(thread.id), useThreadLimit(thread) !== null);
+}
+
+export function threadRowStatus(
+  thread: PluginSidebarThread,
+  rowStatus: PluginSidebarThreadRowStatus | null,
+  limited: boolean,
+): PluginSidebarThreadRowStatus | null {
+  if (!rowStatus || limited || thread.hasPendingInteraction || thread.queuedWork === "failed") return null;
+  // Kept from before the sidebar used bb's resolver: the draft stays out, so
+  // a working thread with a draft keeps "Drafting" where bb would show the
+  // row status over its "working-draft" glyph.
+  return resolveThreadStatus({ thread, hiddenThreads: [], hasUnsubmittedDraft: false, rowStatus }).rowStatus;
 }
 
 /**
- * Folds an unsent composer draft into bb's indicator the way bb's own row
- * does. bb leaves drafts out of `indicator` because they are per-client, so a
- * busy thread with a draft becomes "working-draft" and an otherwise quiet one
- * "draft". A failure, a raised hand, an unread result or a queued message
- * keeps its own status.
+ * Folds an unsent composer draft into the indicator with bb's resolver, as
+ * bb's own row does. bb leaves drafts out of `indicator` because they are
+ * per-client, so a busy thread with a draft becomes "working-draft" and an
+ * otherwise quiet one "draft". A failure, a raised hand, an unread result or
+ * a queued message keeps its own status.
  */
-export function withDraftIndicator(
-  indicator: PluginSidebarThreadIndicator,
-  hasDraft: boolean,
-): PluginSidebarThreadIndicator {
-  if (!hasDraft) return indicator;
-  if (isWorkingIndicator(indicator)) return "working-draft";
-  return indicator === "none" ? "draft" : indicator;
+export function threadWithDraft(thread: PluginSidebarThread, hasUnsubmittedDraft: boolean): PluginSidebarThread {
+  // A kind this build does not know keeps bb's own glyph, as before.
+  if (!hasUnsubmittedDraft || !isKnownIndicator(thread.indicator)) return thread;
+  const { indicator, label } = resolveThreadStatus({ thread, hiddenThreads: [], hasUnsubmittedDraft, rowStatus: null });
+  // Kept from before the sidebar used bb's resolver: bb lets a draft on a
+  // thread with a background agent or command replace an unread result or a
+  // failed send; the sidebar keeps showing those.
+  if (indicator === thread.indicator || thread.indicator === "unread-success" || thread.indicator === "queued-failed") {
+    return thread;
+  }
+  return { ...thread, indicator, indicatorLabel: label };
 }
 
 /** The thread as its row should draw it, with this client's draft folded in. */
 export function useThreadWithDraft(thread: PluginSidebarThread): PluginSidebarThread {
   const { hasUnsubmittedDraft } = useSidebarThreadDraft(thread.id);
-  const indicator = withDraftIndicator(thread.indicator, hasUnsubmittedDraft);
-  return useMemo(
-    () =>
-      indicator === thread.indicator
-        ? thread
-        : {
-            ...thread,
-            indicator,
-            // bb's own wording for the two draft glyphs.
-            indicatorLabel:
-              indicator === "draft" ? "Thread has unsubmitted draft" : "Thread working with unsubmitted draft",
-          },
-    [thread, indicator],
+  return useMemo(() => threadWithDraft(thread, hasUnsubmittedDraft), [thread, hasUnsubmittedDraft]);
+}
+
+/**
+ * isThreadWorkingForDisplay with each thread's own row status, for lists and
+ * rollups. One subscription to every row status.
+ */
+export function useWorkingForDisplay(): ThreadWorking {
+  const rowStatuses = useSidebarThreadRowStatuses();
+  return useCallback(
+    (thread: PluginSidebarThread) => isThreadWorkingForDisplay(thread, rowStatuses.get(thread.id) ?? null),
+    [rowStatuses],
   );
 }
 

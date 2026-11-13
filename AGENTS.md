@@ -77,6 +77,14 @@ live again). Snoozed, Parked and Inactive-shelf threads stay live.
   override's `includes` and in the shared override's exclusions.
 
 App experimental SDK hooks use stable names from `src/bb-sdk.ts`.
+
+"Working" for display comes from bb's status resolver (`resolveThreadStatus`
+in `src/bb-sdk.ts`) through `isThreadWorkingForDisplay` in
+`src/working-tree.ts`, with each thread's own row status; the draft fold and
+row-status precedence in `StatusSlot.tsx` read the same resolver. Guards and
+shelf placement keep the shared lifecycle signals (`isThreadWorking`,
+`sidebarThreadSignals`) that the server mirrors. Another plugin's running row
+status blocks park, snooze and settle in the UI only (`useLifecycle.ts`).
 Pin to the SDK the latest stable bb-app ships (the bump pull request below
 does it); migrate experimental_* breaks through `src/bb-sdk.ts`. The minimum
 host is `engines.bb` with `engines.bbPluginSdk`, now bb 0.49.0 with SDK 0.6.132.

@@ -2,8 +2,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import { renderSlot } from "./test-slot";
-import { isWorkingTree } from "./working-tree";
+import type { ThreadWorking } from "./child-status";
+import { isThreadWorkingForDisplay, isWorkingTree } from "./working-tree";
 import { defaultSidebarSettings, inbox, listProps, loadInboxApp, thread } from "./test-inbox";
+
+const noRowStatus: ThreadWorking = (candidate) => isThreadWorkingForDisplay(candidate, null);
 
 vi.mock("sonner", async () => (await import("./test-inbox")).sonnerMock());
 
@@ -123,10 +126,10 @@ describe("a child waiting on the user", () => {
     const parent = thread({ id: "parent" });
     const worker = thread({ id: "worker", parentThreadId: "parent", indicator: "runtime" });
     const asker = thread({ id: "asker", parentThreadId: "worker", indicator: "waiting-for-input" });
-    expect(isWorkingTree(parent, [worker], new Map())).toBe(true);
-    expect(isWorkingTree(parent, [worker], new Map([["worker", [asker]]]))).toBe(false);
+    expect(isWorkingTree(parent, [worker], new Map(), noRowStatus)).toBe(true);
+    expect(isWorkingTree(parent, [worker], new Map([["worker", [asker]]]), noRowStatus)).toBe(false);
     const busyParent = thread({ id: "busy", indicator: "runtime" });
     const busyAsker = thread({ id: "busy-asker", parentThreadId: "busy", hasPendingInteraction: true });
-    expect(isWorkingTree(busyParent, [busyAsker], new Map())).toBe(false);
+    expect(isWorkingTree(busyParent, [busyAsker], new Map(), noRowStatus)).toBe(false);
   });
 });

@@ -3,6 +3,7 @@ import { Icon } from "./components/Icon";
 import { Tooltip } from "./components/Tooltip";
 import { cn } from "./lib/utils";
 import { StatusGlyph } from "./StatusGlyph";
+import { useWorkingForDisplay } from "./StatusSlot";
 import {
   childStatusIndicator,
   childStatusPhrase,
@@ -56,7 +57,8 @@ export function GrandchildDisclosureButton({
   onToggle,
 }: GrandchildDisclosure & { title: string }) {
   const count = descendants.length;
-  const summary = childStatusSummary(childSubtree(descendants, childrenByParent));
+  const isWorking = useWorkingForDisplay();
+  const summary = childStatusSummary(childSubtree(descendants, childrenByParent), isWorking);
   const noun = `${relation} thread${count === 1 ? "" : "s"}`;
   const phrase = childStatusPhrase(summary);
   const label = `${expanded ? "Hide" : "Show"} ${count} ${noun} for ${title}${phrase}`;

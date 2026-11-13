@@ -14,6 +14,7 @@ import { isInactiveThread } from "./inactive";
 import { isWorkingTree } from "./working-tree";
 import { threadNeedsAttention } from "./useRenamingShelfLocks";
 import { threadsWithAskingDescendants } from "./child-status";
+import { useWorkingForDisplay } from "./StatusSlot";
 
 interface InboxShelfThreadsOptions {
   activeThreadId: string | null;
@@ -38,6 +39,7 @@ export function useInboxShelfThreads({
   threads,
   workingShelfEnabled,
 }: InboxShelfThreadsOptions) {
+  const isWorking = useWorkingForDisplay();
   return useMemo(() => {
     const allVisible = visibleInboxThreads(threads);
     const scoped = filterByProjects(allVisible, scope);
@@ -83,7 +85,7 @@ export function useInboxShelfThreads({
       if (
         workingShelfEnabled &&
         !lifecycle.wokeFor(thread) &&
-        isWorkingTree(thread, childrenByParentId.get(thread.id) ?? [], childrenByParentId)
+        isWorkingTree(thread, childrenByParentId.get(thread.id) ?? [], childrenByParentId, isWorking)
       ) {
         working.push(thread);
       } else if (!askingParentIds.has(thread.id) && isInactiveThread(thread, now, inactiveAfterHours)) {
@@ -116,6 +118,7 @@ export function useInboxShelfThreads({
     activeThreadId,
     childrenByParentId,
     inactiveAfterHours,
+    isWorking,
     lifecycle,
     now,
     renamingShelfLocks,

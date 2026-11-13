@@ -7,7 +7,13 @@ import { Tooltip } from "./components/Tooltip";
 import { Disc } from "./Disc";
 import { cn } from "./lib/utils";
 import { StatusGlyph } from "./StatusGlyph";
-import { STATUS_SLOT_CLASS, StatusOrTime, threadStatusLabel, useThreadWithDraft } from "./StatusSlot";
+import {
+  STATUS_SLOT_CLASS,
+  StatusOrTime,
+  threadStatusLabel,
+  useThreadWithDraft,
+  useWorkingForDisplay,
+} from "./StatusSlot";
 import { RateLimitRecovery } from "./RateLimitRecovery";
 import { useThreadLimit } from "./RateLimits";
 import { limitStatus } from "./rate-limit-labels";
@@ -24,6 +30,7 @@ import {
   childStatusPhrase,
   childStatusSummary,
   childSubtree,
+  type ThreadWorking,
 } from "./child-status";
 import { childStatusBadgeClass, GrandchildDisclosureButton, type GrandchildDisclosure } from "./GrandchildDisclosure";
 import { childThreadSortOf, type ChildThreadSort } from "./sidebar-settings";
@@ -58,8 +65,8 @@ export function childThreadsByParent(
  * ships later, until it is given a kind. This is the same set the collapsed
  * badge counts, so the rows and the badge never disagree.
  */
-function childNeedsAttention(thread: PluginSidebarThread): boolean {
-  return childStatusKind(thread) !== null;
+function childNeedsAttention(thread: PluginSidebarThread, isWorking: ThreadWorking): boolean {
+  return childStatusKind(thread, isWorking) !== null;
 }
 
 /** Children retained while collapsed, including paths to visible descendants. */
@@ -68,11 +75,13 @@ export function collapsedChildThreads(
   childrenByParent: ReadonlyMap<string, readonly PluginSidebarThread[]>,
   activeThreadId: string | null | undefined,
   showAttentionChildren: boolean,
+  isWorking: ThreadWorking,
 ): PluginSidebarThread[] {
   return threads.filter((child) => {
     if (child.isArchived) return false;
     return childSubtree([child], childrenByParent).some(
-      (descendant) => descendant.id === activeThreadId || (showAttentionChildren && childNeedsAttention(descendant)),
+      (descendant) =>
+        descendant.id === activeThreadId || (showAttentionChildren && childNeedsAttention(descendant, isWorking)),
     );
   });
 }
@@ -124,8 +133,10 @@ export function ChildThreadBadge({
 }) {
   const visibleThreads = threads.filter((thread) => !thread.isArchived);
   const count = visibleThreads.length;
+  const isWorking = useWorkingForDisplay();
   const summary = childStatusSummary(
     childrenByParent ? childSubtree(visibleThreads, childrenByParent) : visibleThreads,
+    isWorking,
   );
   const tooltip = `${count} child thread${count === 1 ? "" : "s"}${childStatusPhrase(summary)}`;
 
@@ -179,23 +190,44 @@ type ChildThreadListProps = {
   parentProjectId?: string | null;
 } & InboxChildListInputs;
 
+/**
+ * Draws nothing while collapsed with no child to keep in view. The rows below
+ * unmount then, so their disclosure state resets as it does when a card
+ * leaves the list out.
+ */
 export function ChildThreadList(props: ChildThreadListProps) {
+  const inputs = useInboxChildList(props);
   const {
     threads,
     childrenByParent,
-    now,
-    id,
     activeThreadId,
     expanded = true,
     showRunningChildrenWhenCollapsed = false,
-    parentProjectId,
-    onThreadOpen,
-  } = useInboxChildList(props);
-  const disclosureId = useId();
-  const { projects } = useSidebarThreads();
+  } = inputs;
+  const isWorking = useWorkingForDisplay();
   const visibleThreads = expanded
     ? threads.filter((thread) => !thread.isArchived)
-    : collapsedChildThreads(threads, childrenByParent, activeThreadId, showRunningChildrenWhenCollapsed);
+    : collapsedChildThreads(threads, childrenByParent, activeThreadId, showRunningChildrenWhenCollapsed, isWorking);
+  if (!expanded && visibleThreads.length === 0) return null;
+  return <ChildThreadRows {...inputs} visibleThreads={visibleThreads} isWorking={isWorking} />;
+}
+
+function ChildThreadRows({
+  childrenByParent,
+  now,
+  id,
+  activeThreadId,
+  showRunningChildrenWhenCollapsed = false,
+  parentProjectId,
+  onThreadOpen,
+  visibleThreads,
+  isWorking,
+}: ReturnType<typeof useInboxChildList<ChildThreadListProps>> & {
+  visibleThreads: readonly PluginSidebarThread[];
+  isWorking: ThreadWorking;
+}) {
+  const disclosureId = useId();
+  const { projects } = useSidebarThreads();
   const [expandedDescendantParentIds, setExpandedDescendantParentIds] = useState<ReadonlySet<string>>(() => new Set());
 
   const toggleDescendants = (threadId: string) => {
@@ -224,7 +256,13 @@ export function ChildThreadList(props: ChildThreadListProps) {
       const descendantsExpanded = expandedDescendantParentIds.has(child.id);
       const visibleDescendants = descendantsExpanded
         ? descendants
-        : collapsedChildThreads(descendants, childrenByParent, activeThreadId, showRunningChildrenWhenCollapsed);
+        : collapsedChildThreads(
+            descendants,
+            childrenByParent,
+            activeThreadId,
+            showRunningChildrenWhenCollapsed,
+            isWorking,
+          );
       const descendantsId = `${disclosureId}-${child.id}`;
       const relation =
         depth === 1 ? "child" : depth === 2 ? "grandchild" : depth === 3 ? "great-grandchild" : "descendant";

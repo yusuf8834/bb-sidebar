@@ -8,6 +8,7 @@ import {
   threadsWithAskingDescendants,
 } from "./child-status";
 import { runtimeStatusFor } from "./test-fixtures";
+import { isThreadWorkingForDisplay } from "./working-tree";
 
 function thread(overrides: Partial<PluginSidebarThread> = {}): PluginSidebarThread {
   return {
@@ -41,28 +42,41 @@ function thread(overrides: Partial<PluginSidebarThread> = {}): PluginSidebarThre
   } as PluginSidebarThread;
 }
 
+const working = (candidate: PluginSidebarThread) => isThreadWorkingForDisplay(candidate, null);
+const kind = (candidate: PluginSidebarThread) => childStatusKind(candidate, working);
+
 describe("childStatusKind", () => {
   it("ranks failure over a raised hand over done over working", () => {
-    expect(childStatusKind(thread({ indicator: "unread-error", hasPendingInteraction: true }))).toBe("failed");
-    expect(childStatusKind(thread({ queuedWork: "failed", hasPendingInteraction: true }))).toBe("failed");
-    expect(childStatusKind(thread({ hasPendingInteraction: true }))).toBe("needs-you");
-    expect(childStatusKind(thread({ indicator: "waiting-for-input" }))).toBe("needs-you");
-    expect(childStatusKind(thread({ indicator: "unread-success" }))).toBe("done");
-    expect(childStatusKind(thread({ indicator: "plan-mode" }))).toBe("working");
-    expect(childStatusKind(thread({ indicator: "draft" }))).toBeNull();
-    expect(childStatusKind(thread())).toBeNull();
+    expect(kind(thread({ indicator: "unread-error", hasPendingInteraction: true }))).toBe("failed");
+    expect(kind(thread({ queuedWork: "failed", hasPendingInteraction: true }))).toBe("failed");
+    expect(kind(thread({ hasPendingInteraction: true }))).toBe("needs-you");
+    expect(kind(thread({ indicator: "waiting-for-input" }))).toBe("needs-you");
+    expect(kind(thread({ indicator: "unread-success" }))).toBe("done");
+    expect(
+      kind(
+        thread({
+          indicator: "plan-mode",
+          activity: { workflows: 0, backgroundAgents: 0, backgroundCommands: 0, planMode: 1 },
+        }),
+      ),
+    ).toBe("working");
+    expect(kind(thread({ indicator: "draft" }))).toBeNull();
+    expect(kind(thread())).toBeNull();
   });
 });
 
 describe("childStatusSummary", () => {
   it("counts each kind, skips archived rows, and picks the most urgent", () => {
-    const summary = childStatusSummary([
-      thread({ id: "a", indicator: "runtime" }),
-      thread({ id: "b", indicator: "runtime", isArchived: true }),
-      thread({ id: "c", indicator: "unread-success" }),
-      thread({ id: "d", hasPendingInteraction: true }),
-      thread({ id: "e" }),
-    ]);
+    const summary = childStatusSummary(
+      [
+        thread({ id: "a", indicator: "runtime" }),
+        thread({ id: "b", indicator: "runtime", isArchived: true }),
+        thread({ id: "c", indicator: "unread-success" }),
+        thread({ id: "d", hasPendingInteraction: true }),
+        thread({ id: "e" }),
+      ],
+      working,
+    );
     expect(summary).toEqual({
       failed: 0,
       needsYou: 1,
@@ -74,7 +88,7 @@ describe("childStatusSummary", () => {
   });
 
   it("has no dominant kind and an empty phrase for idle children", () => {
-    const summary = childStatusSummary([thread({ id: "a" })]);
+    const summary = childStatusSummary([thread({ id: "a" })], working);
     expect(summary.dominant).toBeNull();
     expect(childStatusPhrase(summary)).toBe("");
   });
@@ -109,7 +123,7 @@ describe("full child subtree", () => {
       ]),
     );
     expect(subtree.map((row) => row.id)).toEqual(["c", "g", "gg"]);
-    expect(childStatusSummary(subtree).dominant).toBe(dominant);
+    expect(childStatusSummary(subtree, working).dominant).toBe(dominant);
   });
 
   it("stops archived branches and visits cyclic/duplicate DTOs once in sibling order", () => {

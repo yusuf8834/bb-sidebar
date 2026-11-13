@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRpc } from "@get-bb/plugin-sdk/app";
+import {
+  useRpc,
+  useSidebarThreadRowStatus,
+  useSidebarThreadRowStatuses,
+  type PluginSidebarThreadRowStatus,
+} from "@get-bb/plugin-sdk/app";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 import { toast } from "./lib/toast";
 import type { bbSidebarRpcContract } from "./contract";
@@ -17,7 +22,8 @@ import {
   waitsForScheduledContinue,
 } from "./lifecycle";
 import { threadsWithAskingDescendants } from "./child-status";
-import { resolveThreadTitlesIn } from "./inbox";
+import { resolveThreadTitlesIn, threadDisplayTitle } from "./inbox";
+import { threadTreeIds } from "./thread-tree";
 import { useLimitActions } from "./RateLimits";
 import type { LifecycleRows } from "./useLifecycleRows";
 
@@ -75,6 +81,33 @@ const ERROR_MESSAGE: Record<LifecycleMutation, string> = {
   acknowledgeWake: "Could not dismiss Woke marker",
 };
 
+/**
+ * Whether another plugin's status on the thread's row runs, such as "Waiting
+ * for CI". Rows then offer no Park, Snooze or Settle for it, as for a thread
+ * that is working. This guard is the UI's alone: the server, automatic settle
+ * and `bb sidebar` never see row statuses, and shelves do not move for it.
+ */
+export function useRowStatusRuns(threadId: string): boolean {
+  return useSidebarThreadRowStatus(threadId)?.tone === "running";
+}
+
+/**
+ * The thread whose running row status stops a park, snooze or settle, if any.
+ * A park or a snooze files one thread, so only its own status counts, as the
+ * working guard reads only the thread. A settle files the whole tree, which
+ * the server refuses while any thread in it is working.
+ */
+function runningRowStatusThread(
+  threadId: string,
+  wholeTree: boolean,
+  threads: readonly PluginSidebarThread[],
+  rowStatuses: ReadonlyMap<string, PluginSidebarThreadRowStatus>,
+): PluginSidebarThread | undefined {
+  const live = threads.filter((thread) => !thread.isArchived);
+  const ids = new Set(wholeTree ? threadTreeIds(live, threadId) : [threadId]);
+  return live.find((thread) => ids.has(thread.id) && rowStatuses.get(thread.id)?.tone === "running");
+}
+
 function errorDescription(error: unknown): string | undefined {
   if (!(error instanceof Error)) return undefined;
   const message = error.message.trim();
@@ -105,6 +138,9 @@ export function useLifecycle(threads: readonly PluginSidebarThread[], lifecycleR
   // Read at error time, so the API below keeps its identity across thread updates.
   const latestThreads = useRef(threads);
   latestThreads.current = threads;
+  const rowStatuses = useSidebarThreadRowStatuses();
+  const latestRowStatuses = useRef(rowStatuses);
+  latestRowStatuses.current = rowStatuses;
   const portPromptVersions = useRef(new Map<string, number>());
 
   // Arm one timer for the soonest wake instead of polling: the shelf empties
@@ -138,6 +174,18 @@ export function useLifecycle(threads: readonly PluginSidebarThread[], lifecycleR
     // channel, and that subscription refreshes every client after success.
     const mutate = async (request: LifecycleMutationRequest): Promise<boolean> => {
       const { method, threadId } = request;
+      // Every way to shelve a thread ends here, Undo included.
+      const running =
+        method === "park" || method === "snooze" || method === "settle"
+          ? runningRowStatusThread(threadId, method === "settle", latestThreads.current, latestRowStatuses.current)
+          : undefined;
+      if (running) {
+        const status = latestRowStatuses.current.get(running.id)?.label;
+        toast.error(ERROR_MESSAGE[method], {
+          description: `${threadDisplayTitle(running)} is still running: ${status}`,
+        });
+        return false;
+      }
       if (inFlightThreadIds.current.has(threadId)) return false;
       inFlightThreadIds.current.add(threadId);
       const portPromptVersion = (portPromptVersions.current.get(threadId) ?? 0) + 1;

@@ -4,7 +4,7 @@ import { createElement } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import type { PluginSidebarThreadIndicator } from "@get-bb/plugin-sdk/app";
 import { installTestPluginRuntime } from "@get-bb/plugin-sdk/testing/app";
-import { isKnownIndicator, isWorkingIndicator, KNOWN_INDICATORS } from "./child-status";
+import { isKnownIndicator, KNOWN_INDICATORS } from "./child-status";
 import { StatusGlyph } from "./StatusGlyph";
 import { statusToneClass } from "./StatusSlot";
 
@@ -52,12 +52,6 @@ describe("indicators", () => {
   it("knows the listed kinds and not a future one", () => {
     expect(KNOWN_INDICATORS.every(isKnownIndicator)).toBe(true);
     expect(isKnownIndicator(futureKind)).toBe(false);
-  });
-
-  it("does not count a queued or unknown kind as live work", () => {
-    expect(isWorkingIndicator("queued-waiting")).toBe(false);
-    expect(isWorkingIndicator("queued-failed")).toBe(false);
-    expect(isWorkingIndicator(futureKind)).toBe(false);
   });
 
   it("tones a failed send as an error and a waiting one as a draft", () => {

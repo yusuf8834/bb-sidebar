@@ -103,7 +103,9 @@ function hiddenAlerts(threads: readonly PluginSidebarThread[], shown: readonly P
   const counts = new Map<ChildStatusKind | null, number>();
   for (const thread of threads) {
     if (shownIds.has(thread.id)) continue;
-    const kind = childStatusKind(thread);
+    // Group dots carry news only; live work is never one, so nothing here
+    // asks whether a thread is working.
+    const kind = childStatusKind(thread, () => false);
     counts.set(kind, (counts.get(kind) ?? 0) + 1);
   }
   return ALERT_KINDS.flatMap((kind) => {

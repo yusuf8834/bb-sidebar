@@ -8,6 +8,24 @@ vi.mock("sonner", async () => (await import("./test-inbox")).sonnerMock());
 await loadInboxApp();
 
 describe("ThreadInbox", () => {
+  it("folds grandchildren again after the parent's children were collapsed and reopened", () => {
+    render([
+      thread({ id: "parent", title: "Parent" }),
+      thread({ id: "child", title: "Child", parentThreadId: "parent" }),
+      thread({ id: "grandchild", title: "Grandchild", parentThreadId: "child" }),
+    ]);
+    const badge = screen.getByRole("button", { name: "1 child thread" });
+    fireEvent.click(badge);
+    fireEvent.click(screen.getByRole("button", { name: "Show 1 grandchild thread for Child" }));
+    expect(screen.getByText("Grandchild")).toBeDefined();
+
+    fireEvent.click(badge);
+    expect(screen.queryByText("Child")).toBeNull();
+    fireEvent.click(badge);
+    expect(screen.getByText("Child")).toBeDefined();
+    expect(screen.queryByText("Grandchild")).toBeNull();
+  });
+
   it("archives the selected child instead of its parent", async () => {
     const rendered = render([
       thread({ id: "parent", title: "Parent" }),

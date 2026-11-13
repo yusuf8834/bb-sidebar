@@ -43,6 +43,7 @@ import { movePinnedIdByOffset, orderPinnedThreads, rebaseMovedId } from "./pinne
 import { parseConfiguredSnoozePresets } from "./lifecycle";
 import { parseInactiveAfterHours } from "./inactive";
 import { DEFAULT_SIDEBAR_SETTINGS } from "./sidebar-settings";
+import { useWorkingForDisplay } from "./StatusSlot";
 import { useScrollFade } from "./useScrollFade";
 import { usePersistedPreference } from "./lib/use-persisted-preference";
 import { activeSortCodec, childExpansionCodec, shelfExpansionCodec } from "./lib/inbox-preference-codecs";
@@ -203,6 +204,7 @@ function ThreadInboxContent({
   const working = useMemo(() => orderPinnedThreads(workingBase, inboxReorder.ids), [workingBase, inboxReorder.ids]);
   const inactive = useMemo(() => orderPinnedThreads(inactiveBase, inboxReorder.ids), [inactiveBase, inboxReorder.ids]);
   // Keep the root of an attention path reachable when its shelf is folded.
+  const isWorking = useWorkingForDisplay();
   const attentionParentIds = useMemo(() => {
     const ids = new Set<string>();
     if (
@@ -211,12 +213,22 @@ function ThreadInboxContent({
       return ids;
     }
     for (const thread of [...pinnedBase, ...inboxBase, ...inactiveBase]) {
-      if (collapsedChildThreads(childrenByParentId.get(thread.id) ?? [], childrenByParentId, null, true).length > 0) {
+      if (
+        collapsedChildThreads(childrenByParentId.get(thread.id) ?? [], childrenByParentId, null, true, isWorking)
+          .length > 0
+      ) {
         ids.add(thread.id);
       }
     }
     return ids;
-  }, [childrenByParentId, inactiveBase, inboxBase, pinnedBase, sidebarSettings?.showRunningChildrenWhenCollapsed]);
+  }, [
+    childrenByParentId,
+    inactiveBase,
+    inboxBase,
+    isWorking,
+    pinnedBase,
+    sidebarSettings?.showRunningChildrenWhenCollapsed,
+  ]);
   const visiblePinned = useMemo(
     () => visibleShelfThreads(pinned, expandedShelves.pinned, activeListThreadId, undefined, attentionParentIds),
     [attentionParentIds, activeListThreadId, expandedShelves.pinned, pinned],

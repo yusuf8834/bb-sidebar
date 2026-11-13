@@ -12,7 +12,7 @@ import {
   type PointerEventHandler,
 } from "react";
 import { useSidebarThreadShortcut, type PluginSidebarThread } from "@get-bb/plugin-sdk/app";
-import { ChildThreadBadge, ChildThreadList, collapsedChildThreads } from "./ChildThreadList";
+import { ChildThreadBadge, ChildThreadList } from "./ChildThreadList";
 import { Icon } from "./components/Icon";
 import { Tooltip } from "./components/Tooltip";
 import { ThreadDetailsTooltip } from "./ThreadDetailsTooltip";
@@ -21,7 +21,7 @@ import { cn } from "./lib/utils";
 import { rowKeyshortcuts } from "./lib/keyshortcuts";
 import { RowContextMenu } from "./RowContextMenu";
 import { ProviderGlyph } from "./ProviderGlyph";
-import { STATUS_SLOT_CLASS, StatusOrTime } from "./StatusSlot";
+import { STATUS_SLOT_CLASS, StatusOrTime, useWorkingForDisplay } from "./StatusSlot";
 import { CompactStatusOrTime } from "./StatusGlyph";
 import { threadDisplayTitle } from "./inbox";
 import { InlineThreadTitle } from "./InlineThreadTitle";
@@ -32,6 +32,7 @@ import { OpenPortsIndicator } from "./OpenPorts";
 import { useThreadLimit } from "./RateLimits";
 import { useInboxEnvironment, useInboxActions, useInboxActivity } from "./InboxContext";
 import { DEFAULT_SIDEBAR_SETTINGS } from "./sidebar-settings";
+import { useRowStatusRuns } from "./useLifecycle";
 import { projectIconUrl as iconUrl } from "./project-icons";
 import "./settle-button.css";
 
@@ -102,7 +103,7 @@ export function ThreadCard({
   } = useInboxEnvironment();
   const { onNavigate, parkThread, settleThread, snoozeThread, acknowledgeWake, toggleChildExpansion } =
     useInboxActions();
-  const { activeThreadId, now } = useInboxActivity();
+  const { now } = useInboxActivity();
   const provider = providerById.get(thread.providerId) ?? null;
   const projectName = projectNameById.get(thread.projectId) ?? null;
   const projectIconUrl = iconUrl(thread.projectId, projectIconRevision);
@@ -188,8 +189,9 @@ export function ThreadCard({
   const holdParkActions = isSnoozeOpen || isSettling;
   const childListId = useId();
   // Keep busy trees compact until a failure, question, or wake needs attention.
+  const working = useWorkingForDisplay();
   const naturalCompact =
-    compactAlways || (compactWhenWorking && !isWoke && isWorkingTree(thread, childThreads, childrenByParent));
+    compactAlways || (compactWhenWorking && !isWoke && isWorkingTree(thread, childThreads, childrenByParent, working));
   const compact = isRenaming ? compactAtRenameStart.current : naturalCompact;
   const stripeView = compact ? "collapsed" : "full";
   const projectColor = useProjectColor(thread.projectId);
@@ -201,7 +203,8 @@ export function ThreadCard({
   // Collapsed cards leave their child rows behind the expansion badge.
   const showChildrenWhenCollapsed = showRunningChildrenWhenCollapsed && !compact;
   const emphasis = isWoke ? "woke" : thread.isUnread ? "unread" : thread.indicator === "none" ? "read-idle" : "active";
-  const showParkActions = !isWoke && canPark && (snoozePresets.length > 0 || !!onPark);
+  const canShelve = !useRowStatusRuns(thread.id) && canPark;
+  const showParkActions = !isWoke && canShelve && (snoozePresets.length > 0 || !!onPark);
 
   const unpinButton = thread.isPinned ? (
     <Tooltip label="Unpin thread">
@@ -244,12 +247,12 @@ export function ThreadCard({
   return (
     <RowContextMenu
       thread={thread}
-      onPark={canPark ? onPark : undefined}
-      canSnooze={canPark}
+      onPark={canShelve ? onPark : undefined}
+      canSnooze={canShelve}
       canArchive={canPark}
       snoozePresets={snoozePresets}
       onSnooze={onSnooze}
-      onSettle={canPark ? startSettle : undefined}
+      onSettle={canShelve ? startSettle : undefined}
       onRename={() => changeRenaming(true)}
     >
       <li
@@ -509,10 +512,7 @@ export function ThreadCard({
               </div>
             </div>
           )}
-          {childThreads.length > 0 &&
-          (childrenExpanded ||
-            collapsedChildThreads(childThreads, childrenByParent, activeThreadId, showChildrenWhenCollapsed).length >
-              0) ? (
+          {childThreads.length > 0 ? (
             <ChildThreadList
               id={childListId}
               threads={childThreads}

@@ -58,38 +58,25 @@ export function unhandledIndicator(indicator: never): PluginSidebarThreadIndicat
   return indicator;
 }
 
-export function isWorkingIndicator(indicator: PluginSidebarThreadIndicator): boolean {
-  switch (indicator) {
-    case "runtime":
-    case "workflow":
-    case "background-agent":
-    case "background-command":
-    case "plan-mode":
-    case "working-draft":
-      return true;
-    case "draft":
-    case "none":
-    case "queued-failed":
-    case "queued-waiting":
-    case "unread-error":
-    case "unread-success":
-    case "waiting-for-input":
-      return false;
-    default:
-      unhandledIndicator(indicator);
-      return false;
-  }
-}
+/**
+ * Whether a thread is working, for display. App code passes
+ * isThreadWorkingForDisplay from working-tree.ts with each thread's own row
+ * status; this shared module cannot call bb's status resolver itself.
+ */
+export type ThreadWorking = (thread: PluginSidebarThread) => boolean;
 
-export function childStatusKind(thread: PluginSidebarThread): ChildStatusKind | null {
+export function childStatusKind(thread: PluginSidebarThread, isWorking: ThreadWorking): ChildStatusKind | null {
   if (thread.indicator === "unread-error" || thread.queuedWork === "failed") return "failed";
   if (threadAsksForInput(thread)) return "needs-you";
   if (thread.indicator === "unread-success") return "done";
-  if (isWorkingIndicator(thread.indicator)) return "working";
+  if (isWorking(thread)) return "working";
   return null;
 }
 
-export function childStatusSummary(threads: readonly PluginSidebarThread[]): ChildStatusSummary {
+export function childStatusSummary(
+  threads: readonly PluginSidebarThread[],
+  isWorking: ThreadWorking,
+): ChildStatusSummary {
   const summary: ChildStatusSummary = {
     failed: 0,
     needsYou: 0,
@@ -99,7 +86,7 @@ export function childStatusSummary(threads: readonly PluginSidebarThread[]): Chi
   };
   for (const thread of threads) {
     if (thread.isArchived) continue;
-    switch (childStatusKind(thread)) {
+    switch (childStatusKind(thread, isWorking)) {
       case "failed":
         summary.failed += 1;
         break;

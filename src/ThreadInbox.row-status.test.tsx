@@ -62,7 +62,8 @@ describe("row statuses from other plugins", () => {
     renderWithStatus(
       [
         thread({ id: "busy", title: "Busy work", indicator: "runtime", indicatorLabel: "Working" }),
-        thread({ id: "failed", title: "Failed work", indicator: "unread-error" }),
+        // The unread failure bb's indicator stands for.
+        thread({ id: "failed", title: "Failed work", indicator: "unread-error", isUnread: true, status: "error" }),
         thread({ id: "asking", title: "Asking work", indicator: "waiting-for-input", hasPendingInteraction: true }),
         thread({ id: "unsent", title: "Unsent work", queuedWork: "failed" }),
       ],

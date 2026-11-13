@@ -87,6 +87,17 @@ describe("reconcileWorkingSince", () => {
     );
     expect(next.get("a")).toBe(NOW);
   });
+
+  // The display rule no longer counts a disconnected machine as working; the
+  // clock keeps the lifecycle rule, so the stretch survives the outage.
+  it("keeps the stamp while the thread's machine is disconnected and after it comes back", () => {
+    const running = thread({ id: "a", status: "active", runtimeStatus: "active", indicator: "runtime" });
+    const offline = thread({ id: "a", status: "active", runtimeStatus: "waiting-for-host", indicator: "none" });
+    const started = reconcileWorkingSince(new Map(), [running], NOW);
+    const away = reconcileWorkingSince(started, [offline], NOW + 5 * MINUTE);
+    expect(away).toBe(started);
+    expect(reconcileWorkingSince(away, [running], NOW + 10 * MINUTE).get("a")).toBe(NOW);
+  });
 });
 
 describe("statusWithDuration", () => {

@@ -5,7 +5,7 @@ import { Tooltip } from "./components/Tooltip";
 import { ChildThreadBadge, ChildThreadList, collapsedChildThreads } from "./ChildThreadList";
 import { CompactRow } from "./CompactRow";
 import { RowContextMenu } from "./RowContextMenu";
-import { StatusOrTime } from "./StatusSlot";
+import { StatusOrTime, useWorkingForDisplay } from "./StatusSlot";
 import { useThreadLimit } from "./RateLimits";
 import { threadDisplayTitle } from "./inbox";
 import { snoozeWakeLabel } from "./lifecycle";
@@ -14,6 +14,7 @@ import { OpenPortsIndicator } from "./OpenPorts";
 import { ShortcutHint } from "./bb-sdk";
 import { rowKeyshortcuts } from "./lib/keyshortcuts";
 import { useInboxActivity, useInboxEnvironment, useInboxActions } from "./InboxContext";
+import { useRowStatusRuns } from "./useLifecycle";
 import { projectIconUrl as iconUrl } from "./project-icons";
 
 /**
@@ -46,11 +47,15 @@ export const SlimRow = memo(function SlimRow({
   const { activeThreadId } = useInboxActivity();
   const childThreads = childrenByParentId.get(thread.id) ?? [];
   const childListId = useId();
+  const isWorking = useWorkingForDisplay();
   // Shelved rows stay one line: children show only when expanded, or on the
   // way to the open thread, never because one needs attention.
   const showChildren =
     childThreads.length > 0 &&
-    (childrenExpanded || collapsedChildThreads(childThreads, childrenByParentId, activeThreadId, false).length > 0);
+    (childrenExpanded ||
+      collapsedChildThreads(childThreads, childrenByParentId, activeThreadId, false, isWorking).length > 0);
+  // Another plugin's running status keeps the thread where it is.
+  const canShelve = !useRowStatusRuns(thread.id);
   const projectName = projectNameById.get(thread.projectId) ?? null;
   const projectIconUrl = iconUrl(thread.projectId, projectIconRevision);
   const onPark = () => parkThread(thread);
@@ -72,10 +77,10 @@ export const SlimRow = memo(function SlimRow({
   return (
     <RowContextMenu
       thread={thread}
-      onPark={shelf !== "parked" ? onPark : undefined}
+      onPark={canShelve && shelf !== "parked" ? onPark : undefined}
       onResume={shelf === "parked" ? onRestore : undefined}
-      onSettle={shelf !== "settled" ? onSettle : undefined}
-      canSnooze={shelf !== "snoozed"}
+      onSettle={canShelve && shelf !== "settled" ? onSettle : undefined}
+      canSnooze={canShelve && shelf !== "snoozed"}
       snoozePresets={snoozePresets}
       onSnooze={onSnooze}
       onWake={shelf === "snoozed" ? onRestore : undefined}

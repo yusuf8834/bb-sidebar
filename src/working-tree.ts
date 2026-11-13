@@ -1,13 +1,30 @@
-import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
-import { childStatusKind, childSubtree, threadAsksForInput } from "./child-status";
-import { isThreadWorking } from "./lifecycle";
-import { threadShortStatus } from "./StatusSlot";
+import type { PluginSidebarThread, PluginSidebarThreadRowStatus } from "@get-bb/plugin-sdk/app";
+import { resolveThreadStatus } from "./bb-sdk";
+import { childSubtree, threadAsksForInput, type ThreadWorking } from "./child-status";
 
 /**
- * Whether a thread, or anything under it, still has work running: its own
- * turn, its background agents, commands, and workflows, and any
- * working descendant. The badge can prioritize unread success over a live
- * turn, so inspect activity as well as its displayed status.
+ * Whether a thread is working, for display: bb's own rule, from bb's status
+ * resolver, over the thread and its own row status. A running runtime, any
+ * workflow, background agent, background command or plan mode, and another
+ * plugin's status with the "running" tone all count. A thread whose machine
+ * is disconnected, or that has not started, does not.
+ *
+ * Display only. Parking, settling, shelf placement and the working clock keep
+ * `isThreadWorking` from shared lifecycle.ts, which the server mirrors from
+ * rows that never carry another plugin's status.
+ */
+export function isThreadWorkingForDisplay(
+  thread: PluginSidebarThread,
+  rowStatus: PluginSidebarThreadRowStatus | null,
+): boolean {
+  return resolveThreadStatus({ thread, hiddenThreads: [], hasUnsubmittedDraft: false, rowStatus }).isWorking;
+}
+
+/**
+ * Whether a thread, or anything under it, still has work running, by
+ * `isWorking` (isThreadWorkingForDisplay with each thread's own row status).
+ * Children are asked one by one rather than passed to bb as hidden threads,
+ * so each answers with its own row status.
  *
  * The thread itself needing you, or failing, outranks its children's work:
  * that is the user's cue, so such a thread never counts as working here.
@@ -20,6 +37,7 @@ export function isWorkingTree(
   thread: PluginSidebarThread,
   childThreads: readonly PluginSidebarThread[],
   childrenByParent: ReadonlyMap<string, readonly PluginSidebarThread[]>,
+  isWorking: ThreadWorking,
 ): boolean {
   if (
     thread.hasPendingInteraction ||
@@ -31,10 +49,8 @@ export function isWorkingTree(
   }
   const descendants = childSubtree(childThreads, childrenByParent);
   if (descendants.some(threadAsksForInput)) return false;
-  if (threadShortStatus(thread)?.showsDuration === true || isThreadWorking(thread)) return true;
+  if (isWorking(thread)) return true;
   return descendants.some(
-    (child) =>
-      childStatusKind(child) === "working" ||
-      (child.indicator !== "unread-error" && child.queuedWork !== "failed" && isThreadWorking(child)),
+    (child) => child.indicator !== "unread-error" && child.queuedWork !== "failed" && isWorking(child),
   );
 }

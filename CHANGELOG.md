@@ -6,6 +6,9 @@
 
 - Requires bb 0.49.0 or later, and is built against plugin SDK 0.6.132, the version in bb 0.49.0. Version 0.3.10 is the last release for bb 0.48.
 - **The Goal status is gone.** bb no longer reports goals, so the sidebar drops the Goal status label, its icon, and the goal count from the live work that keeps a thread from being parked or settled.
+- **A thread another plugin marks as running can no longer be parked, snoozed or settled from the sidebar.** When another plugin's status on a row has the running tone, such as "Waiting for CI", the card hides its Snooze and Settle buttons and the row menu leaves out Snooze, Park thread and Settle, as for a thread that is working. On a Parked, Snoozed or Settled row the menu offers only the way back, an Undo that would shelve the thread again is refused with a message, and settling a parent is refused while any thread in its tree carries such a status. Archive stays available. Only the sidebar knows: automatic settle and `bb sidebar` still treat the thread by its own state.
+- **A thread another plugin marks as running counts as working.** It moves to the Working shelf, is drawn on one line with the "compact working threads" display, and counts as working in its parent's child badge, which also keeps it in view while the parent's children are collapsed. An idle parent of such a child counts as a working tree.
+- **A thread whose machine is disconnected, or that has not started yet, no longer counts as working.** It stays on the Active shelf instead of the Working shelf and keeps its full card with the "compact working threads" display. It still cannot be parked or settled, and its "Working" duration carries on when the machine reconnects.
 
 ### Removed
 
