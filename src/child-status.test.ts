@@ -7,6 +7,7 @@ import {
   childSubtree,
   threadsWithAskingDescendants,
 } from "./child-status";
+import { runtimeStatusFor } from "./test-fixtures";
 
 function thread(overrides: Partial<PluginSidebarThread> = {}): PluginSidebarThread {
   return {
@@ -33,6 +34,9 @@ function thread(overrides: Partial<PluginSidebarThread> = {}): PluginSidebarThre
     isArchived: false,
     createdAt: 0,
     updatedAt: 0,
+    status: "idle",
+    runtimeStatus: runtimeStatusFor(overrides),
+    queuedWork: "none",
     ...overrides,
   } as PluginSidebarThread;
 }

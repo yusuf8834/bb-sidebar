@@ -3,7 +3,7 @@ import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { loadPluginApp } from "@get-bb/plugin-sdk/testing/app";
 import { renderSlot } from "./test-slot";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
-import { deferred, idleSidebarThreadFields } from "./test-fixtures";
+import { deferred, idleSidebarThreadFields, runtimeStatusFor } from "./test-fixtures";
 import type { SidebarProvider } from "./ProviderGlyph";
 
 export const toastMocks = {
@@ -126,6 +126,7 @@ let nextPinnedKey = 0;
 export function thread(overrides: Partial<PluginSidebarThread> = {}): PluginSidebarThread {
   return {
     ...idleSidebarThreadFields,
+    runtimeStatus: runtimeStatusFor(overrides),
     // Confirmed pins carry keys in canonical BB; explicit null models a provisional pin.
     ...(overrides.isPinned ? { pinnedAt: 100, pinSortKey: `U${String(nextPinnedKey++).padStart(6, "0")}U` } : {}),
     id: "thr_1",
