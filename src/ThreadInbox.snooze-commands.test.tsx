@@ -224,6 +224,22 @@ describe("palette snooze commands", () => {
     expect(unsnooze).not.toHaveBeenCalled();
   });
 
+  it("does not snooze an already snoozed thread again", async () => {
+    const snooze = vi.fn();
+    renderInbox([thread({ id: "napping", title: "Napping" })], {
+      listLifecycle: () => ({
+        rows: [{ threadId: "napping", settledAt: null, snoozedUntil: Date.now() + HOUR_MS, snoozedAt: Date.now() }],
+      }),
+      snooze,
+    });
+    await screen.findByRole("region", { name: "Snoozed" });
+
+    paletteCommands().run("snooze-5h", "napping");
+
+    expect(toastMocks.message).toHaveBeenCalledWith("This thread is already snoozed", expect.anything());
+    expect(snooze).not.toHaveBeenCalled();
+  });
+
   it("tells the user to open the sidebar when no inbox is mounted", () => {
     paletteCommands().run("snooze-1h", "thr_1");
     expect(toastMocks.error).toHaveBeenCalledWith("Open the BB Sidebar to snooze threads", expect.anything());

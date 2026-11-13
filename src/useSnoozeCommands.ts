@@ -40,6 +40,9 @@ export function useSnoozeCommands(
         toast.error("Could not snooze thread", {
           description: `${title} is nested under ${rowTitle}. Snooze ${rowTitle} to snooze the whole tree.`,
         });
+      } else if (lifecycle.shelfFor(thread) === "snoozed") {
+        // The Snoozed row's menu offers only the way back.
+        toast.message("This thread is already snoozed");
       } else if (!lifecycle.canPark(thread)) {
         toast.error("Wait until this thread stops working to snooze it");
       } else {
