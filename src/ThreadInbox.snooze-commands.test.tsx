@@ -4,7 +4,9 @@ import { screen, waitFor } from "@testing-library/react";
 import type { PluginCommandContext, PluginCommandRegistration } from "@get-bb/plugin-sdk/app";
 import { renderSlot } from "./test-slot";
 import { inbox, thread, listProps, toastMocks, loadInboxApp } from "./test-inbox";
-import { registerSnoozeCommands } from "./lib/snooze-commands";
+import { registerSnoozeCommands, type SnoozeCommandRequest } from "./lib/snooze-commands";
+import { BROWSER_EVENTS } from "./lib/browser-events";
+import { DEFAULT_SNOOZE_PRESET_CONFIG, parseConfiguredSnoozePresets, resolveConfiguredSnoozePreset } from "./lifecycle";
 
 vi.mock("sonner", async () => (await import("./test-inbox")).sonnerMock());
 
@@ -48,6 +50,32 @@ describe("palette snooze commands", () => {
       "BB Sidebar: Snooze this thread until next week",
       "BB Sidebar: Unsnooze this thread",
     ]);
+  });
+
+  it("takes each wake time from the default snooze presets", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 10, 9, 12, 0));
+    const requests: SnoozeCommandRequest[] = [];
+    const capture = (event: Event) => {
+      event.preventDefault();
+      requests.push((event as CustomEvent<SnoozeCommandRequest>).detail);
+    };
+    window.addEventListener(BROWSER_EVENTS.snoozeCommand, capture);
+    const commands = paletteCommands();
+    for (const id of ["snooze-1h", "snooze-5h", "snooze-evening", "snooze-tomorrow", "snooze-next-week"]) {
+      commands.run(id, "thr_1");
+    }
+    window.removeEventListener(BROWSER_EVENTS.snoozeCommand, capture);
+
+    const defaults = parseConfiguredSnoozePresets(DEFAULT_SNOOZE_PRESET_CONFIG);
+    expect(requests).toEqual(
+      defaults.map((preset) => ({
+        kind: "snooze",
+        threadId: "thr_1",
+        snoozedUntil: resolveConfiguredSnoozePreset(preset),
+      })),
+    );
+    expect(requests[1]).toMatchObject({ snoozedUntil: Date.now() + 5 * HOUR_MS });
   });
 
   it("hides the commands without a thread in view, and this evening once it has passed", () => {

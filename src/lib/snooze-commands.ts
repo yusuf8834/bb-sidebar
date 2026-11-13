@@ -1,5 +1,10 @@
 import type { PluginAppCommands } from "@get-bb/plugin-sdk/app";
-import { type ConfiguredSnoozePreset, resolveConfiguredSnoozePreset } from "../lifecycle";
+import {
+  type ConfiguredSnoozePreset,
+  DEFAULT_SNOOZE_PRESET_CONFIG,
+  parseConfiguredSnoozePresets,
+  resolveConfiguredSnoozePreset,
+} from "../lifecycle";
 import { BROWSER_EVENTS } from "./browser-events";
 import { toast } from "./toast";
 
@@ -7,27 +12,26 @@ export type SnoozeCommandRequest =
   | { kind: "snooze"; threadId: string; snoozedUntil: number }
   | { kind: "unsnooze"; threadId: string };
 
+type CalendarDay = Extract<ConfiguredSnoozePreset, { calendar: unknown }>["calendar"];
+const CALENDAR_TITLES: Record<CalendarDay, string> = {
+  evening: "until this evening",
+  tomorrow: "until tomorrow morning",
+  "next-week": "until next week",
+};
+
+/** A stable command id and a title from the preset's time, not its label. */
+function paletteCommand(preset: ConfiguredSnoozePreset) {
+  if ("calendar" in preset) {
+    return { id: `snooze-${preset.calendar}`, title: CALENDAR_TITLES[preset.calendar], preset };
+  }
+  const minutes = preset.durationMs / 60_000;
+  const [amount, unit] = minutes % 60 === 0 ? [minutes / 60, "hour"] : [minutes, "minute"];
+  return { id: `snooze-${amount}${unit[0]}`, title: `for ${amount} ${unit}${amount === 1 ? "" : "s"}`, preset };
+}
+
 // Palette rows are registered once at load, before settings arrive, so they
 // follow the default presets rather than the user's configured ones.
-const SNOOZE_COMMANDS: { id: string; title: string; preset: ConfiguredSnoozePreset }[] = [
-  { id: "snooze-1h", title: "for 1 hour", preset: { id: "1h", label: "1 hour", durationMs: 60 * 60_000 } },
-  { id: "snooze-5h", title: "for 5 hours", preset: { id: "5h", label: "5 hours", durationMs: 5 * 60 * 60_000 } },
-  {
-    id: "snooze-evening",
-    title: "until this evening",
-    preset: { id: "evening", label: "This evening", calendar: "evening", hour: 18, minute: 0 },
-  },
-  {
-    id: "snooze-tomorrow",
-    title: "until tomorrow morning",
-    preset: { id: "tomorrow", label: "Tomorrow morning", calendar: "tomorrow", hour: 9, minute: 0 },
-  },
-  {
-    id: "snooze-next-week",
-    title: "until next week",
-    preset: { id: "next-week", label: "Next week", calendar: "next-week", hour: 9, minute: 0 },
-  },
-];
+const SNOOZE_COMMANDS = parseConfiguredSnoozePresets(DEFAULT_SNOOZE_PRESET_CONFIG).map(paletteCommand);
 
 /** Hand the request to the mounted inbox, which owns the snooze actions. */
 function requestSnooze(request: SnoozeCommandRequest) {
