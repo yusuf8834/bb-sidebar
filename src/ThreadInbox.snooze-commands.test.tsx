@@ -95,6 +95,38 @@ describe("palette snooze commands", () => {
     expect(snooze).not.toHaveBeenCalled();
   });
 
+  it("refuses to snooze a thread another plugin marks as running, as the shelve guard does", async () => {
+    const snooze = vi.fn((_input: unknown) => ({
+      ok: true,
+      reclaim: { closedTerminals: 0, keptTerminals: 0, stoppedRuntime: false },
+    }));
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ id: "ci", title: "CI work" }), thread({ id: "free", title: "Free work" })],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
+      },
+      sidebarRowStatuses: { ci: { icon: "Loading", label: "Waiting for CI", tone: "running" } },
+      rpc: { listLifecycle: () => ({ rows: [] }), snooze },
+    });
+    await screen.findByRole("link", { name: "CI work" });
+    const commands = paletteCommands();
+
+    commands.run("snooze-1h", "ci");
+    await waitFor(() =>
+      expect(toastMocks.error).toHaveBeenCalledWith(
+        "Could not snooze thread",
+        expect.objectContaining({ description: "CI work is still running: Waiting for CI" }),
+      ),
+    );
+    expect(snooze).not.toHaveBeenCalled();
+
+    // The same command on a thread without that status goes through.
+    commands.run("snooze-1h", "free");
+    await waitFor(() => expect(snooze).toHaveBeenCalledTimes(1));
+    expect(snooze.mock.calls[0]![0]).toMatchObject({ threadId: "free" });
+  });
+
   it("unsnoozes only a snoozed thread", async () => {
     const unsnooze = vi.fn(() => ({ ok: true }));
     renderInbox([thread({ id: "napping", title: "Napping" }), thread({ id: "awake", title: "Awake" })], {
