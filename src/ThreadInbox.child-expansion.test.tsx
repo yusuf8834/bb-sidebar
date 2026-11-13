@@ -153,4 +153,79 @@ describe("ThreadInbox", () => {
     expect(screen.getByText("Visible child")).toBeDefined();
     expect(screen.queryByText("Archived child")).toBeNull();
   });
+
+  // Moved from the removed header chip's tests: the sidebar's archive test
+  // covers only a direct child.
+  it("archives the selected grandchild instead of its child or parent", async () => {
+    const rendered = render([
+      thread({ id: "parent", title: "Parent" }),
+      thread({ id: "child", title: "Child", parentThreadId: "parent" }),
+      thread({ id: "grandchild", title: "Grandchild", parentThreadId: "child" }),
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "1 child thread" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show 1 grandchild thread for Child" }));
+
+    fireEvent.contextMenu(screen.getByRole("link", { name: "Open grandchild thread: Grandchild" }));
+
+    fireEvent.click(within(await screen.findByRole("menu", { name: "Thread actions" })).getByText("Archive"));
+    expect(rendered.threadActionCalls).toContainEqual({ key: "bb--core/archive", threadId: "grandchild" });
+    expect(rendered.threadActionCalls).not.toContainEqual({ key: "bb--core/archive", threadId: "child" });
+    expect(rendered.threadActionCalls).not.toContainEqual({ key: "bb--core/archive", threadId: "parent" });
+  });
+
+  // Moved from the removed header chip's tests; nothing else renames a child row.
+  it.each(["child", "grandchild", "great-grandchild"])(
+    "renames a %s row without opening it and keeps the list on cancel",
+    async (targetId) => {
+      const rendered = render([
+        thread({ id: "parent", title: "Parent" }),
+        thread({ id: "child", title: "Child", parentThreadId: "parent" }),
+        thread({ id: "grandchild", title: "Grandchild", parentThreadId: "child" }),
+        thread({ id: "great-grandchild", title: "Great-grandchild", parentThreadId: "grandchild" }),
+      ]);
+      fireEvent.click(screen.getByRole("button", { name: "1 child thread" }));
+      if (targetId !== "child") {
+        fireEvent.click(screen.getByRole("button", { name: "Show 1 grandchild thread for Child" }));
+      }
+      if (targetId === "great-grandchild") {
+        fireEvent.click(screen.getByRole("button", { name: "Show 1 great-grandchild thread for Grandchild" }));
+      }
+      const title = targetId === "child" ? "Child" : targetId === "grandchild" ? "Grandchild" : "Great-grandchild";
+      const startRename = async () => {
+        fireEvent.contextMenu(screen.getByRole("link", { name: `Open ${targetId} thread: ${title}` }));
+        fireEvent.click(within(await screen.findByRole("menu", { name: "Thread actions" })).getByText("Rename"));
+        return screen.findByRole("textbox", { name: `Rename ${title}` });
+      };
+      const sdkCallsBefore = rendered.sdkCalls.length;
+      let input = await startRename();
+      expect(input.closest("a, button")).toBeNull();
+      fireEvent.pointerDown(input, { button: 0 });
+      expect(rendered.navigateCalls).toEqual([]);
+      expect(rendered.linkCalls).toEqual([]);
+      expect(rendered.splitSourceCalls).toEqual([]);
+      expect(rendered.sdkCalls.slice(sdkCallsBefore)).toEqual([]);
+      expect(rendered.threadActionCalls).toEqual([{ key: "bb--core/rename", threadId: targetId }]);
+      fireEvent.change(input, { target: { value: "Canceled" } });
+      fireEvent.keyDown(input, { key: "Escape" });
+      expect(screen.getByRole("list", { name: "Child threads" })).toBeDefined();
+      expect(screen.getByRole("link", { name: `Open ${targetId} thread: ${title}` })).toBeDefined();
+      expect(rendered.sdkCalls.slice(sdkCallsBefore)).toEqual([]);
+
+      input = await startRename();
+      fireEvent.change(input, { target: { value: "Renamed child" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      await waitFor(() =>
+        expect(rendered.sdkCalls.slice(sdkCallsBefore)).toEqual([
+          { method: "threads.update", args: [{ threadId: targetId, title: "Renamed child" }] },
+        ]),
+      );
+      expect(rendered.navigateCalls).toEqual([]);
+      expect(rendered.linkCalls).toEqual([]);
+      expect(rendered.splitSourceCalls).toEqual([]);
+      expect(rendered.threadActionCalls).toEqual([
+        { key: "bb--core/rename", threadId: targetId },
+        { key: "bb--core/rename", threadId: targetId },
+      ]);
+    },
+  );
 });

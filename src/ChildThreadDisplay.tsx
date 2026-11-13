@@ -12,7 +12,7 @@ import {
 
 /**
  * How child threads are drawn and ordered wherever they appear: the sidebar
- * list, the header popover, the parent's badge, and hover cards.
+ * list, the parent's badge, and hover cards.
  */
 export interface ChildThreadDisplay {
   iconStyle: ChildThreadIconStyle;

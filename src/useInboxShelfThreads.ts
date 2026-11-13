@@ -41,7 +41,7 @@ export function useInboxShelfThreads({
   return useMemo(() => {
     const allVisible = visibleInboxThreads(threads);
     const scoped = filterByProjects(allVisible, scope);
-    // Children live in their parent's header chip instead of the flat list;
+    // Children are listed inside their parent's row instead of the flat list;
     // an orphan whose parent is not on screen stays here.
     const visible = hideChildrenOfVisibleParents(scoped);
     const active: typeof visible = [];

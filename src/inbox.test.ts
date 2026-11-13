@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 import { idleSidebarThreadFields } from "./test-fixtures";
-import { childNeedsYouCount, childThreadsByParent, childrenOf } from "./ChildThreadList";
+import { childThreadsByParent } from "./ChildThreadList";
 import {
   filterByProjects,
   hideChildrenOfVisibleParents,
@@ -222,8 +222,8 @@ describe("child threads", () => {
     expect(visible.map((t) => t.id)).toEqual(["parent"]);
   });
 
-  // An orphan must stay visible: hidden here AND absent from any header chip
-  // would make it unreachable everywhere.
+  // An orphan must stay visible: hidden here AND absent from every parent's
+  // row would make it unreachable everywhere.
   it("keeps a child whose parent is not on screen", () => {
     const visible = hideChildrenOfVisibleParents([thread({ id: "child", parentThreadId: "archived-parent" })]);
     expect(visible.map((t) => t.id)).toEqual(["child"]);
@@ -250,16 +250,13 @@ describe("child threads", () => {
   });
 
   it("lists a thread's children oldest first", () => {
-    const children = childrenOf(
-      [
-        thread({ id: "parent" }),
-        thread({ id: "b", parentThreadId: "parent", createdAt: 20 }),
-        thread({ id: "a", parentThreadId: "parent", createdAt: 10 }),
-        thread({ id: "other", parentThreadId: "elsewhere" }),
-      ],
-      "parent",
-    );
-    expect(children.map((t) => t.id)).toEqual(["a", "b"]);
+    const children = childThreadsByParent([
+      thread({ id: "parent" }),
+      thread({ id: "b", parentThreadId: "parent", createdAt: 20 }),
+      thread({ id: "a", parentThreadId: "parent", createdAt: 10 }),
+      thread({ id: "other", parentThreadId: "elsewhere" }),
+    ]);
+    expect(children.get("parent")?.map((t) => t.id)).toEqual(["a", "b"]);
   });
 
   it("lists a thread's children by the configured sort", () => {
@@ -286,22 +283,28 @@ describe("child threads", () => {
     ];
 
     expect(
-      childrenOf(threads, "parent", {
+      childThreadsByParent(threads, {
         field: "created",
         direction: "descending",
-      }).map((t) => t.id),
+      })
+        .get("parent")
+        ?.map((t) => t.id),
     ).toEqual(["c", "b", "a"]);
     expect(
-      childrenOf(threads, "parent", {
+      childThreadsByParent(threads, {
         field: "activity",
         direction: "ascending",
-      }).map((t) => t.id),
+      })
+        .get("parent")
+        ?.map((t) => t.id),
     ).toEqual(["b", "a", "c"]);
     expect(
-      childrenOf(threads, "parent", {
+      childThreadsByParent(threads, {
         field: "activity",
         direction: "descending",
-      }).map((t) => t.id),
+      })
+        .get("parent")
+        ?.map((t) => t.id),
     ).toEqual(["c", "a", "b"]);
   });
 
@@ -323,11 +326,19 @@ describe("child threads", () => {
       thread({ id: "b", parentThreadId: "parent", createdAt: 10 }),
       thread({ id: "a", parentThreadId: "parent", createdAt: 10 }),
     ];
-    expect(childrenOf(threads, "parent").map((t) => t.id)).toEqual(["a", "b"]);
-    expect(childrenOf([...threads].reverse(), "parent").map((t) => t.id)).toEqual(["a", "b"]);
+    expect(
+      childThreadsByParent(threads)
+        .get("parent")
+        ?.map((t) => t.id),
+    ).toEqual(["a", "b"]);
+    expect(
+      childThreadsByParent([...threads].reverse())
+        .get("parent")
+        ?.map((t) => t.id),
+    ).toEqual(["a", "b"]);
   });
 
-  it("excludes archived children from child helpers and attention counts", () => {
+  it("excludes archived children from the child map", () => {
     const threads = [
       thread({ id: "parent" }),
       thread({
@@ -343,13 +354,11 @@ describe("child threads", () => {
       }),
     ];
 
-    expect(childrenOf(threads, "parent").map((thread) => thread.id)).toEqual(["visible"]);
     expect(
       childThreadsByParent(threads)
         .get("parent")
         ?.map((thread) => thread.id),
     ).toEqual(["visible"]);
-    expect(childNeedsYouCount(threads)).toBe(1);
   });
 });
 

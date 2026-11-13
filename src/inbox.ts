@@ -119,9 +119,9 @@ interface TreeThread {
 /**
  * The row that carries each thread in the sidebar: the thread itself when its
  * parent is not in the list, else the row that carries its parent. Children
- * have no row of their own while their parent is on screen; they live in the
- * parent's header chip and go wherever the parent's row goes, so they share
- * its shelf. A cycle has no row at all, and its threads map to null.
+ * have no row of their own while their parent is on screen; they are listed
+ * inside the parent's row and go wherever that row goes, so they share its
+ * shelf. A cycle has no row at all, and its threads map to null.
  *
  * The sidebar and `bb sidebar list` both place threads by this rule.
  */
@@ -141,8 +141,8 @@ export function shelfRowIds<T extends TreeThread>(threads: readonly T[]): Readon
 }
 
 /**
- * Child threads leave the flat list and live in their parent's header chip
- * instead — a flat inbox has nowhere to nest them.
+ * Child threads leave the flat list and are listed inside their parent's row
+ * instead, behind its child badge.
  *
  * A child is only hidden when its parent is actually on screen. An orphan
  * (parent archived, deleted, or filtered out by the project scope) stays in

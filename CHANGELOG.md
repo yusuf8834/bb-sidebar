@@ -7,6 +7,10 @@
 - Requires bb 0.49.0 or later, and is built against plugin SDK 0.6.132, the version in bb 0.49.0. Version 0.3.10 is the last release for bb 0.48.
 - **The Goal status is gone.** bb no longer reports goals, so the sidebar drops the Goal status label, its icon, and the goal count from the live work that keeps a thread from being parked or settled.
 
+### Removed
+
+- **The child-threads chip in the thread header is gone.** The "N children" chip that the sidebar added next to an open thread's title, and the list it opened, duplicated what the sidebar already shows. A thread's children are listed inside its row in the sidebar: click the child badge on the row to expand them, with grandchildren and deeper threads behind each child's own disclosure. The hover card still lists a thread's direct subthreads. The parent chip, which takes an open child back to its parent, stays.
+
 ## [0.3.10] - 2026-11-12
 
 ### Added

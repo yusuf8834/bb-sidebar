@@ -367,4 +367,41 @@ describe("card metadata", () => {
     expect(screen.getByText("Unread")).toBeDefined();
     expect(screen.getByText("3h")).toBeDefined();
   });
+
+  // Moved from the removed header chip's tests; the only test of a failed
+  // lookup, run on a sidebar child row.
+  it.each([false, true])("loads a child row's execution details only on hover, failure=%s", async (fail) => {
+    let requests = 0;
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "parent", title: "Parent" }),
+          thread({ id: "child", title: "Child", parentThreadId: "parent" }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: [] }),
+        getThreadExecutionDetails: (input) => {
+          expect(input).toEqual({ threadId: "child" });
+          requests++;
+          if (fail) throw new Error("Offline");
+          return { model: "gpt-6", reasoningLabel: "High", reasoningLevel: "high" };
+        },
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "1 child thread" }));
+    expect(requests).toBe(0);
+    const row = screen.getByRole("link", { name: "Open child thread: Child" });
+    fireEvent.pointerMove(row, { pointerType: "mouse" });
+    await waitFor(() => {
+      const tooltip = screen.getByRole("dialog", { name: "Thread details" });
+      expect(tooltip.textContent).not.toContain("Provider:");
+      expect(within(tooltip).getByRole("img", { name: "codex" })).toBeDefined();
+      expect(tooltip.textContent).toContain(fail ? "Model: Unavailable" : "Model: gpt-6");
+      if (!fail) expect(tooltip.textContent).toContain("Reasoning: High");
+    });
+    expect(requests).toBe(1);
+  });
 });

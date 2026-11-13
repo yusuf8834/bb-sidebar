@@ -34,16 +34,6 @@ import { projectIconUrl } from "./project-icons";
 import { PROJECT_ICONS_CHANNEL } from "./realtime-channels";
 const MAX_CHILD_DOTS = 3;
 
-export function childrenOf(
-  threads: readonly PluginSidebarThread[],
-  parentThreadId: string,
-  sort: ChildThreadSort = childThreadSortOf(null),
-): PluginSidebarThread[] {
-  return threads
-    .filter((thread) => !thread.isArchived && thread.parentThreadId === parentThreadId)
-    .sort(compareChildThreads(sort));
-}
-
 export function childThreadsByParent(
   threads: readonly PluginSidebarThread[],
   sort: ChildThreadSort = childThreadSortOf(null),
@@ -59,10 +49,6 @@ export function childThreadsByParent(
     siblings.sort(compareChildThreads(sort));
   }
   return result;
-}
-
-export function childNeedsYouCount(threads: readonly PluginSidebarThread[]): number {
-  return threads.filter((thread) => !thread.isArchived && thread.hasPendingInteraction).length;
 }
 
 /**
@@ -91,13 +77,7 @@ export function collapsedChildThreads(
   });
 }
 
-export function ChildThreadDots({
-  threads,
-  compact = false,
-}: {
-  threads: readonly PluginSidebarThread[];
-  compact?: boolean;
-}) {
+function ChildThreadDots({ threads, compact = false }: { threads: readonly PluginSidebarThread[]; compact?: boolean }) {
   const { iconStyle, providerById } = useChildThreadDisplay();
   const visibleThreads = threads.filter((thread) => !thread.isArchived);
   if (iconStyle === "provider") {

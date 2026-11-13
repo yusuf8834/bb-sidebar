@@ -223,7 +223,7 @@ describe("ThreadInbox", () => {
         status: "ready",
         threads: [
           thread({ id: "a", title: "Pin A", isPinned: true }),
-          // Hidden behind A's header chip, but still in bb's pinned order.
+          // Listed inside A's row, but still in bb's pinned order.
           thread({
             id: "child",
             title: "Pinned child",

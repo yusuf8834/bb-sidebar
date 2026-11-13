@@ -13,9 +13,9 @@ import { parentOf, threadDisplayTitle } from "./inbox";
 /**
  * The way back out of a child thread.
  *
- * The flat list hides a child while its parent is on screen, so opening a
- * child from the parent's header chip leaves the user with no route back. This
- * chip names the parent and opens it. Its icon follows the child icon setting.
+ * The list draws a child inside its parent's row rather than as a row of its
+ * own, so the child's page says nothing about where it hangs. This chip names
+ * the parent and opens it. Its icon follows the child icon setting.
  */
 export function ParentChip({ threadId, isCompactViewport }: ThreadHeaderActionProps) {
   const { threads } = useSidebarThreads();

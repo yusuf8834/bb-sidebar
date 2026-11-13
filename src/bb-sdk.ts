@@ -39,7 +39,7 @@ interface RetiredHeaderSlot {
 /**
  * SDK 0.6.94 dropped this slot from its types, but bb 0.47 and 0.48 still
  * render it (`bb plugin build` warns). Header thread actions are plain buttons,
- * so the parent and children chips keep this slot until they are redesigned.
+ * so the parent chip keeps this slot until it is redesigned.
  */
 export function registerThreadHeaderAction(
   slots: PluginAppSlots,

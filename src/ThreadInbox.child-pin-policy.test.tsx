@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { renderSlot } from "./test-slot";
-import { app, inbox, PolicyMenu, thread, listProps, loadInboxApp } from "./test-inbox";
+import { inbox, PolicyMenu, thread, listProps, loadInboxApp } from "./test-inbox";
 
 vi.mock("sonner", async () => (await import("./test-inbox")).sonnerMock());
 
@@ -68,24 +68,17 @@ describe("structural child pin policy UI", () => {
     expect(rendered.rpcCalls).toHaveLength(0);
   });
 
-  it.each([false, true])("uses the same child menu policy in %s header/sidebar surface", async (header) => {
+  it("uses the same menu policy for a pinned child row in the sidebar", async () => {
     const children = [thread({ id: "child", title: "Nested policy child", parentThreadId: "parent", isPinned: true })];
     const threads = [thread({ id: "parent", title: "Policy parent" }), ...children];
-    const options = {
+    const rendered = renderSlot(inbox, listProps, {
       sidebarThreads: {
-        status: "ready" as const,
+        status: "ready",
         threads,
         projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: { listLifecycle: () => ({ rows: [] }) },
-    };
-    const rendered = header
-      ? renderSlot(
-          app.threadHeaderActions.find((action) => action.id === "children")!,
-          { threadId: "parent", projectId: "proj_1", isCompactViewport: false },
-          options,
-        )
-      : renderSlot(inbox, listProps, options);
+    });
     fireEvent.click(await screen.findByRole("button", { name: /1 child thread/ }));
     fireEvent.contextMenu(await screen.findByText("Nested policy child"));
     const menu = await screen.findByRole("menu", { name: "Thread actions" });

@@ -1,12 +1,25 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { renderSlot } from "./test-slot";
 import { inbox, defaultSidebarSettings, thread, defaultProviders, listProps, render, loadInboxApp } from "./test-inbox";
 
 vi.mock("sonner", async () => (await import("./test-inbox")).sonnerMock());
 
 await loadInboxApp();
+
+const childProviders = [
+  ...defaultProviders,
+  ...[
+    ["acp-opencode", "opencode"],
+    ["acp-cursor", "Cursor"],
+  ].map(([id, displayName]) => ({
+    ...defaultProviders[0]!,
+    id: id!,
+    pluginId: `provider-${id}`,
+    displayName: displayName!,
+  })),
+];
 
 describe("ThreadInbox", () => {
   it("shows a child count badge with provider dots only on parent cards", () => {
@@ -299,5 +312,112 @@ describe("ThreadInbox", () => {
       expect(within(childList).getByRole("img", { name: "Codex" })).toBeDefined();
       expect(within(childList).getByRole("img", { name: "Claude Code" })).toBeDefined();
     });
+  });
+
+  // Moved from the removed header chip's tests: the badge's provider dots.
+  it("shows each provider once, at most three, on the badge", async () => {
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "parent", title: "Parent" }),
+          ...["codex", "codex", "claude-code", "acp-opencode", "acp-cursor"].map((providerId, index) =>
+            thread({
+              id: `child-${index}`,
+              title: `Child ${index}`,
+              parentThreadId: "parent",
+              providerId,
+              createdAt: 101 + index,
+            }),
+          ),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
+      },
+      providers: { status: "ready", providers: childProviders },
+      rpc: {
+        getSidebarSettings: () => ({
+          ...defaultSidebarSettings,
+          inactiveThreadsEnabled: false,
+          childIconStyle: "provider",
+        }),
+        listLifecycle: () => ({ rows: [] }),
+      },
+    });
+    await waitFor(() => {
+      const badge = screen.getByRole("button", { name: "5 child threads" });
+      const dots = badge.querySelectorAll("[data-child-thread-dot]");
+      expect([...dots].map((dot) => dot.querySelector("[role=img]")?.getAttribute("aria-label"))).toEqual([
+        "Codex",
+        "Claude Code",
+        "opencode",
+      ]);
+    });
+  });
+
+  // Moved from the removed header chip's tests: settings changes reach child
+  // rows that are already on screen.
+  it("reorders open child rows when the saved child sort changes", async () => {
+    let remoteSettings = { ...defaultSidebarSettings, inactiveThreadsEnabled: false, childSortDirection: "descending" };
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "parent", title: "Parent" }),
+          thread({ id: "old", title: "Old child", parentThreadId: "parent", createdAt: 101 }),
+          thread({ id: "new", title: "New child", parentThreadId: "parent", createdAt: 102 }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
+      },
+      rpc: { getSidebarSettings: () => remoteSettings, listLifecycle: () => ({ rows: [] }) },
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "2 child threads" }));
+    const rowNames = () =>
+      within(screen.getByRole("list", { name: "Child threads" }))
+        .getAllByRole("link", { name: /^Open child thread:/ })
+        .map((row) => row.getAttribute("aria-label"));
+    await waitFor(() => expect(rowNames()).toEqual(["Open child thread: New child", "Open child thread: Old child"]));
+
+    remoteSettings = { ...remoteSettings, childSortDirection: "ascending" };
+    await rendered.emitRealtime("sidebar-settings", {});
+    await waitFor(() => expect(rowNames()).toEqual(["Open child thread: Old child", "Open child thread: New child"]));
+  });
+
+  it("switches badge and child row icons when the icon setting changes", async () => {
+    let childIconStyle = "disc";
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "parent", title: "Parent" }),
+          thread({ id: "child", title: "Child", parentThreadId: "parent", hasPendingInteraction: true }),
+        ],
+        projects: [],
+      },
+      providers: { status: "ready", providers: childProviders },
+      rpc: {
+        getSidebarSettings: () => ({ ...defaultSidebarSettings, inactiveThreadsEnabled: false, childIconStyle }),
+        listLifecycle: () => ({ rows: [] }),
+      },
+    });
+    const badge = await screen.findByRole("button", { name: /^1 child thread/ });
+    const row = screen.getByRole("link", { name: /^Open child thread: Child/ });
+    const disc = badge.querySelector<HTMLElement>("[data-child-thread-dot] span");
+    expect(disc?.style.backgroundColor).toContain("oklch");
+    expect(within(row).queryByRole("img", { name: "Codex" })).toBeNull();
+
+    childIconStyle = "provider";
+    await rendered.emitRealtime("sidebar-settings", {});
+    expect(await within(row).findByRole("img", { name: "Codex" })).toBeDefined();
+    expect(badge.querySelector("[data-child-thread-dot] [role=img]")?.getAttribute("aria-label")).toBe("Codex");
+    expect(row.getAttribute("aria-label")).toContain("Needs you");
+
+    childIconStyle = "disc";
+    await rendered.emitRealtime("sidebar-settings", {});
+    await waitFor(() => expect(within(row).queryByRole("img", { name: "Codex" })).toBeNull());
+    expect(badge.querySelector("[data-child-thread-dot] [role=img]")).toBeNull();
+    expect(badge.querySelector<HTMLElement>("[data-child-thread-dot] span")?.style.backgroundColor).toBe(
+      disc?.style.backgroundColor,
+    );
+    expect(row.getAttribute("aria-label")).toContain("Needs you");
   });
 });

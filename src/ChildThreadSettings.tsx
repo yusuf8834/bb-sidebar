@@ -37,7 +37,7 @@ export function ChildThreadSettings({ draft, update, status }: SettingsDraftSect
       />
       <SettingRow
         title="Order"
-        description="Also used in the thread header."
+        description="Also used for subthreads in hover cards."
         control={
           <div className="flex flex-wrap items-center gap-2">
             <SettingsSelect
