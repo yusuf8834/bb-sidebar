@@ -102,13 +102,7 @@ it("guards cyclic child DTOs while expanding and retains deep sibling sort", asy
   const map = childThreadsByParent(rows);
   function Fixture() {
     return (
-      <ChildThreadList
-        threads={[rows[0]!]}
-        childrenByParent={map}
-        variant="sidebar"
-        activeThreadId="earlier"
-        onThreadOpen={() => {}}
-      />
+      <ChildThreadList threads={[rows[0]!]} childrenByParent={map} activeThreadId="earlier" onThreadOpen={() => {}} />
     );
   }
   renderSlot({ component: Fixture }, {}, { sidebarThreads: { status: "ready", threads: rows, projects: [] } });

@@ -519,7 +519,6 @@ export function ThreadCard({
               expanded={childrenExpanded}
               showRunningChildrenWhenCollapsed={showChildrenWhenCollapsed}
               parentProjectId={thread.projectId}
-              variant="sidebar"
             />
           ) : null}
         </div>

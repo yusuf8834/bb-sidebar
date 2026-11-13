@@ -77,7 +77,7 @@ export function collapsedChildThreads(
   });
 }
 
-function ChildThreadDots({ threads, compact = false }: { threads: readonly PluginSidebarThread[]; compact?: boolean }) {
+function ChildThreadDots({ threads }: { threads: readonly PluginSidebarThread[] }) {
   const { iconStyle, providerById } = useChildThreadDisplay();
   const visibleThreads = threads.filter((thread) => !thread.isArchived);
   if (iconStyle === "provider") {
@@ -90,7 +90,7 @@ function ChildThreadDots({ threads, compact = false }: { threads: readonly Plugi
             <ProviderGlyph
               providerId={providerId}
               provider={providerById.get(providerId) ?? null}
-              className={compact ? "size-3 [&_span]:size-2.5" : undefined}
+              className="size-3 [&_span]:size-2.5"
             />
           </span>
         ))}
@@ -100,8 +100,8 @@ function ChildThreadDots({ threads, compact = false }: { threads: readonly Plugi
   return (
     <span className="flex shrink-0 items-center" aria-hidden>
       {visibleThreads.slice(0, MAX_CHILD_DOTS).map((thread, index) => (
-        <span key={thread.id} data-child-thread-dot="" className={cn(index > 0 && (compact ? "-ml-1" : "-ml-1.5"))}>
-          <Disc thread={thread} className={compact ? "size-[9px] border-[1.5px] border-sidebar" : undefined} />
+        <span key={thread.id} data-child-thread-dot="" className={cn(index > 0 && "-ml-1")}>
+          <Disc thread={thread} className="size-[9px] border-[1.5px] border-sidebar" />
         </span>
       ))}
     </span>
@@ -149,7 +149,7 @@ export function ChildThreadBadge({
           childStatusBadgeClass(summary.dominant),
         )}
       >
-        <ChildThreadDots threads={threads} compact />
+        <ChildThreadDots threads={threads} />
         <span className="tabular-nums">{count}</span>
         {summary.dominant ? (
           <StatusGlyph
@@ -183,7 +183,6 @@ export function ChildThreadList(props: ChildThreadListProps) {
   const {
     threads,
     childrenByParent,
-    variant,
     now,
     id,
     activeThreadId,
@@ -245,7 +244,6 @@ export function ChildThreadList(props: ChildThreadListProps) {
           <ChildThreadRow
             thread={child}
             relation={relation}
-            variant={variant}
             now={now}
             isActive={child.id === activeThreadId}
             foreignProject={foreignProject}
@@ -267,7 +265,7 @@ export function ChildThreadList(props: ChildThreadListProps) {
             <ul
               id={descendantsId}
               aria-label={`${listLabel} of ${threadDisplayTitle(child)}`}
-              data-grandchild-thread-list={depth === 1 ? variant : undefined}
+              data-grandchild-thread-list={depth === 1 ? "sidebar" : undefined}
               className="ml-3 flex flex-col border-l border-border"
             >
               {renderRows(visibleDescendants, depth + 1, path, child.projectId)}
@@ -281,12 +279,9 @@ export function ChildThreadList(props: ChildThreadListProps) {
     <ul
       id={id}
       aria-label="Child threads"
-      data-child-thread-list={variant}
+      data-child-thread-list="sidebar"
       onContextMenu={(event) => event.stopPropagation()}
-      className={cn(
-        "flex flex-col",
-        variant === "header" ? "mb-1.5 ml-1.75 mr-1.5 mt-0.5" : "ml-4 mt-1 border-l border-border",
-      )}
+      className="ml-4 mt-1 flex flex-col border-l border-border"
     >
       {renderRows(visibleThreads, 1, new Set(), parentProjectId)}
     </ul>
@@ -301,7 +296,6 @@ interface ForeignProject {
 function ChildThreadRow({
   thread,
   relation,
-  variant,
   now,
   isActive = false,
   foreignProject,
@@ -310,7 +304,6 @@ function ChildThreadRow({
 }: {
   thread: PluginSidebarThread;
   relation: string;
-  variant: "header" | "sidebar";
   now?: number;
   isActive?: boolean;
   /** Set when the thread's project differs from its parent's. */
@@ -339,9 +332,8 @@ function ChildThreadRow({
         data-active={isActive ? "true" : undefined}
         className={cn(
           "group/child flex w-full items-center rounded-md text-left",
-          variant === "header" ? "hover:bg-accent" : "h-7 hover:bg-sidebar-accent/60",
-          variant === "sidebar" &&
-            needsYou &&
+          "h-7 hover:bg-sidebar-accent/60",
+          needsYou &&
             !isActive &&
             cn(
               "bg-[color:var(--bb-sidebar-needs-you-tint)]",
@@ -353,7 +345,7 @@ function ChildThreadRow({
             ),
           // The open chat gets the same tint as an active parent card, so the
           // eye finds it in a long tree the way it finds a card in the list.
-          isActive && (variant === "header" ? "bg-accent" : "bg-sidebar-accent hover:bg-sidebar-accent"),
+          isActive && "bg-sidebar-accent hover:bg-sidebar-accent",
         )}
       >
         <ThreadDetailsTooltip thread={thread} disabled={isRenaming} isOpen={isActive}>
@@ -373,40 +365,23 @@ function ChildThreadRow({
                 : splitProps.onPointerDown
                   ? "cursor-grab active:cursor-grabbing"
                   : "cursor-pointer",
-              variant === "header" ? "gap-1.25 rounded-md py-1.5 pl-1.25 pr-1.5" : "h-full gap-1.25 rounded-md pl-1.25",
+              "h-full gap-1.25 rounded-md pl-1.25",
             )}
           >
             <span className="flex size-3.5 shrink-0 items-center justify-center">
-              <ChildThreadIcon thread={thread} discClassName={variant === "header" ? undefined : "size-2 border-0"} />
+              <ChildThreadIcon thread={thread} discClassName="size-2 border-0" />
             </span>
-            <span
-              className={cn(
-                "min-w-0 flex-1 text-xs",
-                variant === "header" ? "flex flex-col" : "truncate",
-                isActive && "font-medium text-foreground",
-              )}
-            >
+            <span className={cn("min-w-0 flex-1 truncate text-xs", isActive && "font-medium text-foreground")}>
               <InlineThreadTitle
                 thread={thread}
                 editing={isRenaming}
                 onEditingChange={setIsRenaming}
                 className="truncate"
               />
-              {variant === "header" ? (
-                <span className="truncate text-2xs text-muted-foreground">
-                  {thread.originKind ?? "thread"}
-                  {foreignProject?.name ? ` · ${foreignProject.name}` : null}
-                </span>
-              ) : null}
             </span>
             {foreignProject ? <ForeignProjectMark project={foreignProject} /> : null}
             <OpenPortsIndicator thread={thread} />
-            {variant === "header" ? (
-              <span className="shrink-0">
-                <StatusGlyph indicator={statusThread.indicator} label={statusThread.indicatorLabel} />
-              </span>
-            ) : null}
-            {variant === "sidebar" && !limit ? (
+            {!limit ? (
               // Match parent cards: a recognized status owns the trailing
               // slot; an idle or future unknown status leaves it to the age.
               //

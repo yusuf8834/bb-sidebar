@@ -170,7 +170,6 @@ export const SlimRow = memo(function SlimRow({
             expanded={childrenExpanded}
             showRunningChildrenWhenCollapsed={false}
             parentProjectId={thread.projectId}
-            variant="sidebar"
           />
         ) : null}
       </li>

@@ -202,22 +202,20 @@ type ExplicitChildListInputs = {
 export type InboxChildListInputs = {
   now?: number;
   activeThreadId?: string | null;
-} & (({ variant: "header" } & ExplicitChildListInputs) | ({ variant: "sidebar" } & Partial<ExplicitChildListInputs>));
+} & Partial<ExplicitChildListInputs>;
 
-/** Header popovers and standalone lists keep their explicit inputs. */
+/** Inputs a list leaves out come from the inbox; a standalone list passes them all. */
 export function useInboxChildList<T extends InboxChildListInputs>(props: T) {
   const environment = useContext(InboxEnvironmentContext);
   const actions = useContext(InboxActionsContext);
   const activity = useContext(InboxActivityContext);
-  const sidebar = props.variant === "sidebar";
   const childrenByParent = props.childrenByParent ?? requireInboxContext(environment).childrenByParentId;
   const onThreadOpen = props.onThreadOpen ?? requireInboxContext(actions).onNavigate;
   return {
     ...props,
     childrenByParent,
     onThreadOpen,
-    now: props.now ?? (sidebar ? activity?.now : undefined),
-    activeThreadId:
-      props.activeThreadId !== undefined ? props.activeThreadId : sidebar ? activity?.activeThreadId : undefined,
+    now: props.now ?? activity?.now,
+    activeThreadId: props.activeThreadId !== undefined ? props.activeThreadId : activity?.activeThreadId,
   };
 }
