@@ -93,6 +93,66 @@ async function setup() {
 }
 
 describe("title regeneration", () => {
+  it("uses the core title service for a manually selected OpenCode service", async () => {
+    const { sdk, run } = await setup();
+    sdk.stub("system.aiServices", async () => ({
+      selections: { "thread-title": { mode: "service", pluginId: "opencode-ai", serviceId: "opencode" } },
+      services: [
+        {
+          id: "opencode",
+          pluginId: "opencode-ai",
+          displayName: "opencode",
+          tasks: ["thread-title"],
+          status: { ready: true },
+        },
+      ],
+    }));
+    sdk.stub("threads.experimental_regenerateTitle", async () => makeThreadResponse({ title: "OpenCode title" }));
+    await expect(run()).resolves.toEqual({ title: "OpenCode title" });
+    expect(sdk.callsTo("threads.experimental_regenerateTitle")[0]![0]).toEqual({ threadId: "target" });
+    expect(sdk.callsTo("threads.spawn")).toHaveLength(0);
+  });
+
+  it("uses the core title service when OpenCode is the first ready automatic service", async () => {
+    const { sdk, run } = await setup();
+    sdk.stub("system.aiServices", async () => ({
+      selections: { "thread-title": { mode: "automatic" } },
+      services: [
+        {
+          id: "opencode",
+          pluginId: "opencode-ai",
+          displayName: "opencode",
+          tasks: ["thread-title"],
+          automaticRank: 1,
+          status: { ready: true },
+        },
+      ],
+    }));
+    sdk.stub("threads.experimental_regenerateTitle", async () => makeThreadResponse({ title: "OpenCode title" }));
+    await expect(run()).resolves.toEqual({ title: "OpenCode title" });
+    expect(sdk.callsTo("threads.spawn")).toHaveLength(0);
+  });
+
+  it("keeps the higher ranked Codex path when another service is available", async () => {
+    const { sdk, run } = await setup();
+    sdk.stub("system.aiServices", async () => ({
+      selections: { "thread-title": { mode: "automatic" } },
+      services: [
+        codexService,
+        {
+          id: "opencode",
+          pluginId: "opencode-ai",
+          displayName: "opencode",
+          tasks: ["thread-title"],
+          automaticRank: 2,
+          status: { ready: true },
+        },
+      ],
+    }));
+    await expect(run()).resolves.toEqual({ title: "Regenerate sidebar titles" });
+    expect(sdk.callsTo("threads.spawn")).toHaveLength(1);
+    expect(sdk.callsTo("threads.experimental_regenerateTitle")).toHaveLength(0);
+  });
   it("sends only the last three user texts in order and saves the title", async () => {
     const { sdk, run } = await setup();
     await expect(run()).resolves.toEqual({
@@ -294,6 +354,27 @@ describe("bb cloud title regeneration", () => {
     return state;
   }
 
+  it("keeps the higher ranked cloud path when another service is available", async () => {
+    const { sdk, run } = await cloudSetup("automatic");
+    sdk.stub("system.aiServices", async () => ({
+      selections: { "thread-title": { mode: "automatic" } },
+      services: [
+        cloudService,
+        {
+          id: "opencode",
+          pluginId: "opencode-ai",
+          displayName: "opencode",
+          tasks: ["thread-title"],
+          automaticRank: 1,
+          status: { ready: true },
+        },
+      ],
+    }));
+    await expect(run()).resolves.toEqual({ title: "Regenerate sidebar titles" });
+    expect(sdk.callsTo("plugins.callRpc")).toHaveLength(2);
+    expect(sdk.callsTo("threads.experimental_regenerateTitle")).toHaveLength(0);
+  });
+
   it("sends the last three messages to the authenticated cloud gateway without an agent or workspace", async () => {
     const { sdk, run } = await cloudSetup();
     sdk.stub("threads.get", async () =>
@@ -382,13 +463,16 @@ describe("bb cloud title regeneration", () => {
     expect(sdk.callsTo("threads.update")).toHaveLength(0);
   });
 
-  it("does not silently replace an unsupported explicit service with the thread's provider", async () => {
+  it("propagates a selected custom service failure without switching providers", async () => {
     const { sdk, run } = await setup();
     sdk.stub("system.aiServices", async () => ({
       selections: { "thread-title": { mode: "service", pluginId: "custom", serviceId: "custom" } },
       services: [{ ...codexService, pluginId: "custom", id: "custom", displayName: "Custom AI" }],
     }));
-    await expect(run()).rejects.toThrow("does not support Custom AI yet");
+    sdk.stub("threads.experimental_regenerateTitle", async () => {
+      throw new Error("Custom AI failed");
+    });
+    await expect(run()).rejects.toThrow("Custom AI failed");
     expect(sdk.callsTo("threads.spawn")).toHaveLength(0);
   });
 });

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Regenerate title works with additional AI services.** When a service such as OpenCode is selected for thread titles, the sidebar delegates manual regeneration to bb instead of rejecting it. A rename during generation can be overwritten by bb's result. Automatic recovery of missing titles still supports bb cloud and Codex only.
+
 ### Added
 
 - **Waiting longest** in the Active sort picker puts the thread whose news has waited longest at the top. A thread joins the end when its turn finishes and then keeps its place: reading, renaming, or pinning it does not move it, unlike Recent activity.

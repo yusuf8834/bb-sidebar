@@ -177,6 +177,9 @@ export function createTitleRegenerator(bb: BbPluginApi) {
     const { selections, services } = await bb.sdk.system.aiServices({ signal: controller.signal });
     const selection = selections["thread-title"];
     if (selection.mode === "off") throw new Error("Thread titles are turned off in Settings → AI services");
+    // The core implementation can call any registered AI service, including
+    // OpenCode. Keep automatic recovery on its guarded path: core regeneration
+    // is a manual operation and does not offer a conditional update.
     const candidates = services
       .filter(
         (service) =>
@@ -185,6 +188,17 @@ export function createTitleRegenerator(bb: BbPluginApi) {
             (service.pluginId === selection.pluginId && service.id === selection.serviceId)),
       )
       .sort((a, b) => (a.automaticRank ?? Infinity) - (b.automaticRank ?? Infinity));
+    const firstReady = candidates.find((service) => service.status.ready);
+    if (
+      !options.onlyIfUntitled &&
+      firstReady &&
+      !(firstReady.pluginId === "bb-ai" && firstReady.id === "bb") &&
+      !(firstReady.pluginId === "provider-codex" && firstReady.id === "codex")
+    ) {
+      const updated = await bb.sdk.threads.experimental_regenerateTitle({ threadId });
+      if (!updated.title) throw new Error("The title generator returned no title");
+      return { title: updated.title };
+    }
     let title: string | undefined;
     let failure: unknown = new Error("No AI service is available for thread titles");
     for (const service of candidates) {
