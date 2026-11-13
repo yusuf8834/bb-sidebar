@@ -28,12 +28,15 @@ function openPicker() {
   fireEvent.keyDown(screen.getByRole("button", { name: "Sort active threads: Manual order" }), { key: "Enter" });
 }
 
-it.each(["Manual order", "Recent activity", "Date created"])("closes after a pointer click on %s", (name) => {
-  openPicker();
-  fireEvent.click(screen.getByRole("radio", { name }), { detail: 1 });
-  expect(screen.queryByRole("dialog", { name: "Sort active threads" })).toBeNull();
-  expect(screen.getByRole("button", { name: `Sort active threads: ${name}` })).toBeDefined();
-});
+it.each(["Manual order", "Recent activity", "Waiting longest", "Date created"])(
+  "closes after a pointer click on %s",
+  (name) => {
+    openPicker();
+    fireEvent.click(screen.getByRole("radio", { name }), { detail: 1 });
+    expect(screen.queryByRole("dialog", { name: "Sort active threads" })).toBeNull();
+    expect(screen.getByRole("button", { name: `Sort active threads: ${name}` })).toBeDefined();
+  },
+);
 
 it("selects without dismissing on a keyboard-generated click", () => {
   openPicker();

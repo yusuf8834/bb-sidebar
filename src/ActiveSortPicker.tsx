@@ -7,6 +7,7 @@ import { cn } from "./lib/utils";
 const SORT_LABELS: Record<ActiveSortMode, string> = {
   manual: "Manual order",
   activity: "Recent activity",
+  waiting: "Waiting longest",
   created: "Date created",
   project: "Project",
 };

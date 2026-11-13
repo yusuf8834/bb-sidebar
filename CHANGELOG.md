@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Waiting longest** in the Active sort picker puts the thread whose news has waited longest at the top. A thread joins the end when its turn finishes and then keeps its place: reading, renaming, or pinning it does not move it, unlike Recent activity.
+
 ### Changed
 
 - Requires bb 0.49.0 or later, and is built against plugin SDK 0.6.132, the version in bb 0.49.0. Version 0.3.10 is the last release for bb 0.48.
