@@ -1,7 +1,7 @@
 import { useSidebarThreads, useProviders } from "./bb-sdk";
 import { STORAGE_KEYS } from "./lib/storage-keys";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useBbNavigate, type PluginSidebarThread, type PluginThreadListProps } from "@get-bb/plugin-sdk/app";
+import type { PluginSidebarThread, PluginThreadListProps } from "@get-bb/plugin-sdk/app";
 import { useInboxShelfThreads } from "./useInboxShelfThreads";
 import { createDragReorderHandler } from "./drag-reorder";
 import type { InboxDragOrder } from "./drag-reorder-geometry";
@@ -45,7 +45,7 @@ import { parseInactiveAfterHours } from "./inactive";
 import { DEFAULT_SIDEBAR_SETTINGS } from "./sidebar-settings";
 import { useWorkingForDisplay } from "./StatusSlot";
 import { useScrollFade } from "./useScrollFade";
-import { useSnoozeCommands } from "./useSnoozeCommands";
+import { useShelveActions } from "./useShelveActions";
 import { usePersistedPreference } from "./lib/use-persisted-preference";
 import { activeSortCodec, childExpansionCodec, shelfExpansionCodec } from "./lib/inbox-preference-codecs";
 const SETTLED_INITIAL_LIMIT = 10;
@@ -88,7 +88,6 @@ function ThreadInboxContent({
   const { status, threads, projects } = snapshot;
   const workingSince = useWorkingSince(threads, status);
   const { providers } = useProviders();
-  const navigate = useBbNavigate();
   const sidebarSettings = useSidebarSettings();
   const lifecycle = useLifecycle(threads, lifecycleRows);
   const projectIconRevision = useProjectIconRevision();
@@ -96,8 +95,6 @@ function ThreadInboxContent({
   const attachShelvesMotionRef = useListMotion<HTMLDivElement>(listAnimationController);
   const attachDockMotionRef = useListMotion<HTMLDivElement>(listAnimationController);
   const attachScrollFadeRef = useScrollFade<HTMLDivElement>();
-  const activeThreadIdRef = useRef(activeThreadId);
-  activeThreadIdRef.current = activeThreadId;
   const configuredSnoozePresets = sidebarSettings?.snoozePresets ?? DEFAULT_SIDEBAR_SETTINGS.snoozePresets;
   const snoozePresets = useMemo(() => parseConfiguredSnoozePresets(configuredSnoozePresets), [configuredSnoozePresets]);
   const inactiveAfterHours = parseInactiveAfterHours(
@@ -404,32 +401,12 @@ function ThreadInboxContent({
     [inactive, inbox, lifecycle, pinned, working],
   );
 
-  const parkActiveThread = useCallback(
-    async (thread: PluginSidebarThread, mutation: () => Promise<boolean>) => {
-      const parked = await mutation();
-      if (!parked || activeThreadIdRef.current !== thread.id) return;
-
-      // Never land on a thread the user did not pick.
-      navigate.toCompose({ projectId: thread.projectId, focusPrompt: true });
-      onNavigate();
-    },
-    [navigate, onNavigate],
-  );
-
-  const parkThread = useCallback(
-    (thread: PluginSidebarThread) => void parkActiveThread(thread, () => lifecycle.park(thread.id)),
-    [parkActiveThread, lifecycle],
-  );
-  const settleThread = useCallback(
-    (thread: PluginSidebarThread) => void parkActiveThread(thread, () => lifecycle.settle(thread.id)),
-    [parkActiveThread, lifecycle],
-  );
-  const snoozeThread = useCallback(
-    (thread: PluginSidebarThread, until: number) =>
-      void parkActiveThread(thread, () => lifecycle.snooze(thread.id, until)),
-    [parkActiveThread, lifecycle],
-  );
-  useSnoozeCommands(threads, lifecycle, snoozeThread);
+  const { parkThread, settleThread, snoozeThread } = useShelveActions({
+    threads,
+    lifecycle,
+    activeThreadId,
+    onNavigate,
+  });
 
   const inboxContext = useInboxContextValues({
     providerById,
