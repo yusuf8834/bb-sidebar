@@ -4,7 +4,16 @@ import { shelfRowIds, threadDisplayTitle } from "./inbox";
 import { BROWSER_EVENTS } from "./lib/browser-events";
 import type { SnoozeCommandRequest } from "./lib/snooze-commands";
 import { toast } from "./lib/toast";
+import type { ParkBlocker } from "./lifecycle";
 import type { LifecycleApi } from "./useLifecycle";
+
+// The live work that keeps the row menu from offering Snooze, in the
+// sidebar's own words for it.
+const BLOCKED: Record<ParkBlocker, string> = {
+  working: "is still working",
+  question: "needs you",
+  queued: "has a queued message",
+};
 
 /** Run palette snooze commands through the same actions as the row menu. */
 export function useSnoozeCommands(
@@ -43,10 +52,10 @@ export function useSnoozeCommands(
       } else if (lifecycle.shelfFor(thread) === "snoozed") {
         // The Snoozed row's menu offers only the way back.
         toast.message("This thread is already snoozed");
-      } else if (!lifecycle.canPark(thread)) {
-        toast.error("Wait until this thread stops working to snooze it");
       } else {
-        snoozeThread(thread, request.snoozedUntil);
+        const blocker = lifecycle.parkBlocker(thread);
+        if (blocker) toast.error("Could not snooze thread", { description: `${title} ${BLOCKED[blocker]}` });
+        else snoozeThread(thread, request.snoozedUntil);
       }
     };
     window.addEventListener(BROWSER_EVENTS.snoozeCommand, onRequest);

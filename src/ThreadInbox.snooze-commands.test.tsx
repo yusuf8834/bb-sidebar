@@ -108,18 +108,18 @@ describe("palette snooze commands", () => {
     expect(wakeAt).toBeLessThanOrEqual(Date.now() + HOUR_MS);
   });
 
-  it("refuses to snooze a working thread, as the row menu does", async () => {
+  it.each([
+    ["is working", { status: "active", indicator: "runtime" }, "Busy thread is still working"],
+    ["has a question waiting", { hasPendingInteraction: true }, "Busy thread needs you"],
+    ["has a queued message", { queuedWork: "waiting" }, "Busy thread has a queued message"],
+  ] as const)("refuses to snooze a thread that %s and says why", async (_reason, overrides, description) => {
     const snooze = vi.fn();
-    renderInbox([thread({ id: "busy", title: "Busy thread", status: "active", indicator: "runtime" })], { snooze });
+    renderInbox([thread({ id: "busy", title: "Busy thread", ...overrides })], { snooze });
+    await screen.findByRole("link", { name: "Busy thread" });
 
     paletteCommands().run("snooze-1h", "busy");
 
-    await waitFor(() =>
-      expect(toastMocks.error).toHaveBeenCalledWith(
-        "Wait until this thread stops working to snooze it",
-        expect.anything(),
-      ),
-    );
+    expect(toastMocks.error).toHaveBeenCalledWith("Could not snooze thread", expect.objectContaining({ description }));
     expect(snooze).not.toHaveBeenCalled();
   });
 

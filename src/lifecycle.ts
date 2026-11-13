@@ -70,10 +70,19 @@ export function resolveWakeReason(
  * failure this feature cannot afford. A queued message is work about to
  * start, and a failed one is something the user has not seen go nowhere yet.
  */
-export function canPark(
-  signals: Pick<ThreadActivitySignals, "hasPendingInteraction" | "hasQueuedWork" | "isWorking">,
-): boolean {
-  return !signals.hasPendingInteraction && !signals.hasQueuedWork && !signals.isWorking;
+export function canPark(signals: ParkSignals): boolean {
+  return parkBlocker(signals) === null;
+}
+
+type ParkSignals = Pick<ThreadActivitySignals, "hasPendingInteraction" | "hasQueuedWork" | "isWorking">;
+export type ParkBlocker = "working" | "question" | "queued";
+
+/** Why `canPark` refuses a thread, or null when it allows it. */
+export function parkBlocker(signals: ParkSignals): ParkBlocker | null {
+  if (signals.isWorking) return "working";
+  if (signals.hasPendingInteraction) return "question";
+  if (signals.hasQueuedWork) return "queued";
+  return null;
 }
 
 /** A turn bb has accepted and not yet finished, in either thread view. */
