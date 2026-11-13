@@ -173,6 +173,57 @@ describe("palette snooze commands", () => {
     expect(unsnooze.mock.calls[0]).toEqual([{ threadId: "napping" }]);
   });
 
+  it("refuses to snooze a child's own row and names the parent that carries it", async () => {
+    const snooze = vi.fn();
+    renderInbox(
+      [
+        thread({ id: "parent", title: "Parent work" }),
+        thread({ id: "child", title: "Child work", parentThreadId: "parent" }),
+      ],
+      { snooze },
+    );
+    await screen.findByRole("link", { name: "Parent work" });
+
+    paletteCommands().run("snooze-1h", "child");
+
+    expect(toastMocks.error).toHaveBeenCalledWith(
+      "Could not snooze thread",
+      expect.objectContaining({
+        description: "Child work is nested under Parent work. Snooze Parent work to snooze the whole tree.",
+      }),
+    );
+    expect(snooze).not.toHaveBeenCalled();
+  });
+
+  it("names the snoozed parent when asked to unsnooze its child", async () => {
+    const unsnooze = vi.fn(() => ({ ok: true }));
+    renderInbox(
+      [
+        thread({ id: "parent", title: "Parent work" }),
+        thread({ id: "child", title: "Child work", parentThreadId: "parent" }),
+      ],
+      {
+        listLifecycle: () => ({
+          rows: [{ threadId: "parent", settledAt: null, snoozedUntil: Date.now() + HOUR_MS, snoozedAt: Date.now() }],
+        }),
+        unsnooze,
+      },
+    );
+    await screen.findByRole("region", { name: "Snoozed" });
+
+    paletteCommands().run("unsnooze", "child");
+
+    expect(toastMocks.message).not.toHaveBeenCalledWith("This thread is not snoozed", expect.anything());
+    expect(toastMocks.error).toHaveBeenCalledWith(
+      "Could not wake thread",
+      expect.objectContaining({
+        description:
+          "Child work is snoozed with Parent work, the thread it is nested under. Wake Parent work to wake the whole tree.",
+      }),
+    );
+    expect(unsnooze).not.toHaveBeenCalled();
+  });
+
   it("tells the user to open the sidebar when no inbox is mounted", () => {
     paletteCommands().run("snooze-1h", "thr_1");
     expect(toastMocks.error).toHaveBeenCalledWith("Open the BB Sidebar to snooze threads", expect.anything());
