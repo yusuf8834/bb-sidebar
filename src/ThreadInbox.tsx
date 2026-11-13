@@ -403,6 +403,7 @@ function ThreadInboxContent({
 
   const { parkThread, settleThread, snoozeThread } = useShelveActions({
     threads,
+    scope,
     lifecycle,
     activeThreadId,
     onNavigate,

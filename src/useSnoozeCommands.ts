@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
-import { shelfRowIds, threadDisplayTitle } from "./inbox";
+import { filterByProjects, shelfRowIds, threadDisplayTitle, visibleInboxThreads } from "./inbox";
 import { BROWSER_EVENTS } from "./lib/browser-events";
 import type { SnoozeCommandRequest } from "./lib/snooze-commands";
 import { toast } from "./lib/toast";
@@ -18,6 +18,7 @@ const BLOCKED: Record<ParkBlocker, string> = {
 /** Run palette snooze commands through the same actions as the row menu. */
 export function useSnoozeCommands(
   threads: readonly PluginSidebarThread[],
+  scope: readonly string[],
   lifecycle: LifecycleApi,
   snoozeThread: (thread: PluginSidebarThread, until: number) => void,
 ) {
@@ -25,8 +26,9 @@ export function useSnoozeCommands(
     const onRequest = (event: Event) => {
       event.preventDefault();
       const request = (event as CustomEvent<SnoozeCommandRequest>).detail;
-      const live = threads.filter((candidate) => !candidate.isArchived);
-      const thread = live.find((candidate) => candidate.id === request.threadId);
+      // The threads the sidebar shows, placed into rows as it places them.
+      const shown = filterByProjects(visibleInboxThreads(threads), scope);
+      const thread = shown.find((candidate) => candidate.id === request.threadId);
       if (!thread) {
         toast.error("This thread is not in the BB Sidebar");
         return;
@@ -34,8 +36,8 @@ export function useSnoozeCommands(
       // A child has no shelf of its own while its parent's row carries it, so
       // it goes wherever that row goes and its menu offers no Snooze. Name the
       // row, as `bb sidebar resume` does.
-      const rowId = shelfRowIds(live).get(thread.id) ?? thread.id;
-      const row = live.find((candidate) => candidate.id === rowId) ?? thread;
+      const rowId = shelfRowIds(shown).get(thread.id) ?? thread.id;
+      const row = shown.find((candidate) => candidate.id === rowId) ?? thread;
       const title = threadDisplayTitle(thread);
       const rowTitle = threadDisplayTitle(row);
       if (request.kind === "unsnooze") {
@@ -60,5 +62,5 @@ export function useSnoozeCommands(
     };
     window.addEventListener(BROWSER_EVENTS.snoozeCommand, onRequest);
     return () => window.removeEventListener(BROWSER_EVENTS.snoozeCommand, onRequest);
-  }, [threads, lifecycle, snoozeThread]);
+  }, [threads, scope, lifecycle, snoozeThread]);
 }

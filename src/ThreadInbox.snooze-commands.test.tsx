@@ -6,6 +6,7 @@ import { renderSlot } from "./test-slot";
 import { inbox, thread, listProps, toastMocks, loadInboxApp } from "./test-inbox";
 import { registerSnoozeCommands, type SnoozeCommandRequest } from "./lib/snooze-commands";
 import { BROWSER_EVENTS } from "./lib/browser-events";
+import { STORAGE_KEYS } from "./lib/storage-keys";
 import { DEFAULT_SNOOZE_PRESET_CONFIG, parseConfiguredSnoozePresets, resolveConfiguredSnoozePreset } from "./lifecycle";
 
 vi.mock("sonner", async () => (await import("./test-inbox")).sonnerMock());
@@ -193,6 +194,30 @@ describe("palette snooze commands", () => {
       }),
     );
     expect(snooze).not.toHaveBeenCalled();
+  });
+
+  it("places the thread by the rows the project scope shows", async () => {
+    sessionStorage.setItem(STORAGE_KEYS.projectScope.key, JSON.stringify(["proj_1"]));
+    const snooze = vi.fn((_input: unknown) => ({
+      ok: true,
+      reclaim: { closedTerminals: 0, keptTerminals: 0, stoppedRuntime: false },
+    }));
+    renderInbox(
+      [
+        thread({ id: "parent", projectId: "proj_2", title: "Parent work" }),
+        thread({ id: "child", title: "Child work", parentThreadId: "parent" }),
+      ],
+      { snooze },
+    );
+    // With its parent filtered out, the child is a row of its own, with Snooze.
+    await screen.findByRole("link", { name: "Child work" });
+    const commands = paletteCommands();
+
+    commands.run("snooze-1h", "parent");
+    expect(toastMocks.error).toHaveBeenCalledWith("This thread is not in the BB Sidebar", expect.anything());
+    commands.run("snooze-1h", "child");
+    await waitFor(() => expect(snooze).toHaveBeenCalledTimes(1));
+    expect(snooze.mock.calls[0]![0]).toMatchObject({ threadId: "child" });
   });
 
   it("names the snoozed parent when asked to unsnooze its child", async () => {

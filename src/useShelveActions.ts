@@ -9,11 +9,13 @@ import { useSnoozeCommands } from "./useSnoozeCommands";
  */
 export function useShelveActions({
   threads,
+  scope,
   lifecycle,
   activeThreadId,
   onNavigate,
 }: {
   threads: readonly PluginSidebarThread[];
+  scope: readonly string[];
   lifecycle: LifecycleApi;
   activeThreadId: string | null;
   onNavigate: () => void;
@@ -47,7 +49,7 @@ export function useShelveActions({
       void parkActiveThread(thread, () => lifecycle.snooze(thread.id, until)),
     [parkActiveThread, lifecycle],
   );
-  useSnoozeCommands(threads, lifecycle, snoozeThread);
+  useSnoozeCommands(threads, scope, lifecycle, snoozeThread);
 
   return { parkThread, settleThread, snoozeThread };
 }
