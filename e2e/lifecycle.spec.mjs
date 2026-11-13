@@ -88,11 +88,20 @@ test("palette commands snooze and unsnooze the thread in view", async ({ page, r
   const snoozedUntil = async () =>
     (await rpc(request, "listLifecycle")).rows.find((row) => row.threadId === thread.id)?.snoozedUntil ?? null;
   const runCommand = async (title) => {
+    // bb hands commands the thread in view as the palette opens, and only once
+    // the thread's page has rendered; a palette opened right after a click on
+    // a row lists no thread commands.
+    await expect(page.getByRole("textbox", { name: /^Ask for a follow-up/ })).toBeVisible();
     await page.keyboard.press("ControlOrMeta+K");
-    // The palette opens on thread search; Escape returns to its commands.
-    await page.keyboard.press("Escape");
-    await page.keyboard.type(title);
-    await page.getByRole("option", { name: title }).click();
+    const palette = page.getByRole("dialog");
+    await expect(palette).toBeVisible();
+    // The palette can open on thread search, where Escape returns to its
+    // commands; on the commands themselves Escape would close it.
+    const search = palette.getByRole("combobox", { name: "Search commands" });
+    if (!(await search.isVisible())) await page.keyboard.press("Escape");
+    await expect(search).toBeFocused();
+    await search.fill(title);
+    await palette.getByRole("option", { name: title }).click();
   };
 
   test.setTimeout(120_000);
