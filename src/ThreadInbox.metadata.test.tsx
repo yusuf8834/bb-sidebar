@@ -351,6 +351,7 @@ describe("card metadata", () => {
             title: "Unread draft",
             indicator: "unread-success",
             indicatorLabel: "Unread thread succeeded",
+            isUnread: true,
           }),
           thread({ id: "thr_clean", title: "No draft", updatedAt: Date.now() - (3 * 3_600_000 + 60_000) }),
         ],

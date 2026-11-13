@@ -5,7 +5,7 @@ import type {
   PluginSidebarThreadRowStatus,
 } from "@get-bb/plugin-sdk/app";
 import { resolveThreadStatus } from "./bb-sdk";
-import { childStatusKind, childSubtree, threadAsksForInput } from "./child-status";
+import { childStatusKind, childSubtree, isKnownIndicator, threadAsksForInput } from "./child-status";
 import { isThreadWorking } from "./lifecycle";
 import { threadRowStatus, threadShortStatus, threadWithDraft } from "./StatusSlot";
 import { idleSidebarThreadFields } from "./test-fixtures";
@@ -67,6 +67,16 @@ const OLD = {
       return null;
     return rowStatus;
   },
+  slot(
+    listed: PluginSidebarThread,
+    hasDraft: boolean,
+    rowStatus: PluginSidebarThreadRowStatus | null,
+    limited: boolean,
+  ): string {
+    const drafted = OLD.withDraft(listed);
+    const folded = hasDraft ? { ...listed, indicator: drafted.indicator, indicatorLabel: drafted.label } : listed;
+    return drawSlot(folded as PluginSidebarThread, OLD.rowStatus(listed, rowStatus, limited), limited);
+  },
   withDraft(thread: PluginSidebarThread): { indicator: string; label: string | null } {
     if (OLD.isWorkingIndicator(thread.indicator))
       return { indicator: "working-draft", label: "Thread working with unsubmitted draft" };
@@ -74,6 +84,50 @@ const OLD = {
     return { indicator: thread.indicator, label: thread.indicatorLabel };
   },
 };
+
+/**
+ * What the row's status slot draws, as StatusOrTime does: the provider-limit
+ * warning, another plugin's status, the sidebar's short status (with the
+ * glyph a compact row adds to a running one), bb's glyph for a kind this
+ * build does not know, or the age.
+ */
+function drawSlot(
+  folded: PluginSidebarThread,
+  shownRowStatus: PluginSidebarThreadRowStatus | null,
+  limited: boolean,
+): string {
+  if (limited && !folded.hasPendingInteraction && folded.indicator !== "runtime") return "provider limit";
+  if (shownRowStatus) return `plugin status: ${shownRowStatus.label}`;
+  const status = threadShortStatus(folded);
+  if (status === null) return isKnownIndicator(folded.indicator) ? "age" : `bb's glyph: ${folded.indicatorLabel}`;
+  return status.showsDuration ? `${status.label} [${folded.indicator} glyph]` : status.label;
+}
+
+function slot(
+  listed: PluginSidebarThread,
+  hasDraft: boolean,
+  rowStatus: PluginSidebarThreadRowStatus | null,
+  limited: boolean,
+): string {
+  return drawSlot(threadWithDraft(listed, hasDraft), threadRowStatus(listed, rowStatus, limited, hasDraft), limited);
+}
+
+/** The sidebar's own priorities, which sit above bb's indicator. */
+const SIDEBAR_PRIORITIES = ["Needs you", "Send failed", "Queued", "provider limit"];
+
+function slotReason(listed: PluginSidebarThread, hasDraft: boolean, before: string, after: string): string {
+  if (SIDEBAR_PRIORITIES.some((words) => before.startsWith(words) || after.startsWith(words)))
+    return "unexpected: one of the sidebar's own priorities changed";
+  if (!hasDraft) return "unexpected";
+  if (listed.indicator === "runtime" && after.startsWith("plugin status"))
+    return "owner: bb shows another plugin's status over a working draft";
+  if (
+    (listed.indicator === "unread-success" || listed.indicator === "queued-failed") &&
+    after.includes("working-draft")
+  )
+    return "owner: bb's working-draft over an unread result";
+  return "unexpected";
+}
 
 const STATUSES = ["pending", "idle", "starting", "active", "stopping", "error"] as const;
 const RUNTIME_STATUSES = [...STATUSES, "provisioning", "waiting-for-host"] as const;
@@ -192,20 +246,41 @@ function differences() {
         );
         compare("child status kind", OLD.childStatusKind(thread), childStatusKind(thread, working));
       }
-      for (const limited of [false, true])
-        compare(
-          `row status shown${limited ? ", provider limit" : ""}`,
-          OLD.rowStatus(thread, rowStatus, limited)?.label ?? null,
-          threadRowStatus(thread, rowStatus, limited)?.label ?? null,
-        );
     }
+    // What the row's status slot shows (as StatusOrTime draws it), with and
+    // without a draft. An indicator this build does not know cannot be built
+    // here: in bb the resolver that set it is the one the sidebar calls, so
+    // draft-status.test.ts covers that case instead.
+    // The folded indicator and its label, which the hover card draws.
+    const before = OLD.withDraft(thread);
     const drafted = threadWithDraft(thread, true);
-    if (
-      JSON.stringify(OLD.withDraft(thread)) !==
-      JSON.stringify({ indicator: drafted.indicator, label: drafted.indicatorLabel })
-    )
-      add(pair, `draft indicator (${level})`, "unexpected", OLD.withDraft(thread), drafted.indicator);
-    if (threadWithDraft(thread, false) !== thread) add(pair, "no draft", "unexpected", thread.indicator, null);
+    const after = { indicator: drafted.indicator, label: drafted.indicatorLabel };
+    if (JSON.stringify(before) !== JSON.stringify(after)) {
+      const owner =
+        (thread.indicator === "unread-success" || thread.indicator === "queued-failed") &&
+        after.indicator === "working-draft";
+      add(
+        pair,
+        `draft indicator (${level}, listed ${thread.indicator})`,
+        owner ? "owner: bb's working-draft over an unread result or a failed send" : "unexpected",
+        before.indicator,
+        after.indicator,
+      );
+    }
+    for (const hasDraft of [false, true])
+      for (const rowStatus of Object.values(ROW_STATUSES))
+        for (const limited of [false, true]) {
+          const before = OLD.slot(thread, hasDraft, rowStatus, limited);
+          const after = slot(thread, hasDraft, rowStatus, limited);
+          if (before === after) continue;
+          add(
+            pair,
+            `row (${level}, listed ${thread.indicator})`,
+            slotReason(thread, hasDraft, before, after),
+            before,
+            after,
+          );
+        }
   }
   return Object.fromEntries([...table].sort());
 }
@@ -213,10 +288,10 @@ function differences() {
 describe("display status against the rules before bb's resolver", () => {
   it("differs only where the change means to", () => {
     // "pair": whether bb 0.49.0 emits the status and runtimeStatus pair.
-    // A working thread with a draft and a plugin status keeps "Drafting",
-    // and a draft keeps an unread result or a failed send on a thread with
-    // background work: bb's resolver would show the plugin status and
-    // "working-draft". Both stay as before (see StatusSlot), so neither is here.
+    // "owner": cases where the sidebar now shows what bb's resolver does with
+    // a draft: another plugin's status over a working draft, and
+    // "working-draft" over an unread result on a thread with a background
+    // agent or command. A failed send there still reads "Send failed".
     expect(differences()).toEqual({
       'emitted | child status kind (child) | D2: another plugin\'s running status counts as working | null -> "working"': 16,
       "emitted | display working (child) | D2: another plugin's running status counts as working | false -> true": 8,
@@ -225,9 +300,21 @@ describe("display status against the rules before bb's resolver", () => {
       "emitted | display working (top-level) | D2: another plugin's running status counts as working | false -> true": 6,
       "emitted | display working (top-level) | D2: runtimeStatus pending no longer counts as working | true -> false": 16,
       "emitted | display working (top-level) | D2: runtimeStatus waiting-for-host no longer counts as working | true -> false": 16,
+      'emitted | draft indicator (child, listed queued-failed) | owner: bb\'s working-draft over an unread result or a failed send | "queued-failed" -> "working-draft"': 24,
+      'emitted | draft indicator (top-level, listed queued-failed) | owner: bb\'s working-draft over an unread result or a failed send | "queued-failed" -> "working-draft"': 21,
+      'emitted | draft indicator (top-level, listed unread-success) | owner: bb\'s working-draft over an unread result or a failed send | "unread-success" -> "working-draft"': 6,
       "emitted | idle parent of this child working (child) | D2: another plugin's running status counts as working | false -> true": 8,
       "emitted | idle parent of this child working (child) | D2: runtimeStatus pending no longer counts as working | true -> false": 16,
       "emitted | idle parent of this child working (child) | D2: runtimeStatus waiting-for-host no longer counts as working | true -> false": 16,
+      'emitted | row (child, listed runtime) | owner: bb shows another plugin\'s status over a working draft | "Drafting [working-draft glyph]" -> "plugin status: Plugin done"': 96,
+      'emitted | row (child, listed runtime) | owner: bb shows another plugin\'s status over a working draft | "Drafting [working-draft glyph]" -> "plugin status: Plugin failed"': 96,
+      'emitted | row (child, listed runtime) | owner: bb shows another plugin\'s status over a working draft | "Drafting [working-draft glyph]" -> "plugin status: Plugin status"': 96,
+      'emitted | row (child, listed runtime) | owner: bb shows another plugin\'s status over a working draft | "Drafting [working-draft glyph]" -> "plugin status: Waiting for CI"': 96,
+      'emitted | row (top-level, listed runtime) | owner: bb shows another plugin\'s status over a working draft | "Drafting [working-draft glyph]" -> "plugin status: Plugin done"': 96,
+      'emitted | row (top-level, listed runtime) | owner: bb shows another plugin\'s status over a working draft | "Drafting [working-draft glyph]" -> "plugin status: Plugin failed"': 96,
+      'emitted | row (top-level, listed runtime) | owner: bb shows another plugin\'s status over a working draft | "Drafting [working-draft glyph]" -> "plugin status: Plugin status"': 96,
+      'emitted | row (top-level, listed runtime) | owner: bb shows another plugin\'s status over a working draft | "Drafting [working-draft glyph]" -> "plugin status: Waiting for CI"': 96,
+      'emitted | row (top-level, listed unread-success) | owner: bb\'s working-draft over an unread result | "Unread" -> "Drafting [working-draft glyph]"': 6,
       'never emitted | child status kind (child) | D2: another plugin\'s running status counts as working | null -> "working"': 80,
       "never emitted | display working (child) | D2: another plugin's running status counts as working | false -> true": 24,
       "never emitted | display working (child) | D2: runtimeStatus pending no longer counts as working | true -> false": 48,
@@ -239,11 +326,23 @@ describe("display status against the rules before bb's resolver", () => {
       "never emitted | display working (top-level) | D2: runtimeStatus waiting-for-host no longer counts as working | true -> false": 48,
       "never emitted | display working (top-level) | an in-flight status over runtimeStatus error, which bb never emits | true -> false": 64,
       "never emitted | display working (top-level) | an in-flight status over runtimeStatus idle, which bb never emits | true -> false": 64,
+      'never emitted | draft indicator (child, listed queued-failed) | owner: bb\'s working-draft over an unread result or a failed send | "queued-failed" -> "working-draft"': 120,
+      'never emitted | draft indicator (top-level, listed queued-failed) | owner: bb\'s working-draft over an unread result or a failed send | "queued-failed" -> "working-draft"': 111,
+      'never emitted | draft indicator (top-level, listed unread-success) | owner: bb\'s working-draft over an unread result or a failed send | "unread-success" -> "working-draft"': 18,
       "never emitted | idle parent of this child working (child) | D2: another plugin's running status counts as working | false -> true": 24,
       "never emitted | idle parent of this child working (child) | D2: runtimeStatus pending no longer counts as working | true -> false": 48,
       "never emitted | idle parent of this child working (child) | D2: runtimeStatus waiting-for-host no longer counts as working | true -> false": 48,
       "never emitted | idle parent of this child working (child) | an in-flight status over runtimeStatus error, which bb never emits | true -> false": 64,
       "never emitted | idle parent of this child working (child) | an in-flight status over runtimeStatus idle, which bb never emits | true -> false": 64,
+      'never emitted | row (child, listed runtime) | owner: bb shows another plugin\'s status over a working draft | "Drafting [working-draft glyph]" -> "plugin status: Plugin done"': 672,
+      'never emitted | row (child, listed runtime) | owner: bb shows another plugin\'s status over a working draft | "Drafting [working-draft glyph]" -> "plugin status: Plugin failed"': 672,
+      'never emitted | row (child, listed runtime) | owner: bb shows another plugin\'s status over a working draft | "Drafting [working-draft glyph]" -> "plugin status: Plugin status"': 672,
+      'never emitted | row (child, listed runtime) | owner: bb shows another plugin\'s status over a working draft | "Drafting [working-draft glyph]" -> "plugin status: Waiting for CI"': 672,
+      'never emitted | row (top-level, listed runtime) | owner: bb shows another plugin\'s status over a working draft | "Drafting [working-draft glyph]" -> "plugin status: Plugin done"': 608,
+      'never emitted | row (top-level, listed runtime) | owner: bb shows another plugin\'s status over a working draft | "Drafting [working-draft glyph]" -> "plugin status: Plugin failed"': 608,
+      'never emitted | row (top-level, listed runtime) | owner: bb shows another plugin\'s status over a working draft | "Drafting [working-draft glyph]" -> "plugin status: Plugin status"': 608,
+      'never emitted | row (top-level, listed runtime) | owner: bb shows another plugin\'s status over a working draft | "Drafting [working-draft glyph]" -> "plugin status: Waiting for CI"': 608,
+      'never emitted | row (top-level, listed unread-success) | owner: bb\'s working-draft over an unread result | "Unread" -> "Drafting [working-draft glyph]"': 18,
     });
   });
 });

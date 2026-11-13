@@ -81,6 +81,41 @@ describe("row statuses from other plugins", () => {
     }
   });
 
+  // bb's resolver with this client's draft decides what shows.
+  it("shows bb's choice for a draft: the plugin status over a working draft, Drafting over Unread", async () => {
+    const agent = { workflows: 0, backgroundAgents: 1, backgroundCommands: 0, planMode: 0 };
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "busy", title: "Busy work", indicator: "runtime" }),
+          thread({ id: "unread", title: "Unread work", indicator: "unread-success", isUnread: true, activity: agent }),
+          thread({
+            id: "unsent",
+            title: "Unsent work",
+            indicator: "queued-failed",
+            queuedWork: "failed",
+            activity: agent,
+          }),
+        ],
+        projects,
+      },
+      sidebarRowStatuses: { busy: sandbox },
+      sidebarDraftThreadIds: ["busy", "unread", "unsent"],
+      rpc: {
+        getSidebarSettings: () => ({ ...defaultSidebarSettings, inactiveThreadsEnabled: false }),
+        listLifecycle: () => ({ rows: [] }),
+      },
+    });
+    await screen.findByRole("link", { name: /Busy work/ });
+    await waitFor(() => expect(glyph("Busy work")).not.toBeNull());
+    expect(within(row("Busy work")).queryByText(/^Drafting/)).toBeNull();
+    expect(within(row("Unread work")).getByText(/^Drafting/)).toBeDefined();
+    expect(within(row("Unread work")).queryByText("Unread")).toBeNull();
+    // The sidebar's own failed-send warning still comes first.
+    expect(within(row("Unsent work")).getByText("Send failed")).toBeDefined();
+  });
+
   it("spells out the status in the thread's hover card", async () => {
     renderWithStatus([thread({ id: "marked", title: "Marked work" })], ["marked"]);
     fireEvent.pointerMove(await screen.findByRole("link", { name: /Marked work/ }), { pointerType: "mouse" });

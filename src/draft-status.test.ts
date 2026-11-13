@@ -65,17 +65,32 @@ describe("threadWithDraft", () => {
     }
   });
 
-  it("keeps an indicator this build does not know", () => {
+  it("takes bb's result for an indicator this build does not know", () => {
     const listed = thread({ indicator: "future-kind" as PluginSidebarThread["indicator"], indicatorLabel: "New" });
+    expect(threadWithDraft(listed, true)).toMatchObject({
+      indicator: "draft",
+      indicatorLabel: "Thread has unsubmitted draft",
+    });
+  });
+
+  // The sidebar words a waiting message itself, and only that wording can
+  // stand for a kind it does not know.
+  it("keeps an unknown indicator with a waiting message, so the row still reads Queued", () => {
+    const listed = thread({
+      indicator: "future-kind" as PluginSidebarThread["indicator"],
+      indicatorLabel: "New",
+      queuedWork: "waiting",
+      runtimeStatus: "active",
+    });
     expect(threadWithDraft(listed, true)).toBe(listed);
   });
 
-  // bb would show "working-draft" here; the sidebar keeps what it showed
-  // before it used bb's resolver.
-  it("keeps an unread result or a failed send over a draft on a thread with background work", () => {
+  // bb's order puts a draft on a working thread above an unread result and a
+  // failed send; the row still reads "Send failed" from `queuedWork`.
+  it("shows working with a draft over an unread result or a failed send on a thread with background work", () => {
     for (const fields of [kept["unread-success"], kept["queued-failed"]]) {
       const listed = thread({ ...fields, activity: { ...counts, backgroundAgents: 1 } });
-      expect(threadWithDraft(listed, true)).toBe(listed);
+      expect(threadWithDraft(listed, true)).toMatchObject({ indicator: "working-draft" });
     }
   });
 });
