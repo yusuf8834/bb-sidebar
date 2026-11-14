@@ -10,10 +10,9 @@ import {
   parseConfiguredSnoozePresets,
   resolveConfiguredSnoozePreset,
   resolveRowShelf,
-  type ThreadShelf,
   waitsForScheduledContinue,
 } from "./lifecycle";
-import { shelfRowIds } from "./inbox";
+import { placeOnRowShelves } from "./inbox";
 import { ancestorsOfAskingThreads } from "./child-status";
 
 type CliHandlers = Pick<
@@ -90,8 +89,6 @@ export function createServerCli(
    */
   const loadShelves = async (now = Date.now()) => {
     const threads = await loadPolicyThreads();
-    const byId = new Map(threads.map((thread) => [thread.id, thread] as const));
-    const rowIds = shelfRowIds(threads);
     // A child's question shows inside its parent's row, so it counts as the
     // parent's own, as it does in the sidebar.
     const asking = ancestorsOfAskingThreads(threads, (thread) => thread.hasPendingInteraction);
@@ -101,25 +98,14 @@ export function createServerCli(
       (thread) => thread.queuedWork === "waiting" && (readOne(thread.id)?.snoozedUntil ?? 0) > now,
     );
     const limits = waiting.length ? await threadLimits({ keys: waiting.map((thread) => thread.id) }) : {};
-    const rowShelves = new Map<string, ThreadShelf>();
-    const rowShelf = (thread: (typeof threads)[number]) => {
-      let shelf = rowShelves.get(thread.id);
-      if (shelf === undefined) {
-        const row = readOne(thread.id) ?? undefined;
-        const signals = threadSignals(thread);
-        if (asking.has(thread.id)) signals.hasPendingInteraction = true;
-        if (waitsForScheduledContinue(row, limits[thread.id]?.scheduled, thread.queuedWork, now)) {
-          signals.hasQueuedWork = false;
-        }
-        shelf = resolveRowShelf(row, signals, now, thread.pinnedAt !== null);
-        rowShelves.set(thread.id, shelf);
+    const placed = placeOnRowShelves(threads, (thread) => {
+      const row = readOne(thread.id) ?? undefined;
+      const signals = threadSignals(thread);
+      if (asking.has(thread.id)) signals.hasPendingInteraction = true;
+      if (waitsForScheduledContinue(row, limits[thread.id]?.scheduled, thread.queuedWork, now)) {
+        signals.hasQueuedWork = false;
       }
-      return shelf;
-    };
-    const placed = threads.map((thread) => {
-      // A thread in a parent cycle has no sidebar row; it keeps its own.
-      const rowThread = byId.get(rowIds.get(thread.id) ?? thread.id)!;
-      return { thread, rowThread, shelf: rowShelf(rowThread) };
+      return resolveRowShelf(row, signals, now, thread.pinnedAt !== null);
     });
     return { placed, byId: new Map(placed.map((entry) => [entry.thread.id, entry] as const)) };
   };

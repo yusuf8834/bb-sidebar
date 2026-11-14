@@ -141,6 +141,26 @@ export function shelfRowIds<T extends TreeThread>(threads: readonly T[]): Readon
 }
 
 /**
+ * Every thread with the row that carries it (`shelfRowIds`) and that row's
+ * shelf, decided once per row. `bb sidebar list` and the live-thread filter
+ * place threads this way across all projects; each decides a row's shelf.
+ */
+export function placeOnRowShelves<T extends TreeThread, Shelf>(
+  threads: readonly T[],
+  shelfOfRow: (rowThread: T) => Shelf,
+): { thread: T; rowThread: T; shelf: Shelf }[] {
+  const byId = new Map(threads.map((thread) => [thread.id, thread] as const));
+  const rowIds = shelfRowIds(threads);
+  const shelves = new Map<string, Shelf>();
+  return threads.map((thread) => {
+    // A thread in a parent cycle has no sidebar row; it keeps its own.
+    const rowThread = byId.get(rowIds.get(thread.id) ?? thread.id)!;
+    if (!shelves.has(rowThread.id)) shelves.set(rowThread.id, shelfOfRow(rowThread));
+    return { thread, rowThread, shelf: shelves.get(rowThread.id)! };
+  });
+}
+
+/**
  * Child threads leave the flat list and are listed inside their parent's row
  * instead, behind its child badge.
  *

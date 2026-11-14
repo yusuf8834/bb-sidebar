@@ -1,6 +1,6 @@
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 import { resolveRowShelf, sidebarThreadSignals, type ThreadLifecycleRow } from "./lifecycle";
-import { shelfRowIds } from "./inbox";
+import { placeOnRowShelves } from "./inbox";
 import { threadsWithAskingDescendants } from "./child-status";
 
 /**
@@ -22,25 +22,16 @@ export function settledThreadIds(
   rows: ReadonlyMap<string, ThreadLifecycleRow>,
   now: number,
 ): Set<string> {
-  const unarchived = threads.filter((thread) => !thread.isArchived);
-  const byId = new Map(unarchived.map((thread) => [thread.id, thread] as const));
-  const rowIds = shelfRowIds(unarchived);
   const asking = threadsWithAskingDescendants(threads);
-  const rowSettled = new Map<string, boolean>();
-  const settled = new Set<string>();
-  for (const thread of unarchived) {
-    // A thread in a parent cycle has no sidebar row; it keeps its own.
-    const rowThread = byId.get(rowIds.get(thread.id) ?? thread.id)!;
-    let isSettled = rowSettled.get(rowThread.id);
-    if (isSettled === undefined) {
+  const placed = placeOnRowShelves(
+    threads.filter((thread) => !thread.isArchived),
+    (rowThread) => {
       const signals = sidebarThreadSignals(rowThread);
       if (asking.has(rowThread.id)) signals.hasPendingInteraction = true;
-      isSettled = resolveRowShelf(rows.get(rowThread.id), signals, now, rowThread.isPinned) === "settled";
-      rowSettled.set(rowThread.id, isSettled);
-    }
-    if (isSettled) settled.add(thread.id);
-  }
-  return settled;
+      return resolveRowShelf(rows.get(rowThread.id), signals, now, rowThread.isPinned);
+    },
+  );
+  return new Set(placed.filter(({ shelf }) => shelf === "settled").map(({ thread }) => thread.id));
 }
 
 /**
