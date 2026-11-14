@@ -172,10 +172,6 @@ export function createServerPolicy(
         unansweredThreadIds = unanswered;
       };
       const configured = readSidebarSettings();
-      let threads = await loadPolicyThreads(true);
-      // Repair older trees before any decision reads their children's rows.
-      const backfilled = backfillSettledChildRows(threads);
-      const lifecycleByThreadId = new Map(readAll().map((row) => [row.threadId, row]));
       const policySettings = {
         afterDays: parseAutoSettleAfterDays(configured.autoSettleInactive, String(configured.autoSettleAfterDays)),
         onMerge: configured.autoSettleOnMerge,
@@ -183,6 +179,15 @@ export function createServerPolicy(
       // With both rules off, every known PR outcome leads to the same decision,
       // so skip GitHub entirely and treat each environment as having no PR.
       const readsPullRequests = policySettings.onMerge || policySettings.afterDays !== null;
+      // With both rules off, only a policy-settled row can change: every other
+      // thread is kept. Without one, and once a full re-check (which also runs
+      // the one-time backfill) has completed, this pass cannot change anything,
+      // so skip listing every thread.
+      if (!readsPullRequests && !fullRecheck && !readAll().some(isAutoSettled)) return [];
+      let threads = await loadPolicyThreads(true);
+      // Repair older trees before any decision reads their children's rows.
+      const backfilled = backfillSettledChildRows(threads);
+      const lifecycleByThreadId = new Map(readAll().map((row) => [row.threadId, row]));
       const environmentIds = readsPullRequests
         ? [
             ...new Set(

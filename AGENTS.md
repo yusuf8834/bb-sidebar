@@ -38,6 +38,8 @@ live again). Snoozed, Parked and Inactive-shelf threads stay live.
   `cannotAutoSettle` in `src/auto-settle.ts` can return them to Active. A
   full re-check is pending from server start and from each auto-settle
   settings change until a pass completes; unanswered lookups retry each pass.
+  With both rules off, no re-check pending and no policy-settled row, a pass
+  returns before listing threads.
   New server jobs decide "settled" with `resolveRowShelf` or `resolveShelf`
   from shared `src/lifecycle.ts`.
 
