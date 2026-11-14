@@ -18,16 +18,6 @@ function findOverride(marker) {
   return found.at(0);
 }
 
-function findPattern(override, message) {
-  const found = override.linter?.rules?.style?.noRestrictedImports?.options?.patterns?.filter(
-    (pattern) => pattern.message === message,
-  );
-  if (found?.length !== 1 || !Array.isArray(found.at(0).group)) {
-    configError(`Expected exactly one restriction with a group and message: ${message}`);
-  }
-  return found.at(0).group;
-}
-
 const typeImportsOverride = findOverride("src/**/*.ts");
 const appOverride = findOverride("src/components/**");
 const sharedOverride = findOverride("src/*.ts");
@@ -35,11 +25,6 @@ const nodeOverride = findOverride("src/ports-host.ts");
 if (!nodeOverride.includes.includes("src/server-*.ts") || !sharedOverride.includes.includes("!src/server-*.ts")) {
   configError("Server modules must be classified as Node with src/server-*.ts.");
 }
-const sharedBrowserPatterns = [
-  "Shared modules must not import TSX app modules.",
-  "Shared modules must not import browser hooks, lib, or components.",
-  "Shared modules must not import browser modules.",
-].flatMap((message) => findPattern(sharedOverride, message));
 const expectedOrder = [typeImportsOverride, appOverride, sharedOverride, nodeOverride];
 const actualOrder = config.overrides.filter((override) => expectedOrder.includes(override));
 if (actualOrder.some((override, index) => override !== expectedOrder.at(index))) {
@@ -47,6 +32,11 @@ if (actualOrder.some((override, index) => override !== expectedOrder.at(index)))
 }
 const appIncludes = appOverride.includes;
 const sharedIncludes = sharedOverride.includes;
+const nodeIncludes = nodeOverride.includes;
+const { options: compilerOptions } = ts.convertCompilerOptionsFromJson(
+  JSON.parse(readFileSync("tsconfig.json", "utf8")).compilerOptions,
+  ".",
+);
 const sourceFiles = [
   "app.tsx",
   ...readdirSync("src", { recursive: true })
@@ -59,33 +49,6 @@ const matches = (file, globs) =>
   globs.some((glob) => !glob.startsWith("!") && matchesGlob(file, glob)) &&
   !globs.some((glob) => glob.startsWith("!") && matchesGlob(file, glob.slice(1)));
 let failures = 0;
-
-// ESLint derived extensionless TSX names at runtime. Keep Biome's explicit list complete.
-const tsxPatterns = [
-  "**/*.tsx",
-  ...new Set(
-    sourceFiles
-      .filter((file) => file.endsWith(".tsx"))
-      .map((file) => {
-        const name = file.split("/").at(-1).slice(0, -4);
-        return `**/${name}`;
-      }),
-  ),
-].sort();
-for (const [override, message, expected] of [
-  [nodeOverride, "Node runtime modules must not import TSX app modules.", tsxPatterns],
-  [
-    sharedOverride,
-    "Shared modules must not import TSX app modules.",
-    tsxPatterns.flatMap((glob) => ["./**/", "../**/"].map((prefix) => prefix + glob.slice(3))).sort(),
-  ],
-]) {
-  const patterns = findPattern(override, message);
-  if (JSON.stringify([...patterns].sort()) !== JSON.stringify(expected)) {
-    console.error("biome.json: sync Node/shared TSX pattern lists with app.tsx and every src/**/*.tsx basename.");
-    failures++;
-  }
-}
 
 function report(file, source, node, message) {
   const { line, character } = source.getLineAndCharacterOfPosition(node.getStart(source));
@@ -111,7 +74,7 @@ for (const input of files) {
   const source = ts.createSourceFile(file, readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true);
   const shared = matches(file, sharedIncludes);
   const browser = matches(file, appIncludes);
-  const browserOrShared = browser || shared;
+  const nodeRuntime = matches(file, nodeIncludes);
   function checkSdkImport(node) {
     if (!browser || file === "src/bb-sdk.ts" || !ts.isStringLiteralLike(node.moduleSpecifier)) return;
     if (node.moduleSpecifier.text !== "@get-bb/plugin-sdk/app") return;
@@ -127,11 +90,25 @@ for (const input of files) {
     }
   }
   function checkSpecifier(specifier, typeOnly = false) {
-    if (!browserOrShared || !specifier || !ts.isStringLiteralLike(specifier)) return;
+    if (!specifier || !ts.isStringLiteralLike(specifier)) return;
     const name = specifier.text;
     const normalized = nodeBuiltins.has(name) && !name.startsWith("node:") ? `node:${name}` : name;
-    if (shared && sharedBrowserPatterns.some((glob) => matchesGlob(name, glob))) {
-      report(file, source, specifier, `Shared modules must not import browser module ${name}, even for types.`);
+    // Shared and Node code must not reach app files or any TSX, whatever the specifier's spelling.
+    const target =
+      (shared || nodeRuntime) &&
+      ts.resolveModuleName(name, resolve(file), compilerOptions, ts.sys).resolvedModule?.resolvedFileName;
+    if (
+      target &&
+      (target.endsWith(".tsx") || matches(relative(process.cwd(), target).replaceAll("\\", "/"), appIncludes))
+    ) {
+      report(
+        file,
+        source,
+        specifier,
+        `${shared ? "Shared" : "Node"} modules must not import app or TSX module ${name}, even for types.`,
+      );
+    } else if (!browser && !shared) {
+      return;
     } else if (/(^|\/)(server(?:-[^/]+)?|ports-host)(\.[cm]?[jt]sx?)?$/.test(normalized)) {
       report(file, source, specifier, `Browser/shared code must not import ${name}, even for types.`);
     } else if (shared && normalized.startsWith("node:")) {
@@ -151,6 +128,8 @@ for (const input of files) {
     if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
       if (node.moduleSpecifier) checkSdkImport(node);
       checkSpecifier(node.moduleSpecifier, isTypeOnly(node));
+    } else if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) {
+      checkSpecifier(node.moduleReference.expression, node.isTypeOnly);
     } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
       if (browser && file !== "src/bb-sdk.ts" && node.arguments.at(0)?.text === "@get-bb/plugin-sdk/app") {
         report(file, source, node, "Use named SDK imports; experimental APIs belong in src/bb-sdk.ts.");

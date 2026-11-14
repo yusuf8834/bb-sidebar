@@ -179,14 +179,17 @@ access are checked by `src/storage-keys.test.ts`.
 - Biome does not format Markdown or YAML. `useImportType` is an error.
   `jsxRuntime: reactClassic` affects linting only; TypeScript still compiles
   with `react-jsx`.
-- Biome's `noRestrictedImports` enforces the import rules above. Biome lacks
-  `allowTypeImports`, so `scripts/check-import-boundaries.mjs` enforces the
-  type-only, dynamic-import and Node built-in parts. It also checks the
-  Node/shared TSX name lists for drift, requires named imports from
-  `@get-bb/plugin-sdk/app` with `experimental_*` only in `src/bb-sdk.ts`, and
-  bans `import()` type annotations except in `ports-host.test.ts` (Vitest's
-  `importOriginal`; regular imports there still need type-only syntax when
-  used only as types).
+- Biome's `noRestrictedImports` enforces the import rules above that a
+  specifier shows by its name: React, Node entries, `node:*` in shared code,
+  `*.tsx`, `use*`, `lib`, and `components`. `scripts/check-import-boundaries.mjs`
+  resolves each import in shared and Node modules and refuses any that reaches
+  an app file, even for types; these appear in `npm run lint` and the commit
+  hook, not as editor warnings. Biome lacks `allowTypeImports`, so the script
+  also enforces the app's type-only, dynamic-import and Node built-in rules.
+  It also requires named imports from `@get-bb/plugin-sdk/app` with
+  `experimental_*` only in `src/bb-sdk.ts`, and bans `import()` type
+  annotations except in `ports-host.test.ts` (Vitest's `importOriginal`;
+  regular imports there still need type-only syntax when used only as types).
 
 ## bb versions: daily check and bump pull request
 
