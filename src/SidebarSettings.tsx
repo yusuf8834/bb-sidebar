@@ -16,8 +16,8 @@ import { ChildThreadSettings } from "./ChildThreadSettings";
 import { DeviceSettings } from "./DeviceSettings";
 import { ProjectManagement } from "./ProjectManagement";
 import { configuredSnoozePresetError, parseConfiguredSnoozePresets } from "./lifecycle";
-import { MAX_INACTIVE_AFTER_HOURS, MIN_INACTIVE_AFTER_HOURS } from "./inactive";
-import { MAX_AUTO_SETTLE_AFTER_DAYS, MIN_AUTO_SETTLE_AFTER_DAYS } from "./auto-settle";
+import { isValidInactiveAfterHours } from "./inactive";
+import { isValidAutoSettleAfterDays } from "./auto-settle";
 import type { SaveStatus } from "./settings-ui";
 
 /** Long enough to finish typing a shortcut, short enough to feel instant. */
@@ -48,10 +48,10 @@ const SECTION_BY_SETTING: Record<keyof SidebarSettingsValues, string> = {
   projectColorDisplay: "Project appearance",
 };
 
-const validHours = (value: number) =>
-  Number.isInteger(value) && value >= MIN_INACTIVE_AFTER_HOURS && value <= MAX_INACTIVE_AFTER_HOURS;
-const validDays = (value: number) =>
-  Number.isInteger(value) && value >= MIN_AUTO_SETTLE_AFTER_DAYS && value <= MAX_AUTO_SETTLE_AFTER_DAYS;
+const validDraft = (value: SidebarSettingsValues) =>
+  configuredSnoozePresetError(value.snoozePresets) === null &&
+  (!value.inactiveThreadsEnabled || isValidInactiveAfterHours(value.inactiveAfterHours)) &&
+  (!value.autoSettleInactive || isValidAutoSettleAfterDays(value.autoSettleAfterDays));
 
 /**
  * The plugin's settings page. Every change saves on its own, as bb's own
@@ -125,19 +125,10 @@ export function SidebarSettings() {
   });
 
   const dirty = dirtyFields.current.size > 0;
-  const inactiveHoursValid =
-    Number.isInteger(draft.inactiveAfterHours) &&
-    draft.inactiveAfterHours >= MIN_INACTIVE_AFTER_HOURS &&
-    draft.inactiveAfterHours <= MAX_INACTIVE_AFTER_HOURS;
-  const autoSettleDaysValid =
-    Number.isInteger(draft.autoSettleAfterDays) &&
-    draft.autoSettleAfterDays >= MIN_AUTO_SETTLE_AFTER_DAYS &&
-    draft.autoSettleAfterDays <= MAX_AUTO_SETTLE_AFTER_DAYS;
+  const inactiveHoursValid = isValidInactiveAfterHours(draft.inactiveAfterHours);
+  const autoSettleDaysValid = isValidAutoSettleAfterDays(draft.autoSettleAfterDays);
   const snoozePresetsError = configuredSnoozePresetError(draft.snoozePresets);
-  const hasValidationError =
-    (draft.inactiveThreadsEnabled && !inactiveHoursValid) ||
-    (draft.autoSettleInactive && !autoSettleDaysValid) ||
-    snoozePresetsError !== null;
+  const hasValidationError = !validDraft(draft);
   const snoozePreview = snoozePresetsError
     ? []
     : parseConfiguredSnoozePresets(draft.snoozePresets).map((preset) => preset.label);
@@ -151,11 +142,6 @@ export function SidebarSettings() {
     });
   };
 
-  const validDraft = (value: SidebarSettingsValues) =>
-    configuredSnoozePresetError(value.snoozePresets) === null &&
-    (!value.inactiveThreadsEnabled || validHours(value.inactiveAfterHours)) &&
-    (!value.autoSettleInactive || validDays(value.autoSettleAfterDays));
-
   const save = async () => {
     if (savingRef.current) return;
     savingRef.current = true;
@@ -166,8 +152,9 @@ export function SidebarSettings() {
       while (dirtyFields.current.size && validDraft(draftRef.current)) {
         const sentVersions = new Map(dirtyFields.current);
         const sent = { ...draftRef.current };
-        if (!validHours(sent.inactiveAfterHours)) sent.inactiveAfterHours = DEFAULT_SIDEBAR_SETTINGS.inactiveAfterHours;
-        if (!validDays(sent.autoSettleAfterDays))
+        if (!isValidInactiveAfterHours(sent.inactiveAfterHours))
+          sent.inactiveAfterHours = DEFAULT_SIDEBAR_SETTINGS.inactiveAfterHours;
+        if (!isValidAutoSettleAfterDays(sent.autoSettleAfterDays))
           sent.autoSettleAfterDays = DEFAULT_SIDEBAR_SETTINGS.autoSettleAfterDays;
         const patch = Object.fromEntries([...sentVersions.keys()].map((key) => [key, sent[key]]));
         loadRequestSeq.current += 1;

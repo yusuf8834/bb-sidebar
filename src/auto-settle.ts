@@ -73,13 +73,15 @@ export function decideAutoSettledThread(
   return cannotAutoSettle(lifecycle, thread) ? "unsettle" : "keep";
 }
 
+export function isValidAutoSettleAfterDays(days: number): boolean {
+  return Number.isInteger(days) && days >= MIN_AUTO_SETTLE_AFTER_DAYS && days <= MAX_AUTO_SETTLE_AFTER_DAYS;
+}
+
 /** Invalid settings disable inactivity settling instead of hiding work. */
 export function parseAutoSettleAfterDays(enabled: boolean, rawDays: string): number | null {
   if (!enabled) return null;
   const days = Number(rawDays);
-  return Number.isInteger(days) && days >= MIN_AUTO_SETTLE_AFTER_DAYS && days <= MAX_AUTO_SETTLE_AFTER_DAYS
-    ? days
-    : null;
+  return isValidAutoSettleAfterDays(days) ? days : null;
 }
 
 /**

@@ -9,6 +9,8 @@ import {
   THREAD_DISPLAYS,
 } from "./sidebar-settings-values";
 import { configuredSnoozePresetError } from "./lifecycle";
+import { MAX_INACTIVE_AFTER_HOURS, MIN_INACTIVE_AFTER_HOURS } from "./inactive";
+import { MAX_AUTO_SETTLE_AFTER_DAYS, MIN_AUTO_SETTLE_AFTER_DAYS } from "./auto-settle";
 export {
   SIDEBAR_SETTINGS_CHANNEL,
   PROJECT_ICONS_CHANNEL,
@@ -142,10 +144,10 @@ export const sidebarSettingsSchema = z
         message: "Use one to eight valid snooze shortcuts",
       }),
     inactiveThreadsEnabled: z.boolean(),
-    inactiveAfterHours: z.number().int().min(1).max(720),
+    inactiveAfterHours: z.number().int().min(MIN_INACTIVE_AFTER_HOURS).max(MAX_INACTIVE_AFTER_HOURS),
     showRunningChildrenWhenCollapsed: z.boolean(),
     autoSettleInactive: z.boolean(),
-    autoSettleAfterDays: z.number().int().min(1).max(90),
+    autoSettleAfterDays: z.number().int().min(MIN_AUTO_SETTLE_AFTER_DAYS).max(MAX_AUTO_SETTLE_AFTER_DAYS),
     autoSettleOnMerge: z.boolean(),
     childSortField: z.enum(CHILD_THREAD_SORT_FIELDS),
     childSortDirection: z.enum(CHILD_THREAD_SORT_DIRECTIONS),
