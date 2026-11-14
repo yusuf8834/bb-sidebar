@@ -1,6 +1,12 @@
 import type { PluginSidebarThread, PluginSidebarThreadRowStatus } from "@get-bb/plugin-sdk/app";
 import { resolveThreadStatus } from "./bb-sdk";
-import { childSubtree, threadAsksForInput, type ThreadWorking } from "./child-status";
+import {
+  childSubtree,
+  threadAsksForInput,
+  threadFailed,
+  threadNeedsAttention,
+  type ThreadWorking,
+} from "./child-status";
 
 /**
  * Whether a thread is working, for display: bb's own rule, from bb's status
@@ -39,18 +45,9 @@ export function isWorkingTree(
   childrenByParent: ReadonlyMap<string, readonly PluginSidebarThread[]>,
   isWorking: ThreadWorking,
 ): boolean {
-  if (
-    thread.hasPendingInteraction ||
-    thread.indicator === "waiting-for-input" ||
-    thread.indicator === "unread-error" ||
-    thread.queuedWork === "failed"
-  ) {
-    return false;
-  }
+  if (threadNeedsAttention(thread)) return false;
   const descendants = childSubtree(childThreads, childrenByParent);
   if (descendants.some(threadAsksForInput)) return false;
   if (isWorking(thread)) return true;
-  return descendants.some(
-    (child) => child.indicator !== "unread-error" && child.queuedWork !== "failed" && isWorking(child),
-  );
+  return descendants.some((child) => !threadFailed(child) && isWorking(child));
 }

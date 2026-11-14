@@ -12,8 +12,7 @@ import {
 import { activeRepresentativeThreadId } from "./inbox-layout";
 import { isInactiveThread } from "./inactive";
 import { isWorkingTree } from "./working-tree";
-import { threadNeedsAttention } from "./useRenamingShelfLocks";
-import { threadsWithAskingDescendants } from "./child-status";
+import { threadNeedsAttention, threadsWithAskingDescendants } from "./child-status";
 import { useWorkingForDisplay } from "./StatusSlot";
 
 interface InboxShelfThreadsOptions {

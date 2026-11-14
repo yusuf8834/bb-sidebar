@@ -66,7 +66,7 @@ export function unhandledIndicator(indicator: never): PluginSidebarThreadIndicat
 export type ThreadWorking = (thread: PluginSidebarThread) => boolean;
 
 export function childStatusKind(thread: PluginSidebarThread, isWorking: ThreadWorking): ChildStatusKind | null {
-  if (thread.indicator === "unread-error" || thread.queuedWork === "failed") return "failed";
+  if (threadFailed(thread)) return "failed";
   if (threadAsksForInput(thread)) return "needs-you";
   if (thread.indicator === "unread-success") return "done";
   if (isWorking(thread)) return "working";
@@ -150,6 +150,16 @@ export function childStatusIndicator(kind: ChildStatusKind): PluginSidebarThread
 /** Whether a thread is blocked on the user: a question, an approval, or a prompt. */
 export function threadAsksForInput(thread: PluginSidebarThread): boolean {
   return thread.hasPendingInteraction || thread.indicator === "waiting-for-input";
+}
+
+/** Whether a thread's last turn or its queued work failed. */
+export function threadFailed(thread: PluginSidebarThread): boolean {
+  return thread.indicator === "unread-error" || thread.queuedWork === "failed";
+}
+
+/** Whether a thread asks for the user or failed: the user's cue, never "working". */
+export function threadNeedsAttention(thread: PluginSidebarThread): boolean {
+  return threadAsksForInput(thread) || threadFailed(thread);
 }
 
 /**

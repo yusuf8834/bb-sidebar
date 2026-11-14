@@ -1,15 +1,7 @@
 import { useEffect, useState } from "react";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
+import { threadNeedsAttention } from "./child-status";
 import type { LifecycleApi } from "./useLifecycle";
-
-export function threadNeedsAttention(thread: PluginSidebarThread): boolean {
-  return (
-    thread.hasPendingInteraction ||
-    thread.indicator === "waiting-for-input" ||
-    thread.indicator === "unread-error" ||
-    thread.queuedWork === "failed"
-  );
-}
 
 export function useRenamingShelfLocks(threads: readonly PluginSidebarThread[], lifecycle: LifecycleApi) {
   const [renamingShelfLocks, setRenamingShelfLocks] = useState<Map<string, "active" | "working" | "inactive">>(
