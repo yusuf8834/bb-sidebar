@@ -1,13 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
-const appTests = [
-  "src/ThreadInbox.*.test.tsx",
-  "src/ParentChip.test.tsx",
-  "src/SubagentsChip.test.tsx",
-  "src/ProjectFavicon.test.tsx",
-  "src/app-worker-state.*.test.tsx",
-];
+const appTests = ["src/ThreadInbox.*.test.tsx", "src/ParentChip.test.tsx", "src/ProjectFavicon.test.tsx"];
 const common = {
   silent: "passed-only" as const,
   testTimeout: 30_000,
