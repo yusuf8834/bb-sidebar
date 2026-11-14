@@ -190,6 +190,13 @@ export async function createWired(
         const tags = invalidations[deliveredInvalidations++] ?? null;
         for (const slot of slots) await slot.behavior.experimental_invalidateRpc(tags);
       } else {
+        // bb's query cache notifies React on a zero-delay timer, which fake
+        // timers hold back until a test advances them.
+        if (vi.isFakeTimers()) {
+          await act(async () => {
+            await vi.advanceTimersByTimeAsync(0);
+          });
+        }
         return;
       }
     }

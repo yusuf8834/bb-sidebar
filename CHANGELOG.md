@@ -9,6 +9,10 @@
 - **Copy thread link is bb's own Copy link.** The item in the row menu's Copy submenu now runs the action behind Copy link in bb's thread menu, instead of building the address itself. The link is the same, including for threads in the Personal project, as are the "Thread link copied" and "Failed to copy thread link" messages. Copy branch and Copy thread ID are unchanged.
 - **"Command" has its own colour.** A thread whose turn has ended but which still has a background command running shows "Command · 11m" in a neutral colour, with its terminal glyph to match: the theme's text colour in light, and in dark a near-white a step brighter than the text, so it stands out from the grey age on idle rows. Before, it used the blue of "Working". Blue now means the agent itself is taking a turn; "Working", "Monitoring", "Workflow", "Agent" and "Planning" keep it. The child badge on a parent row still counts a running command as working and stays blue.
 
+### Fixed
+
+- **The sidebar catches up after a dropped connection.** A change made while bb's connection was down, from another window or the `bb sidebar` command, stayed out of view until the sidebar was opened again. Sidebar settings now reload when bb reconnects, as project colors already did.
+
 ## [0.3.11] - 2026-11-13
 
 ### Added

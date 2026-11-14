@@ -5,3 +5,4 @@
  * with the same tags after the write, and every open client rereads.
  */
 export const PROJECT_COLORS_TAG = "project-colors";
+export const SIDEBAR_SETTINGS_TAG = "sidebar-settings";

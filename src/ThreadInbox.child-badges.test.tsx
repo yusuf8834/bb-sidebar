@@ -378,7 +378,7 @@ describe("ThreadInbox", () => {
     await waitFor(() => expect(rowNames()).toEqual(["Open child thread: New child", "Open child thread: Old child"]));
 
     remoteSettings = { ...remoteSettings, childSortDirection: "ascending" };
-    await rendered.emitRealtime("sidebar-settings", {});
+    await rendered.experimental_invalidateRpc(["sidebar-settings"]);
     await waitFor(() => expect(rowNames()).toEqual(["Open child thread: Old child", "Open child thread: New child"]));
   });
 
@@ -406,13 +406,13 @@ describe("ThreadInbox", () => {
     expect(within(row).queryByRole("img", { name: "Codex" })).toBeNull();
 
     childIconStyle = "provider";
-    await rendered.emitRealtime("sidebar-settings", {});
+    await rendered.experimental_invalidateRpc(["sidebar-settings"]);
     expect(await within(row).findByRole("img", { name: "Codex" })).toBeDefined();
     expect(badge.querySelector("[data-child-thread-dot] [role=img]")?.getAttribute("aria-label")).toBe("Codex");
     expect(row.getAttribute("aria-label")).toContain("Needs you");
 
     childIconStyle = "disc";
-    await rendered.emitRealtime("sidebar-settings", {});
+    await rendered.experimental_invalidateRpc(["sidebar-settings"]);
     await waitFor(() => expect(within(row).queryByRole("img", { name: "Codex" })).toBeNull());
     expect(badge.querySelector("[data-child-thread-dot] [role=img]")).toBeNull();
     expect(badge.querySelector<HTMLElement>("[data-child-thread-dot] span")?.style.backgroundColor).toBe(

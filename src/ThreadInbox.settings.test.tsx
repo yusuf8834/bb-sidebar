@@ -46,12 +46,12 @@ describe("sidebar settings", () => {
     expect(rendered.rpcCalls.some((call) => call.method === "getProjectColors")).toBe(false);
     expect(screen.queryByRole("button", { name: "Archive all settled threads" })).toBeNull();
     settings = { ...settings, projectColorsEnabled: true };
-    await rendered.emitRealtime("sidebar-settings", {});
+    await rendered.experimental_invalidateRpc(["sidebar-settings"]);
     expect(screen.queryByText("Old work")).toBeNull();
     expect(within(settledShelf).queryByRole("button", { name: "Archive thread" })).toBeNull();
     await waitFor(() => expect(document.querySelector("[data-project-stripe]")).not.toBeNull());
     settings = { ...settings, projectColorsEnabled: false };
-    await rendered.emitRealtime("sidebar-settings", {});
+    await rendered.experimental_invalidateRpc(["sidebar-settings"]);
     await waitFor(() => expect(screen.queryByRole("region", { name: "Archived" })).toBeNull());
     expect(within(settledShelf).queryByRole("button", { name: "Archive thread" })).toBeNull();
     expect(within(settledShelf).getByText("Settled work")).toBeDefined();
@@ -148,7 +148,7 @@ describe("sidebar settings", () => {
     await waitFor(() => expect(row("Compact card").querySelector(".h-8")).not.toBeNull());
     for (const display of ["all", "full", "grouped", "none"]) {
       settings = { ...settings, projectColorDisplay: display };
-      await rendered.emitRealtime("sidebar-settings", {});
+      await rendered.experimental_invalidateRpc(["sidebar-settings"]);
       await waitFor(() => {
         assertColor(group, display !== "none");
         assertColor(row("Full card"), display === "all" || display === "full");
@@ -168,7 +168,7 @@ describe("sidebar settings", () => {
       assertColor(row(title), false);
     }
     settings = { ...settings, projectColorsEnabled: false };
-    await rendered.emitRealtime("sidebar-settings", {});
+    await rendered.experimental_invalidateRpc(["sidebar-settings"]);
     await waitFor(() => expect(document.querySelector(".bb-sidebar-project-name")).toBeNull());
     expect(document.querySelector("[data-project-stripe]")).toBeNull();
     expect(document.querySelector(".bb-sidebar-project-monogram")).toBeNull();

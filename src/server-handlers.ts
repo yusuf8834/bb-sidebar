@@ -12,6 +12,7 @@ import type { createPortDiscovery } from "./port-discovery";
 import type { createThreadPullRequests } from "./thread-pull-requests";
 import type { createTitleRegenerator } from "./regenerate-title";
 import { SIDEBAR_SETTINGS_CHANNEL, INBOX_ORDER_CHANNEL } from "./contract";
+import { SIDEBAR_SETTINGS_TAG } from "./rpc-tags";
 import { runThreadTasks } from "./thread-tasks";
 
 const CATALOG_TTL_MS = 5 * 60_000;
@@ -152,6 +153,8 @@ export function createServerHandlers(
       else if (values.compactWorkingThreads !== undefined)
         next.threadDisplay = values.compactWorkingThreads ? "compact-working" : "full";
       writeSidebarSettings(next);
+      ctx.bb.rpc.experimental_invalidate([SIDEBAR_SETTINGS_TAG]);
+      // The settings page still reloads its drafts on this channel.
       ctx.bb.realtime.publish(SIDEBAR_SETTINGS_CHANNEL, {});
       if (
         next.autoSettleInactive !== stored.autoSettleInactive ||

@@ -7,7 +7,7 @@ import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 import { idleSidebarThreadFields } from "./test-fixtures";
 import type { SidebarProvider } from "./ProviderGlyph";
 import { cacheSidebarSettings, DEFAULT_SIDEBAR_SETTINGS } from "./sidebar-settings";
-import { SIDEBAR_SETTINGS_CHANNEL } from "./realtime-channels";
+import { SIDEBAR_SETTINGS_TAG } from "./rpc-tags";
 
 // Load through the harness so the plugin's `@get-bb/plugin-sdk/app` import binds
 // to the test runtime.
@@ -141,7 +141,7 @@ describe("ParentChip", () => {
         rpc: { getSidebarSettings: () => ({ ...DEFAULT_SIDEBAR_SETTINGS, childIconStyle: "provider" }) },
       },
     );
-    await rendered.emitRealtime(SIDEBAR_SETTINGS_CHANNEL, {});
+    await rendered.experimental_invalidateRpc([SIDEBAR_SETTINGS_TAG]);
     expect(screen.queryByRole("img")).toBeNull();
     expect(screen.getByRole("button").querySelector<HTMLElement>("span.rounded-full")?.style.backgroundColor).toBe(
       "oklch(0.72 0.13 290)",
@@ -170,11 +170,11 @@ describe("ParentChip", () => {
     const button = screen.getByRole("button", { name: "Back to parent: Parent" });
     expect(button.querySelector("span.rounded-full")).not.toBeNull();
     settings = { ...settings, childIconStyle: "provider" };
-    await rendered.emitRealtime(SIDEBAR_SETTINGS_CHANNEL, {});
+    await rendered.experimental_invalidateRpc([SIDEBAR_SETTINGS_TAG]);
     expect(await within(button).findByRole("img", { name: "Codex" })).toBeDefined();
     expect(screen.getByRole("button")).toBe(button);
     settings = { ...settings, childIconStyle: "disc" };
-    await rendered.emitRealtime(SIDEBAR_SETTINGS_CHANNEL, {});
+    await rendered.experimental_invalidateRpc([SIDEBAR_SETTINGS_TAG]);
     await waitFor(() => expect(within(button).queryByRole("img")).toBeNull());
     expect(button.querySelector("span.rounded-full")).not.toBeNull();
   });

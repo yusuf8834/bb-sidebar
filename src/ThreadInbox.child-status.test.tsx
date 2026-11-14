@@ -9,7 +9,7 @@ vi.mock("sonner", async () => (await import("./test-inbox")).sonnerMock());
 await loadInboxApp();
 
 describe("ThreadInbox", () => {
-  it("ignores a settings load that answers after a newer one", async () => {
+  it("rereads settings changed while a load is in flight instead of keeping its older answer", async () => {
     const stale = deferred<typeof defaultSidebarSettings>();
     let loads = 0;
     const rendered = renderSlot(inbox, listProps, {
@@ -40,11 +40,10 @@ describe("ThreadInbox", () => {
       },
     });
 
-    await rendered.emitRealtime("sidebar-settings", {});
-    await waitFor(() => expect(screen.queryByRole("list", { name: "Child threads" })).toBeNull());
-
+    // bb keeps one read in flight per query: the change waits for it, then rereads.
+    const invalidated = rendered.experimental_invalidateRpc(["sidebar-settings"]);
     stale.resolve(defaultSidebarSettings);
-    await stale.promise;
+    await invalidated;
     await waitFor(() => expect(loads).toBe(2));
     expect(screen.queryByRole("list", { name: "Child threads" })).toBeNull();
     expect(

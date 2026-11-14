@@ -43,7 +43,7 @@ describe("Compact project display", () => {
 
       for (const compactProjectIconOnly of [true, false]) {
         settings = { ...settings, compactProjectIconOnly };
-        await view.emitRealtime("sidebar-settings", {});
+        await view.experimental_invalidateRpc(["sidebar-settings"]);
         await waitFor(() => {
           for (const title of ["Working thread", "Full pinned thread", "Parked thread"]) {
             const card = row(title);
