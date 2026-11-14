@@ -172,8 +172,8 @@ access are checked by `src/storage-keys.test.ts`.
 
 - Production files and `scripts/**/*.mjs`: at most 500 physical lines; tests
   get 1,000. `scripts/check-file-sizes.mjs` records a ceiling for one file,
-  `src/ThreadCard.tsx`. Growth fails; shrinkage also fails until the ceiling
-  is lowered. Remove the entry once the file is within 500.
+  `src/ThreadCard.tsx`. Growth past it fails; shrinking never does. Remove
+  the entry once the file is within 500.
 - `SidebarSettings.tsx` renders section components; keep draft and save logic
   centralized there.
 - Biome does not format Markdown or YAML. `useImportType` is an error.
