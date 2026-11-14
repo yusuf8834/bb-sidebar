@@ -190,28 +190,6 @@
   --bb-sidebar-monogram-7-fg: var(--bb-sidebar-red-300);
 }
 
-/*
- * A provider logo is drawn once per theme tint, because the tints are provider
- * data rather than CSS, so the pair has to be swapped by visibility. These
- * replace `dark:hidden` / `hidden dark:block`; the `hidden` in the markup
- * still supplies the light default.
- */
-.dark .bb-sidebar-theme-light-only {
-  display: none;
-}
-
-.dark .bb-sidebar-theme-dark-only {
-  display: block;
-}
-
-.light .bb-sidebar-theme-light-only {
-  display: block;
-}
-
-.light .bb-sidebar-theme-dark-only {
-  display: none;
-}
-
 /* Project letter tiles; each theme block above sets their colours. */
 .bb-sidebar-monogram::before {
   content: attr(data-letter);

@@ -10,7 +10,7 @@ await loadInboxApp();
 
 describe("ThreadInbox", () => {
   it.each(["full", "compact-working", "compact-all", "working-shelf"])(
-    "renders provider names, logos, and theme tints from bb's directory (%s)",
+    "renders provider names, and logos and theme tints through bb's provider icon (%s)",
     async (display) => {
       const view = renderSlot(inbox, listProps, {
         sidebarThreads: {
@@ -72,14 +72,28 @@ describe("ThreadInbox", () => {
       const glyph = within(region).getByRole("img", { name: "Pi" });
       const row = glyph.closest("[data-parent-card]")! as HTMLElement;
       expect(within(row).getByText("Working")).toBeDefined();
-      const marks = glyph.querySelectorAll<HTMLElement>("[aria-hidden=true]");
-      expect(marks).toHaveLength(2);
-      expect(marks[0]!.style.maskImage).toContain("/api/v1/system/providers/pi/logo");
-      expect(marks[0]!.style.backgroundColor).toBe("rgb(109, 93, 251)");
-      expect(marks[1]!.style.backgroundColor).toBe("rgb(169, 158, 255)");
+      // bb's ProviderIcon draws the logo and picks the tint for the theme;
+      // the sidebar hands it the directory record unchanged.
+      const mark = glyph.querySelector<HTMLElement>("[data-provider-id]")!;
+      expect(mark.dataset.providerKind).toBe("agent");
+      expect(mark.dataset.providerId).toBe("pi");
+      expect(mark.dataset.providerLogo).toBe("/api/v1/system/providers/pi/logo");
+      expect(JSON.parse(mark.dataset.providerTint!)).toEqual({ light: "#6D5DFB", dark: "#A99EFF" });
       expect(view.container.querySelector('[aria-label="pi"]')).toBeNull();
     },
   );
+
+  it("labels each provider glyph once and hides bb's provider icon inside it", () => {
+    render([thread({ providerId: "codex" })]);
+
+    const glyph = screen.getByRole("img", { name: "Codex" });
+    const mark = glyph.querySelector<HTMLElement>("[data-provider-id]")!;
+    expect(mark.getAttribute("aria-hidden")).toBe("true");
+    expect(mark.hasAttribute("aria-label")).toBe(false);
+    // Untinted logos keep the sidebar's muted ink; bb paints its mask in currentColor.
+    expect(mark.classList.contains("text-muted-foreground/70")).toBe(true);
+    expect(screen.getAllByRole("img", { name: "Codex" })).toHaveLength(1);
+  });
 
   it("falls back to the provider id when the directory has no match", () => {
     render([thread({ providerId: "custom-agent" })]);

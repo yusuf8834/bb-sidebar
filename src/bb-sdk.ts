@@ -19,6 +19,8 @@ export {
   experimental_useSidebarThreadSplit as useSidebarThreadSplit,
   experimental_ThreadStatusGlyph as ThreadStatusGlyph,
   experimental_ShortcutHint as ShortcutHint,
+  // bb 0.49.0, the minimum host (engines.bb), ships it, so it has no fallback.
+  experimental_ProviderIcon as ProviderIcon,
   // bb's own thread-status rule. bb 0.49.0, the minimum host (engines.bb),
   // ships it, so it has no fallback.
   experimental_resolveThreadStatus as resolveThreadStatus,

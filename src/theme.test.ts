@@ -83,7 +83,6 @@ describe("theme", () => {
     if (!existsSync(built)) return;
     const css = readFileSync(built, "utf8");
     expect(css).not.toContain("prefers-color-scheme");
-    expect(css).toContain(".dark .bb-sidebar-theme-light-only");
     expect(css).toMatch(/\.dark\s*\{/);
   });
 });

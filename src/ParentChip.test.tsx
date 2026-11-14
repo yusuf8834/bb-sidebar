@@ -124,7 +124,9 @@ describe("ParentChip", () => {
       },
     );
     const glyph = await screen.findByRole("img", { name: "Codex" });
-    expect(glyph.querySelector<HTMLElement>("span")?.style.maskImage).toBe(`url("${codex.logoUrl}")`);
+    const mark = glyph.querySelector<HTMLElement>("[data-provider-id]");
+    expect(mark?.dataset.providerId).toBe("codex");
+    expect(mark?.dataset.providerLogo).toBe(codex.logoUrl);
     expect(screen.getByRole("button").querySelector("span.rounded-full")).toBeNull();
     expect(screen.getByRole("button").textContent).toBe(compact ? "" : "Parent");
   });
