@@ -278,9 +278,11 @@ export function statusToneClass(indicator: PluginSidebarThreadIndicator): string
     case "runtime":
     case "workflow":
     case "background-agent":
-    case "background-command":
     case "plan-mode":
       return "text-[color:var(--bb-sidebar-tone-working)]";
+    case "background-command":
+      // Only a process the agent started is running, not the agent itself.
+      return "text-[color:var(--bb-sidebar-tone-command)]";
     case "draft":
     case "working-draft":
     case "queued-waiting":

@@ -237,6 +237,23 @@ describe("card metadata", () => {
     expect(screen.queryByText("3h")).toBeNull();
   });
 
+  // A command left running after the turn is not the agent working, so it
+  // takes the text colour rather than the working blue.
+  it("draws a running background command in the command tone, not the working one", async () => {
+    render([
+      thread({
+        id: "thr_cmd",
+        indicator: "background-command",
+        indicatorLabel: "Background command running",
+        updatedAt: Date.now() - (3 * 3_600_000 + 60_000),
+      }),
+    ]);
+    expect(await screen.findByLabelText("Background command running")).toBeDefined();
+    const label = screen.getByText("Command");
+    expect(label.className).toContain("text-[color:var(--bb-sidebar-tone-command)]");
+    expect(label.className).not.toContain("tone-working");
+  });
+
   // The host says only that a thread is working, so the sidebar keeps its own
   // stamp per thread and shows how long the current stretch has run.
   it("shows how long a thread has been working", async () => {

@@ -79,6 +79,12 @@
   --bb-sidebar-tone-success: var(--bb-sidebar-emerald-700);
   --bb-sidebar-tone-working: var(--bb-sidebar-sky-600);
   --bb-sidebar-tone-draft: var(--bb-sidebar-amber-700);
+  /*
+   * A background command left running after the turn ended. The text colour,
+   * not the working blue: only a process is live, not the agent. Amber is
+   * taken by Draft and Queued.
+   */
+  --bb-sidebar-tone-command: var(--foreground);
 
   --bb-sidebar-woke: var(--bb-sidebar-amber-700);
 
@@ -140,6 +146,12 @@
   --bb-sidebar-tone-success: var(--bb-sidebar-emerald-300);
   --bb-sidebar-tone-working: var(--bb-sidebar-sky-400);
   --bb-sidebar-tone-draft: var(--bb-sidebar-amber-300);
+  /*
+   * bb's dark foreground sits a few points above muted-foreground, so a
+   * Command label in it would read like the idle age beside it. Lift it
+   * toward white.
+   */
+  --bb-sidebar-tone-command: color-mix(in oklch, var(--foreground) 45%, white);
 
   --bb-sidebar-woke: var(--bb-sidebar-amber-300);
 

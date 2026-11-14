@@ -63,6 +63,15 @@ describe("theme", () => {
     }
   });
 
+  // bb's dark --foreground is only a few points above --muted-foreground, so
+  // a Command label in plain foreground would read like the idle age.
+  it("draws Command in the text colour, lifted toward white in dark", () => {
+    const light = cssBlock(THEME_RULES, ":root,\n.light {");
+    const dark = cssBlock(THEME_RULES, ".dark {");
+    expect(light).toMatch(/--bb-sidebar-tone-command:\s*var\(--foreground\);/);
+    expect(dark).toMatch(/--bb-sidebar-tone-command:\s*color-mix\(in oklch, var\(--foreground\) \d+%, white\);/);
+  });
+
   it("keys the stylesheet off bb's theme class, never the OS", () => {
     expect(THEME_RULES).not.toContain("prefers-color-scheme");
     expect(THEME_RULES).toContain(".dark {");

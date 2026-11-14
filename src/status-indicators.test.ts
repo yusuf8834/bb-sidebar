@@ -59,4 +59,20 @@ describe("indicators", () => {
     expect(statusToneClass("queued-waiting")).toBe(statusToneClass("draft"));
     expect(statusToneClass(futureKind)).toBe(statusToneClass("none"));
   });
+
+  it("tones a background command apart from live agent work and from idle", () => {
+    expect(statusToneClass("background-command")).toBe("text-[color:var(--bb-sidebar-tone-command)]");
+    expect(statusToneClass("background-command")).not.toBe(statusToneClass("runtime"));
+    expect(statusToneClass("background-command")).not.toBe(statusToneClass("none"));
+    for (const kind of ["workflow", "background-agent", "plan-mode"] as const) {
+      expect(statusToneClass(kind)).toBe(statusToneClass("runtime"));
+    }
+  });
+
+  it("draws the background command glyph in the command tone", () => {
+    const container = glyphFor("background-command", "Background command running");
+    const glyph = container.querySelector('[aria-label="Background command running"]');
+    expect(glyph?.closest('[class*="tone-command"]')).not.toBeNull();
+    expect(container.querySelector('[class*="tone-working"]')).toBeNull();
+  });
 });
