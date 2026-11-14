@@ -11,7 +11,7 @@
 
 ### Fixed
 
-- **The sidebar catches up after a dropped connection.** A change made while bb's connection was down, from another window or the `bb sidebar` command, stayed out of view until the sidebar was opened again. Sidebar settings, the inbox order, and the project lists on the settings page now reload when bb reconnects, as project colors already did.
+- **The sidebar catches up after a dropped connection.** A thread settled, snoozed, parked or woken while bb's connection was down, from another window, the `bb sidebar` command or the automatic-settle check, stayed on its old shelf until the sidebar was opened again. The shelves, the inbox order, the sidebar settings the thread list applies, and the project lists on the settings page now reload when bb reconnects, as project colors already did. The settings page's own fields and the project icon list still do not.
 
 ## [0.3.11] - 2026-11-13
 

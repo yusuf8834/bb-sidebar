@@ -268,7 +268,7 @@ describe("parking threads", () => {
     await within(dialog).findByRole("button", { name: "Cleaning..." });
 
     settled = false;
-    await rendered.emitRealtime("lifecycle", {});
+    await rendered.experimental_invalidateRpc(["lifecycle"]);
     await waitFor(() => expect(shelf.hidden).toBe(true));
     expect(screen.getByRole("dialog", { name: "Clean settled resources?" })).toBe(dialog);
 

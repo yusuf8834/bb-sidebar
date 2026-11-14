@@ -1,4 +1,6 @@
 import { createContext, useContext, type ComponentType, type ReactNode } from "react";
+import { act } from "@testing-library/react";
+import { vi } from "vitest";
 import { useBbNavigate, useSdk } from "@get-bb/plugin-sdk/app";
 import type { PluginSdkApp, PluginThreadActionEntry } from "@get-bb/plugin-sdk/app";
 import {
@@ -147,5 +149,23 @@ export function renderSlot<Props extends object>(
   };
   rendered.rerender = rerender;
   rendered.lifecycle.rerender = rerender;
+  // bb's query cache tells React about new data on a zero-delay timer, after
+  // the SDK driver's act has returned. Wait for it, as a browser would.
+  const settleCache = () =>
+    act(async () => {
+      if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(0);
+      else await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  const { experimental_invalidateRpc: invalidate, setRealtimeConnectionState: setConnection } = rendered.behavior;
+  rendered.behavior.experimental_invalidateRpc = async (...args) => {
+    await invalidate(...args);
+    await settleCache();
+  };
+  rendered.experimental_invalidateRpc = rendered.behavior.experimental_invalidateRpc;
+  rendered.behavior.setRealtimeConnectionState = async (state) => {
+    await setConnection(state);
+    await settleCache();
+  };
+  rendered.setRealtimeConnectionState = rendered.behavior.setRealtimeConnectionState;
   return Object.assign(rendered, { threadActionCalls, splitSourceCalls, linkCalls: renderedLinkCalls });
 }

@@ -80,10 +80,7 @@ describe("children of older parent-only settles", () => {
       { threadId: "grandchild", ...inherited },
       { threadId: "hidden", ...inherited },
     ]);
-    expect(harness.inspection.realtimeSignals).toContainEqual({
-      channel: "lifecycle",
-      payload: { threadIds: ["quiet", "grandchild", "hidden"] },
-    });
+    expect(harness.inspection.experimental_rpcInvalidations).toContainEqual(["lifecycle"]);
 
     // A later rowless child is not legacy data. The repair does not run again.
     bb.storage.database().prepare("DELETE FROM thread_lifecycle WHERE thread_id = 'quiet'").run();

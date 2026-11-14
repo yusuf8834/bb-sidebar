@@ -12,7 +12,7 @@ import {
   thread,
   toastMocks,
 } from "./test-inbox";
-import { LIFECYCLE_CHANNEL } from "./realtime-channels";
+import { LIFECYCLE_TAG } from "./rpc-tags";
 
 vi.mock("sonner", async () => (await import("./test-inbox")).sonnerMock());
 
@@ -136,7 +136,7 @@ async function settleAndClosePorts(slot: ReturnType<typeof mount>["slot"], title
   const row = within(active).getByRole("link", { name: title }).closest("li")!;
   fireEvent.click(within(row).getByLabelText("Settle thread"));
   await waitFor(() => expect(toastMocks.message).toHaveBeenCalledWith("Close this thread's ports?", expect.anything()));
-  await slot.behavior.emitRealtime(LIFECYCLE_CHANNEL, {});
+  await slot.behavior.experimental_invalidateRpc([LIFECYCLE_TAG]);
   return async () => {
     const options = toastMocks.message.mock.calls
       .filter(([message]) => message === "Close this thread's ports?")
@@ -187,7 +187,7 @@ describe("open ports of settled threads", () => {
     const { slot, scans, unsettle } = mount();
     await settledRowLink();
     unsettle();
-    await slot.behavior.emitRealtime(LIFECYCLE_CHANNEL, {});
+    await slot.behavior.experimental_invalidateRpc([LIFECYCLE_TAG]);
     await waitFor(() => expect(scans().at(-1)).toEqual(["env_live", "env_settled"]));
     const active = await screen.findByRole("region", { name: "Active" });
     expect(await within(active).findByRole("img", { name: PLUG })).toBeDefined();

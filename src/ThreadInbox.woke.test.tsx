@@ -72,14 +72,15 @@ describe("parking threads", () => {
     ] as const;
     for (const [title, status] of expected) {
       const row = (await screen.findByText(title)).closest("li")!;
-      expect(within(row).getByRole("button", { name: "Dismiss Woke marker" })).toBeDefined();
+      // The row shows before the lifecycle rows that mark it Woke arrive.
+      expect(await within(row).findByRole("button", { name: "Dismiss Woke marker" })).toBeDefined();
       expect(within(row).getByText(status)).toBeDefined();
     }
 
     const pendingRow = screen.getByText("Pending wake").closest("li")!;
     fireEvent.click(within(pendingRow).getByRole("button", { name: "Dismiss Woke marker" }));
     await waitFor(() => expect(acknowledged).toEqual(["pending"]));
-    await rendered.emitRealtime("lifecycle", {});
+    await rendered.experimental_invalidateRpc(["lifecycle"]);
     await waitFor(() =>
       expect(
         within(screen.getByText("Pending wake").closest("li")!).queryByRole("button", { name: "Dismiss Woke marker" }),
@@ -144,7 +145,7 @@ describe("parking threads", () => {
     );
 
     const row = (await screen.findByText("Woke work")).closest("li")!;
-    const dismiss = within(row).getByRole("button", {
+    const dismiss = await within(row).findByRole("button", {
       name: "Dismiss Woke marker",
     });
     expect(within(row).getByText("Failed")).toBeDefined();
@@ -164,7 +165,7 @@ describe("parking threads", () => {
       ...rendered.threadActionCalls,
     ]).toEqual([]);
 
-    await rendered.emitRealtime("lifecycle", {});
+    await rendered.experimental_invalidateRpc(["lifecycle"]);
     const settled = () => screen.getByText("Woke work").closest("li")!;
     await waitFor(() =>
       expect(

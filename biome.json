@@ -387,6 +387,8 @@
                       "../**/wired.flows.test",
                       "./**/wired.live-reads.test",
                       "../**/wired.live-reads.test",
+                      "./**/ThreadInbox.lifecycle-reads.test",
+                      "../**/ThreadInbox.lifecycle-reads.test",
                       "../**/RateLimitRecovery",
                       "../**/RateLimits",
                       "../**/ThreadInbox.rate-limits.test",
@@ -838,6 +840,7 @@
                       "**/useScrollFade.test",
                       "**/wired.flows.test",
                       "**/wired.live-reads.test",
+                      "**/ThreadInbox.lifecycle-reads.test",
                       "**/RateLimitRecovery",
                       "**/RateLimits",
                       "**/ThreadInbox.rate-limits.test"

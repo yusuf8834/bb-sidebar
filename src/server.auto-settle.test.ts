@@ -293,10 +293,7 @@ describe("automatic settle evaluation", () => {
         settledOverride: null,
       }),
     ]);
-    expect(harness.inspection.realtimeSignals).toContainEqual({
-      channel: "lifecycle",
-      payload: { threadIds: ["thr_old"] },
-    });
+    expect(harness.inspection.experimental_rpcInvalidations).toContainEqual(["lifecycle"]);
   });
 
   it("never settles or stops idle threads that still have live work", async () => {

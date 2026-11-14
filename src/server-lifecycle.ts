@@ -1,7 +1,7 @@
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import type { ServerContext } from "./server-context";
 import type { SettledOverride } from "./auto-settle";
-import { LIFECYCLE_CHANNEL } from "./contract";
+import { LIFECYCLE_TAG } from "./rpc-tags";
 import { canPark, hasLiveWork, isTurnInFlight, resolveRowShelf, rowActivity } from "./lifecycle";
 import { threadTreeIds } from "./thread-tree";
 import { shelfRowIds } from "./inbox";
@@ -87,7 +87,7 @@ export function createServerLifecycle(ctx: ServerContext) {
       )
       .run(row.threadId, row.settledAt, row.settledOverride, row.snoozedUntil, row.snoozedAt, row.parkedAt ?? null);
     if (publish) {
-      ctx.bb.realtime.publish(LIFECYCLE_CHANNEL, { threadId: row.threadId });
+      ctx.bb.rpc.experimental_invalidate([LIFECYCLE_TAG]);
     }
   };
 
@@ -97,12 +97,12 @@ export function createServerLifecycle(ctx: ServerContext) {
 
   const publishLifecycleChanges = (threadIds: readonly string[]): void => {
     if (threadIds.length === 0) return;
-    ctx.bb.realtime.publish(LIFECYCLE_CHANNEL, { threadIds });
+    ctx.bb.rpc.experimental_invalidate([LIFECYCLE_TAG]);
   };
 
   const clear = (threadId: string): void => {
     ctx.db.prepare(`DELETE FROM thread_lifecycle WHERE thread_id = ?`).run(threadId);
-    ctx.bb.realtime.publish(LIFECYCLE_CHANNEL, { threadId });
+    ctx.bb.rpc.experimental_invalidate([LIFECYCLE_TAG]);
   };
 
   const clearSettlingState = (threadId: string): boolean => {
@@ -122,7 +122,7 @@ export function createServerLifecycle(ctx: ServerContext) {
         false,
       );
     }
-    ctx.bb.realtime.publish(LIFECYCLE_CHANNEL, { threadId });
+    ctx.bb.rpc.experimental_invalidate([LIFECYCLE_TAG]);
     return true;
   };
 

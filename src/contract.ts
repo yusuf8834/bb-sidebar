@@ -10,7 +10,6 @@ import {
 } from "./sidebar-settings-values";
 import { configuredSnoozePresetError } from "./lifecycle";
 export {
-  LIFECYCLE_CHANNEL,
   SIDEBAR_SETTINGS_CHANNEL,
   PROJECT_ICONS_CHANNEL,
   RATE_LIMITS_CHANNEL,

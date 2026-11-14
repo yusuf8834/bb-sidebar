@@ -41,10 +41,7 @@ describe("settling thread trees", () => {
       if (event === "thread.created") {
         expect(rows.find((row) => row.threadId === "grandchild")?.settledAt).toEqual(expect.any(Number));
       }
-      expect(harness.inspection.realtimeSignals.at(-1)).toEqual({
-        channel: "lifecycle",
-        payload: { threadIds: ["child", "parent"] },
-      });
+      expect(harness.inspection.experimental_rpcInvalidations.at(-1)).toEqual(["lifecycle"]);
     },
   );
 
@@ -221,7 +218,9 @@ describe("settling thread trees", () => {
     expect(new Set(rows.map((row) => row.settledAt)).size).toBe(1);
     expect(rows.every((row) => row.settledOverride === "settled" && row.snoozedUntil === null)).toBe(true);
     expect(harness.inspection.sdk.callsTo("threads.stop")).toHaveLength(4);
-    expect(harness.inspection.realtimeSignals.filter((signal) => signal.channel === "lifecycle")).toHaveLength(1);
+    expect(harness.inspection.experimental_rpcInvalidations.filter((tags) => tags?.includes("lifecycle"))).toHaveLength(
+      1,
+    );
     await harness.behavior.callRpc("unsettle", { threadId: "parent" });
     const restored = (await harness.behavior.callRpc("listLifecycle", {})) as LifecycleListResult;
     expect(restored.rows).toEqual([

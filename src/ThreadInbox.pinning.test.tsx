@@ -181,11 +181,12 @@ describe("ThreadInbox", () => {
       },
     });
 
-    const pinned = await screen.findByRole("region", { name: "Pinned" });
+    // Every pinned thread shows in Pinned until the lifecycle rows arrive.
+    expect(await screen.findByRole("region", { name: "Settled" })).toBeDefined();
+    expect(await screen.findByRole("region", { name: "Snoozed" })).toBeDefined();
+    const pinned = screen.getByRole("region", { name: "Pinned" });
     expect(within(pinned).getByText("Pinned auto")).toBeDefined();
     expect(within(pinned).queryByText("Pinned manual")).toBeNull();
     expect(within(pinned).queryByText("Pinned snooze")).toBeNull();
-    expect(await screen.findByRole("region", { name: "Settled" })).toBeDefined();
-    expect(await screen.findByRole("region", { name: "Snoozed" })).toBeDefined();
   });
 });

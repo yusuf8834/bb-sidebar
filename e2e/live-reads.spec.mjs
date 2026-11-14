@@ -1,5 +1,5 @@
 import { expect } from "@playwright/test";
-import { test, fixture, rpc, shelf, reset, open } from "./helpers.mjs";
+import { test, fixture, rpc, shelf, link, menu, reset, open } from "./helpers.mjs";
 
 /**
  * Put bb's realtime sockets under the test's control. `drop()` closes every
@@ -35,6 +35,21 @@ async function controlRealtime(page) {
 
 test.beforeEach(async ({ request }) => {
   await reset(request);
+});
+
+test("shelf rows changed while the connection is down refresh after it reconnects", async ({ page, request }) => {
+  test.setTimeout(60_000);
+  const thread = fixture.threads[0];
+  const realtime = await controlRealtime(page);
+  await open(page);
+  await expect(link(page, thread.title)).toBeVisible();
+  await realtime.drop();
+  await rpc(request, "settle", { threadId: thread.id });
+  // The page cannot have heard about the settle: the row is still in Active.
+  await page.waitForTimeout(1_500);
+  await expect(link(page, thread.title)).toBeVisible();
+  realtime.restore();
+  await expect(link(page, thread.title)).toHaveCount(0, { timeout: 30_000 });
 });
 
 test("project colors changed while the connection is down refresh after it reconnects", async ({ page, request }) => {
@@ -107,4 +122,28 @@ test("a reorder right after the sidebar loads shows at once and survives the rer
   await expect.poll(() => activeTitles(page), { timeout: 1_000 }).toEqual(expected);
   await page.waitForTimeout(2_500);
   expect(await activeTitles(page)).toEqual(expected);
+});
+
+test("a thread settled in one window leaves Active in another open window", async ({ page }) => {
+  const thread = fixture.threads[0];
+  const other = await page.context().newPage();
+  await open(page);
+  await open(other);
+  await expect(link(other, thread.title)).toBeVisible();
+  await (await menu(page, thread.title)).getByRole("menuitem", { name: "Settle", exact: true }).click();
+  await expect(link(page, thread.title)).toHaveCount(0);
+  await expect(link(other, thread.title)).toHaveCount(0);
+  await expect(shelf(other, "Settled")).toBeVisible();
+  await other.close();
+});
+
+test("a settle right after the sidebar loads shows at once and survives the reread", async ({ page }) => {
+  const thread = fixture.threads[1];
+  await open(page);
+  // Inside the cache's two-second freshness window of the first read.
+  await (await menu(page, thread.title)).getByRole("menuitem", { name: "Settle", exact: true }).click();
+  await expect(link(page, thread.title)).toHaveCount(0, { timeout: 1_000 });
+  await page.waitForTimeout(2_500);
+  await expect(link(page, thread.title)).toHaveCount(0);
+  await expect(shelf(page, "Settled")).toBeVisible();
 });

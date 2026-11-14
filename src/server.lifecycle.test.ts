@@ -79,10 +79,7 @@ describe("lifecycle RPC", () => {
         },
       ],
     });
-    expect(harness.inspection.realtimeSignals.at(-1)).toEqual({
-      channel: "lifecycle",
-      payload: { threadId: "thr_1" },
-    });
+    expect(harness.inspection.experimental_rpcInvalidations.at(-1)).toEqual(["lifecycle"]);
   });
 
   it.each(["settle", "snooze", "park"])("preserves %s when native pinning fails", async (method) => {

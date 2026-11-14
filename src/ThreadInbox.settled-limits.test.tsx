@@ -6,7 +6,8 @@ import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 import { renderSlot } from "./test-slot";
 import { defaultSidebarSettings, inbox, listProps, loadInboxApp, thread } from "./test-inbox";
 import { deferred } from "./test-fixtures";
-import { LIFECYCLE_CHANNEL, RATE_LIMITS_CHANNEL } from "./realtime-channels";
+import { RATE_LIMITS_CHANNEL } from "./realtime-channels";
+import { LIFECYCLE_TAG } from "./rpc-tags";
 
 await loadInboxApp();
 let clock = Date.parse("2026-10-26T19:49:00Z");
@@ -138,7 +139,7 @@ describe("provider limits of settled threads", () => {
     await openSettled();
     expect(lookups()).toEqual([]);
     rows = [];
-    await slot.behavior.emitRealtime(LIFECYCLE_CHANNEL, {});
+    await slot.behavior.experimental_invalidateRpc([LIFECYCLE_TAG]);
     await waitFor(() => expect(lookups()).toEqual([{ keys: ["limited"] }]));
     const active = await screen.findByRole("region", { name: "Active" });
     expect(await within(active).findByText("Limit reached")).toBeDefined();
@@ -154,11 +155,11 @@ describe("provider limits of settled threads", () => {
     expect(await within(settled).findByText("Limit reached")).toBeDefined();
     fireEvent.keyDown(row, { key: "Escape" });
     rows = [];
-    await slot.behavior.emitRealtime(LIFECYCLE_CHANNEL, {});
+    await slot.behavior.experimental_invalidateRpc([LIFECYCLE_TAG]);
     await waitFor(() => expect(lookups()).toHaveLength(2));
     // Settled again: neither the looked-up nor the recurring answer stays behind.
     rows = [settledRow];
-    await slot.behavior.emitRealtime(LIFECYCLE_CHANNEL, {});
+    await slot.behavior.experimental_invalidateRpc([LIFECYCLE_TAG]);
     // The shelf stays expanded from before.
     await within(await screen.findByRole("region", { name: "Settled" })).findByRole("link", { name: /Limited work/ });
     await act(async () => {});

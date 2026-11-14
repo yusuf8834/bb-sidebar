@@ -246,6 +246,8 @@ describe("ThreadInbox", () => {
       });
       const active = screen.getByRole("region", { name: "Active" });
       await waitFor(() => expect(rowLinks(active).map((e) => e.getAttribute("aria-label"))).toEqual(["a", "x"]));
+      // The rows look the same before the saved order arrives; move only once it has.
+      await waitFor(() => expect(JSON.parse(localStorage.getItem("bb-sidebar:inbox-order-cache:v1")!)).toEqual(order));
       const x = within(active).getByRole("link", { name: "x" });
       if (gesture === "keyboard") fireEvent.keyDown(x, { key: "ArrowUp", altKey: true });
       else {
@@ -375,7 +377,7 @@ describe("ThreadInbox", () => {
         rows[index] = { ...rows[index]!, projectId: "web" };
       }
       const expected = [...order];
-      await rendered.behavior.emitRealtime("lifecycle", {});
+      await rendered.behavior.experimental_invalidateRpc(["lifecycle"]);
       await rendered.behavior.experimental_invalidateRpc(["inbox-order"]);
       await waitFor(() => expect(visible()).toEqual(["a", "x", "y"]));
       fireEvent.pointerUp(window, { clientX: 20, clientY: 30, pointerId: 1 });
@@ -427,7 +429,7 @@ describe("ThreadInbox", () => {
       expect(visible()).toEqual(["b", "a"]);
       rows.splice(0, rows.length, ...rows.filter((row) => ["a", "ca"].includes(row.id)));
       order = ["a", "ca"];
-      await rendered.behavior.emitRealtime("lifecycle", {});
+      await rendered.behavior.experimental_invalidateRpc(["lifecycle"]);
       await rendered.behavior.experimental_invalidateRpc(["inbox-order"]);
       await waitFor(() => expect(visible()).toEqual(["a"]));
       fireEvent.pointerUp(window, { clientX: 20, clientY: 60, pointerId: 1 });
@@ -445,7 +447,7 @@ describe("ThreadInbox", () => {
         snoozedUntil: null,
         snoozedAt: null,
       });
-      let lifecycleRows: Array<ReturnType<typeof settledRow>> = [];
+      let lifecycleRows: Array<Omit<ReturnType<typeof settledRow>, "settledAt"> & { settledAt: number | null }> = [];
       const rows = [
         thread({ id: "w1", projectId: "web", title: "Web one", updatedAt: Date.now() }),
         thread({ id: "x", projectId: "api", title: "Loose X", updatedAt: Date.now() }),
@@ -477,7 +479,7 @@ describe("ThreadInbox", () => {
           .filter((label) => /^(Web|Api|Zed|New) \(|^(Web one|Web two|Loose X|Loose Y|New one)$/.test(label ?? ""));
       const settle = async (...threadIds: string[]) => {
         lifecycleRows = threadIds.map(settledRow);
-        await rendered.behavior.emitRealtime("lifecycle", {});
+        await rendered.behavior.experimental_invalidateRpc(["lifecycle"]);
       };
       await waitFor(() => expect(layout()).toEqual(["Web (2)", "Web one", "Web two", "Loose X", "Loose Y"]));
       await waitFor(() => expect(savedProjectOrder()).toEqual(["web", "api", "zed"]));
@@ -496,7 +498,9 @@ describe("ThreadInbox", () => {
 
       // A project new to the view starts at the top.
       rows.push(thread({ id: "n1", projectId: "new", title: "New one", createdAt: Date.now(), updatedAt: Date.now() }));
-      await rendered.behavior.emitRealtime("lifecycle", {});
+      // The fake has no thread-snapshot driver; a lifecycle change re-renders the inbox.
+      lifecycleRows = [{ threadId: "n1", settledAt: null, snoozedUntil: null, snoozedAt: null }];
+      await rendered.behavior.experimental_invalidateRpc(["lifecycle"]);
       await waitFor(() => expect(layout()).toEqual(["New one", "Web (2)", "Web one", "Web two", "Loose X", "Loose Y"]));
       await waitFor(() => expect(savedProjectOrder()).toEqual(["new", "web", "api", "zed"]));
       expect(rendered.rpcCalls.filter((call) => call.method.startsWith("reorder"))).toEqual([]);
@@ -582,6 +586,7 @@ describe("ThreadInbox", () => {
       let saved: string[] | null = null;
       renderProjects((ids) => (saved = ids));
       const card = await screen.findByRole("link", { name: "Web two" });
+      await waitFor(() => expect(localStorage.getItem("bb-sidebar:inbox-order-cache:v1")).not.toBeNull());
       fireEvent.keyDown(card, { key: "ArrowUp", altKey: true });
       // The project's threads swap within the slots they already held.
       await waitFor(() => expect(saved).toEqual(["w2", "x", "w1", "y"]));
