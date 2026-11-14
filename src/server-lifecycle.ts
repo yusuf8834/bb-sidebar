@@ -2,7 +2,7 @@ import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import type { ServerContext } from "./server-context";
 import type { SettledOverride } from "./auto-settle";
 import { LIFECYCLE_TAG } from "./rpc-tags";
-import { canPark, hasLiveWork, isTurnInFlight, resolveRowShelf, rowActivity } from "./lifecycle";
+import { canPark, resolveRowShelf, rowParkSignals } from "./lifecycle";
 import { threadTreeIds } from "./thread-tree";
 import { shelfRowIds } from "./inbox";
 
@@ -264,9 +264,7 @@ export function createServerLifecycle(ctx: ServerContext) {
   type CleanupThread = Awaited<ReturnType<typeof loadPolicyThreads>>[number];
 
   const threadSignals = (thread: CleanupThread) => ({
-    hasPendingInteraction: thread.hasPendingInteraction,
-    hasQueuedWork: thread.queuedWork !== "none",
-    isWorking: hasLiveWork(rowActivity(thread.activity), isTurnInFlight(thread.status)),
+    ...rowParkSignals(thread),
     isUnread: thread.lastReadAt === null || thread.latestAttentionAt > thread.lastReadAt,
     latestAttentionAt: thread.latestAttentionAt,
   });

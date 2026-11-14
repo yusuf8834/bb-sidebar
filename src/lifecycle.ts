@@ -86,7 +86,7 @@ export function parkBlocker(signals: ParkSignals): ParkBlocker | null {
 }
 
 /** A turn bb has accepted and not yet finished, in either thread view. */
-export function isTurnInFlight(status: PluginSidebarThread["status"]): boolean {
+function isTurnInFlight(status: PluginSidebarThread["status"]): boolean {
   return status === "active" || status === "pending" || status === "starting" || status === "stopping";
 }
 
@@ -97,7 +97,7 @@ export function isTurnInFlight(status: PluginSidebarThread["status"]): boolean {
  * different bb views, so each passes its own turn signal, but the counters
  * that make a thread busy must never differ between them.
  */
-export function hasLiveWork(activity: PluginSidebarThreadActivity, turnInFlight: boolean): boolean {
+function hasLiveWork(activity: PluginSidebarThreadActivity, turnInFlight: boolean): boolean {
   return (
     turnInFlight ||
     activity.workflows > 0 ||
@@ -108,7 +108,7 @@ export function hasLiveWork(activity: PluginSidebarThreadActivity, turnInFlight:
 }
 
 /** The activity counts on bb's project-thread row, which server code reads. */
-export interface ThreadRowActivity {
+interface ThreadRowActivity {
   activeBackgroundAgentCount: number;
   activeBackgroundCommandCount: number;
   activePlanModeCount: number;
@@ -119,12 +119,29 @@ export interface ThreadRowActivity {
  * A project-thread row's counts in the sidebar view's activity shape, so
  * server code and the sidebar judge live work over the same fields.
  */
-export function rowActivity(activity: ThreadRowActivity): PluginSidebarThreadActivity {
+function rowActivity(activity: ThreadRowActivity): PluginSidebarThreadActivity {
   return {
     workflows: activity.activeWorkflowCount,
     backgroundAgents: activity.activeBackgroundAgentCount,
     backgroundCommands: activity.activeBackgroundCommandCount,
     planMode: activity.activePlanModeCount,
+  };
+}
+
+/** The fields of bb's project-thread row, which server code reads, that block parking. */
+export interface ThreadRowWork {
+  activity: ThreadRowActivity;
+  hasPendingInteraction: boolean;
+  queuedWork: "failed" | "none" | "waiting";
+  status: PluginSidebarThread["status"];
+}
+
+/** The parking signals for bb's project-thread row: the server's `sidebarThreadSignals`. */
+export function rowParkSignals(thread: ThreadRowWork): ParkSignals {
+  return {
+    hasPendingInteraction: thread.hasPendingInteraction,
+    hasQueuedWork: thread.queuedWork !== "none",
+    isWorking: hasLiveWork(rowActivity(thread.activity), isTurnInFlight(thread.status)),
   };
 }
 

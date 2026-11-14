@@ -1,4 +1,4 @@
-import { canPark, hasLiveWork, isTurnInFlight, rowActivity, type ThreadRowActivity } from "./lifecycle";
+import { canPark, rowParkSignals, type ThreadRowWork } from "./lifecycle";
 
 export const MIN_AUTO_SETTLE_AFTER_DAYS = 1;
 export const MAX_AUTO_SETTLE_AFTER_DAYS = 90;
@@ -14,14 +14,10 @@ export interface AutoSettleLifecycleState {
 }
 
 /** The fields of a bb project-thread row that the policy reads. */
-export interface AutoSettleThread {
-  activity: ThreadRowActivity;
+export interface AutoSettleThread extends ThreadRowWork {
   createdAt: number;
-  hasPendingInteraction: boolean;
   latestAttentionAt: number;
   pinnedAt: number | null;
-  queuedWork: "failed" | "none" | "waiting";
-  status: "active" | "error" | "idle" | "pending" | "starting" | "stopping";
   updatedAt: number;
 }
 
@@ -41,21 +37,12 @@ interface AutoSettleSettings {
 
 type AutoSettleDecision = "keep" | "settle" | "unsettle";
 
-/** The same live work that blocks a manual settle in the sidebar. */
-function isWorking(thread: AutoSettleThread): boolean {
-  return hasLiveWork(rowActivity(thread.activity), isTurnInFlight(thread.status));
-}
-
 // Settling also stops the thread's runtime, so anything the sidebar would
 // refuse to park must keep it out of policy reach too.
 function cannotAutoSettle(lifecycle: AutoSettleLifecycleState | null, thread: AutoSettleThread): boolean {
   return (
     thread.pinnedAt !== null ||
-    !canPark({
-      hasPendingInteraction: thread.hasPendingInteraction,
-      hasQueuedWork: thread.queuedWork !== "none",
-      isWorking: isWorking(thread),
-    }) ||
+    !canPark(rowParkSignals(thread)) ||
     lifecycle?.parkedAt != null ||
     lifecycle?.snoozedUntil != null
   );
