@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
+import { useEffect, useMemo, useState } from "react";
+import { useRpc } from "@get-bb/plugin-sdk/app";
 import { toast } from "./lib/toast";
 import type { bbSidebarRpcContract } from "./contract";
-import { PROJECT_ICONS_CHANNEL } from "./realtime-channels";
+import { useSidebarRead } from "./bb-sdk";
 import { cn } from "./lib/utils";
 import { SettingRow, SettingsSection, SettingsSelect, secondaryButtonClass } from "./settings-ui";
 
@@ -13,37 +13,20 @@ interface ProjectChoice {
 
 export function ProjectManagement() {
   const rpc = useRpc<typeof bbSidebarRpcContract>();
-  const request = useRef(0);
-  const [projects, setProjects] = useState<ProjectChoice[]>([]);
+  const directory = useSidebarRead("listProjects");
+  // A removed project leaves the list at once, whatever a read in flight says.
+  const [removedIds, setRemovedIds] = useState<ReadonlySet<string>>(() => new Set());
+  const projects = useMemo<ProjectChoice[]>(
+    () => (directory.data?.projects ?? []).filter((project) => !removedIds.has(project.id)),
+    [directory.data, removedIds],
+  );
+  const loadFailed = directory.error !== null;
+  const loading = directory.data === undefined && !loadFailed;
   const [selectedId, setSelectedId] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [loadFailed, setLoadFailed] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [removing, setRemoving] = useState(false);
   const selected = projects.find((project) => project.id === selectedId) ?? projects[0];
 
-  const load = useCallback(async () => {
-    const seq = ++request.current;
-    try {
-      const result = await rpc.call("listProjects", {});
-      if (seq !== request.current) return;
-      setProjects(result.projects);
-      setLoadFailed(false);
-    } catch {
-      if (seq === request.current) setLoadFailed(true);
-    } finally {
-      if (seq === request.current) setLoading(false);
-    }
-  }, [rpc]);
-  useEffect(() => {
-    void load();
-    return () => {
-      request.current += 1;
-    };
-  }, [load]);
-  useRealtime(PROJECT_ICONS_CHANNEL, () => {
-    void load();
-  });
   useEffect(() => {
     setConfirming(false);
   }, [selected?.id]);
@@ -51,12 +34,10 @@ export function ProjectManagement() {
   const remove = async () => {
     if (!selected || removing) return;
     const removed = selected;
-    request.current += 1;
     setRemoving(true);
     try {
       await rpc.call("removeProject", { projectId: removed.id, confirmation: removed.name });
-      request.current += 1;
-      setProjects((current) => current.filter((project) => project.id !== removed.id));
+      setRemovedIds((current) => new Set(current).add(removed.id));
       setSelectedId("");
       setConfirming(false);
       toast.success(`${removed.name} removed from BB`);

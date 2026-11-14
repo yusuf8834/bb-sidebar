@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
 import { toast } from "./lib/toast";
 import type { bbSidebarRpcContract } from "./contract";
+import { useSidebarRead } from "./bb-sdk";
 import { PROJECT_ICONS_CHANNEL } from "./realtime-channels";
 import { PROJECT_ICON_EXTENSIONS, projectIconUrl } from "./project-icons";
 import { ProjectMonogram } from "./ProjectFavicon";
@@ -45,40 +46,36 @@ export function ProjectAppearanceSettings() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const loadRequestSeq = useRef(0);
   const [iconSettings, setIconSettings] = useState<ProjectIconSetting[]>([]);
-  const [projects, setProjects] = useState<ProjectChoice[]>([]);
+  const directory = useSidebarRead("listProjects");
+  const projects: ProjectChoice[] = directory.data?.projects ?? [];
   const [selectedProjectId, setSelectedProjectId] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [iconsLoading, setIconsLoading] = useState(true);
+  const loading = iconsLoading || (directory.data === undefined && directory.error === null);
   const [saving, setSaving] = useState(false);
   const [revision, setRevision] = useState(0);
   const [previewFailed, setPreviewFailed] = useState(false);
 
   const load = useCallback(async () => {
     const seq = ++loadRequestSeq.current;
-    const [icons, directory] = await Promise.allSettled([
-      rpc.call("listProjectIconSettings", {}),
-      rpc.call("listProjects", {}),
-    ]);
-    if (seq !== loadRequestSeq.current) return;
-    if (icons.status === "fulfilled") {
-      setIconSettings(icons.value.projects);
-    } else {
+    try {
+      const icons = await rpc.call("listProjectIconSettings", {});
+      if (seq !== loadRequestSeq.current) return;
+      setIconSettings(icons.projects);
+    } catch (error) {
+      if (seq !== loadRequestSeq.current) return;
       toast.error("Could not load project icons", {
-        description: icons.reason instanceof Error ? icons.reason.message : undefined,
+        description: error instanceof Error ? error.message : undefined,
       });
     }
-    if (directory.status === "fulfilled") {
-      setProjects(directory.value.projects);
-    } else {
-      toast.error("Could not load projects", {
-        description: directory.reason instanceof Error ? directory.reason.message : undefined,
-      });
-    }
-    setLoading(false);
+    setIconsLoading(false);
   }, [rpc]);
 
   useEffect(() => {
     void load();
   }, [load]);
+  useEffect(() => {
+    if (directory.error) toast.error("Could not load projects", { description: directory.error.message });
+  }, [directory.error]);
   useRealtime(PROJECT_ICONS_CHANNEL, () => {
     setRevision((current) => current + 1);
     void load();

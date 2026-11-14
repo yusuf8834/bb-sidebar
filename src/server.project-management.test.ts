@@ -15,6 +15,8 @@ describe("project management", () => {
       harness.behavior.callRpc("renameProject", { projectId: "proj_1", name: "  New name  " }),
     ).resolves.toEqual({ ok: true });
     expect(harness.inspection.sdk.callsTo("projects.update")).toEqual([[{ projectId: "proj_1", name: "New name" }]]);
+    // Project lists in every open settings page reread the new name.
+    expect(harness.inspection.experimental_rpcInvalidations).toEqual([["projects"]]);
     await expect(harness.behavior.callRpc("renameProject", { projectId: "proj_1", name: " " })).rejects.toThrow();
     project = { ...project, kind: "personal" } as unknown as typeof project;
     await expect(harness.behavior.callRpc("renameProject", { projectId: "proj_1", name: "No" })).rejects.toThrow(
@@ -108,7 +110,7 @@ describe("project management", () => {
     ).resolves.toEqual({ ok: true });
     expect(harness.inspection.sdk.callsTo("projects.delete")).toEqual([[{ projectId: "proj_1" }]]);
     expect(await harness.behavior.callRpc("getProjectColors", {})).toEqual({ colors: {} });
-    expect(harness.inspection.experimental_rpcInvalidations.at(-1)).toEqual(["project-colors"]);
+    expect(harness.inspection.experimental_rpcInvalidations.at(-1)).toEqual(["projects", "project-colors"]);
     await expect(harness.behavior.callRpc("listProjectIconSettings", {})).resolves.toEqual({
       projects: [
         {

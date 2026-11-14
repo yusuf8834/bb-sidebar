@@ -1,7 +1,7 @@
 import type { ServerContext, ServerHandlers } from "./server-context";
 import type { createServerProjectIcons } from "./server-project-icons";
 import { PROJECT_ICONS_CHANNEL } from "./contract";
-import { PROJECT_COLORS_TAG } from "./rpc-tags";
+import { PROJECT_COLORS_TAG, PROJECTS_TAG } from "./rpc-tags";
 
 export function createServerProjectManagement(ctx: ServerContext, icons: ReturnType<typeof createServerProjectIcons>) {
   const { defaultProjectHostIds, clearProjectIconCache } = icons;
@@ -19,6 +19,7 @@ export function createServerProjectManagement(ctx: ServerContext, icons: ReturnT
       const project = await ctx.bb.sdk.projects.get({ projectId });
       if (project.kind !== "standard") throw new Error("Personal projects cannot be renamed");
       await ctx.bb.sdk.projects.update({ projectId, name });
+      ctx.bb.rpc.experimental_invalidate([PROJECTS_TAG]);
       ctx.bb.realtime.publish(PROJECT_ICONS_CHANNEL, { projectId });
       return { ok: true as const };
     },
@@ -60,7 +61,7 @@ export function createServerProjectManagement(ctx: ServerContext, icons: ReturnT
       defaultProjectHostIds.delete(projectId);
       clearProjectIconCache(projectId);
       ctx.bb.realtime.publish(PROJECT_ICONS_CHANNEL, { projectId });
-      ctx.bb.rpc.experimental_invalidate([PROJECT_COLORS_TAG]);
+      ctx.bb.rpc.experimental_invalidate([PROJECTS_TAG, PROJECT_COLORS_TAG]);
       return { ok: true as const };
     },
   } satisfies Pick<
