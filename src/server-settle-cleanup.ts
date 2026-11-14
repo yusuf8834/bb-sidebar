@@ -5,7 +5,7 @@ import type { createThreadPortActions } from "./thread-ports";
 import type { z } from "zod";
 import type { cleanupIssueSchema, cleanupPreviewSchema, cleanupResultSchema, ownedPortTargetSchema } from "./contract";
 import { randomUUID } from "node:crypto";
-import { canPark } from "./lifecycle";
+import { canPark, resolveShelf } from "./lifecycle";
 import { EMPTY_RECLAIM, planTerminalReclaim, type ReclaimSummary } from "./reclaim";
 import { runThreadTasks } from "./thread-tasks";
 
@@ -43,19 +43,10 @@ export function createServerSettleCleanup(
 
   const cleanupPlans = new Map<string, { expiresAt: number; threads: CleanupPlanThread[]; skipped: CleanupIssue[] }>();
 
-  const canCleanSettledThread = (thread: CleanupThread, row: StoredLifecycleRow | null) => {
-    if (
-      !row ||
-      thread.visibility !== "visible" ||
-      row.settledAt === null ||
-      row.parkedAt != null ||
-      row.snoozedUntil !== null ||
-      thread.pinnedAt !== null ||
-      thread.latestAttentionAt > row.settledAt
-    )
-      return false;
-    return canPark(threadSignals(thread));
-  };
+  const canCleanSettledThread = (thread: CleanupThread, row: StoredLifecycleRow | null) =>
+    thread.visibility === "visible" &&
+    thread.pinnedAt === null &&
+    resolveShelf(row ?? undefined, threadSignals(thread), Date.now()) === "settled";
 
   const cleanupContext = async (targetThreadId?: string) => {
     const beforeLookup = await loadPolicyThreads(true);
