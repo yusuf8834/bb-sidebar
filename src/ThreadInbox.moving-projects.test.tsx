@@ -2,7 +2,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { renderSlot } from "./test-slot";
-import { inbox, defaultSidebarSettings, thread, listProps, loadInboxApp, rowLinks, pinnedReorders } from "./test-inbox";
+import {
+  inbox,
+  defaultSidebarSettings,
+  thread,
+  listProps,
+  loadInboxApp,
+  rowLinks,
+  pinnedReorders,
+  startDrag,
+} from "./test-inbox";
 
 vi.mock("sonner", async () => (await import("./test-inbox")).sonnerMock());
 
@@ -196,13 +205,9 @@ describe("ThreadInbox", () => {
         const a = within(active).getByRole("link", { name: "a" });
         if (gesture === "keyboard") fireEvent.keyDown(a, { key: "ArrowDown", altKey: true });
         else {
-          vi.mocked(document.elementFromPoint).mockReturnValue(
-            within(active).getByRole("link", { name: "b" }).closest("li")!,
-          );
-          fireEvent.pointerDown(a, { button: 0, clientX: 20, clientY: 0, pointerId: 1 });
-          fireEvent.pointerMove(window, { buttons: 1, clientX: 20, clientY: 60, pointerId: 1 });
+          const drag = startDrag(a, within(active).getByRole("link", { name: "b" }).closest("li")!, 60);
           expect(visible()).toEqual(["b", "a"]);
-          fireEvent.pointerUp(window, { clientX: 20, clientY: 60, pointerId: 1 });
+          drag.drop();
         }
         await waitFor(() => expect(rendered.rpcCalls.filter((c) => c.method === "reorderInbox")).toHaveLength(1));
         const actual = rendered.rpcCalls.find((c) => c.method === "reorderInbox")!.input;
@@ -294,15 +299,11 @@ describe("ThreadInbox", () => {
       const visible = () => rowLinks(active).map((row) => row.getAttribute("aria-label"));
       await waitFor(() => expect(visible()).toEqual(["a", "b"]));
       const a = within(active).getByRole("link", { name: "a" });
-      vi.mocked(document.elementFromPoint).mockReturnValue(
-        within(active).getByRole("link", { name: "b" }).closest("li")!,
-      );
-      fireEvent.pointerDown(a, { button: 0, clientX: 20, clientY: 0, pointerId: 1 });
-      fireEvent.pointerMove(window, { buttons: 1, clientX: 20, clientY: 60, pointerId: 1 });
+      const drag = startDrag(a, within(active).getByRole("link", { name: "b" }).closest("li")!, 60);
       expect(visible()).toEqual(["b", "a"]);
       order = ["z", "a", "hidden", "b", "ca", "cb"];
       await rendered.behavior.experimental_invalidateRpc(["inbox-order"]);
-      fireEvent.pointerUp(window, { clientX: 20, clientY: 60, pointerId: 1 });
+      drag.drop();
       await waitFor(() =>
         expect(rendered.rpcCalls.find((call) => call.method === "reorderInbox")?.input).toEqual({
           inboxThreadIds: ["z", "b", "hidden", "a", "ca", "cb"],
@@ -416,23 +417,18 @@ describe("ThreadInbox", () => {
       const active = screen.getByRole("region", { name: "Active" });
       const visible = () => rowLinks(active).map((row) => row.getAttribute("aria-label"));
       await waitFor(() => expect(visible()).toEqual(["a", "b"]));
-      vi.mocked(document.elementFromPoint).mockReturnValue(
+      const drag = startDrag(
+        within(active).getByRole("link", { name: "a" }),
         within(active).getByRole("link", { name: "b" }).closest("li")!,
+        60,
       );
-      fireEvent.pointerDown(within(active).getByRole("link", { name: "a" }), {
-        button: 0,
-        clientX: 20,
-        clientY: 0,
-        pointerId: 1,
-      });
-      fireEvent.pointerMove(window, { buttons: 1, clientX: 20, clientY: 60, pointerId: 1 });
       expect(visible()).toEqual(["b", "a"]);
       rows.splice(0, rows.length, ...rows.filter((row) => ["a", "ca"].includes(row.id)));
       order = ["a", "ca"];
       await rendered.behavior.experimental_invalidateRpc(["lifecycle"]);
       await rendered.behavior.experimental_invalidateRpc(["inbox-order"]);
       await waitFor(() => expect(visible()).toEqual(["a"]));
-      fireEvent.pointerUp(window, { clientX: 20, clientY: 60, pointerId: 1 });
+      drag.drop();
       await act(async () => {});
       expect(rendered.rpcCalls.filter((call) => call.method === "reorderInbox")).toEqual([]);
       expect(order).toEqual(["a", "ca"]);
@@ -541,22 +537,7 @@ describe("ThreadInbox", () => {
       renderProjects((ids) => (saved = ids));
       const header = await screen.findByRole("button", { name: "Web (2)" });
       const target = screen.getByText("Loose Y").closest("li")!;
-      vi.mocked(document.elementFromPoint).mockReturnValue(target);
-      vi.spyOn(target, "getBoundingClientRect").mockReturnValue({
-        top: 0,
-        bottom: 40,
-        left: 0,
-        right: 200,
-        width: 200,
-        height: 40,
-        x: 0,
-        y: 0,
-        toJSON: () => ({}),
-      });
-
-      fireEvent.pointerDown(header, { button: 0, clientX: 20, clientY: 0, pointerId: 1 });
-      fireEvent.pointerMove(window, { buttons: 1, clientX: 20, clientY: 30, pointerId: 1 });
-      fireEvent.pointerUp(window, { clientX: 20, clientY: 30, pointerId: 1 });
+      startDrag(header, target).drop();
 
       await waitFor(() => expect(savedProjectOrder()).toEqual(["api", "zed", "web"]));
       expect(saved).toBeNull();

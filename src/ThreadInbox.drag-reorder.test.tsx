@@ -12,6 +12,7 @@ import {
   rowLinks,
   pinnedOrderResponse,
   pinnedReorders,
+  startDrag,
 } from "./test-inbox";
 
 vi.mock("sonner", async () => (await import("./test-inbox")).sonnerMock());
@@ -64,24 +65,11 @@ describe("ThreadInbox", () => {
     expect(within(pinned).getByRole("button", { name: /^1 child thread/, expanded: false })).toBeDefined();
     const card = within(pinned).getByRole("link", { name: "Attention root" });
     const target = within(pinned).getByRole("link", { name: "Idle root" }).closest("li")!;
-    vi.mocked(document.elementFromPoint).mockReturnValue(target);
-    vi.spyOn(target, "getBoundingClientRect").mockReturnValue({
-      top: 0,
-      bottom: 40,
-      left: 0,
-      right: 200,
-      width: 200,
-      height: 40,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    });
-    fireEvent.pointerDown(card, { button: 0, clientX: 20, clientY: 0, pointerId: 1 });
-    fireEvent.pointerMove(window, { buttons: 1, clientX: 20, clientY: 30, pointerId: 1 });
+    const drag = startDrag(card, target);
     expect(card.closest("ul")!.hasAttribute("data-drag-preview")).toBe(true);
     expect(rowLinks(pinned).map((row) => row.getAttribute("aria-label"))).toEqual(["Idle root", "Attention root"]);
     expect(within(pinned).getByRole("link", { name: "Open child thread: Attention child, Needs you" })).toBeDefined();
-    fireEvent.pointerUp(window, { clientX: 20, clientY: 30, pointerId: 1 });
+    drag.drop();
     await waitFor(() =>
       expect(reorderInput).toEqual({
         threadId: "attention-root",
@@ -235,11 +223,9 @@ describe("ThreadInbox", () => {
       const card = await screen.findByRole("link", { name: "Pin A" });
       const list = card.closest("ul")!;
       const target = screen.getByText("Pin B").closest("li")!;
-      vi.mocked(document.elementFromPoint).mockReturnValue(target);
       const previousCursor = document.body.style.cursor;
       const previousSelect = document.body.style.userSelect;
-      fireEvent.pointerDown(card, { button: 0, clientX: 20, clientY: 0, pointerId: 1 });
-      fireEvent.pointerMove(window, { buttons: 1, clientX: 20, clientY: 30, pointerId: 1 });
+      const drag = startDrag(card, target);
       expect(list.hasAttribute("data-drag-preview")).toBe(true);
       if (reason === "Escape") fireEvent.keyDown(window, { key: "Escape" });
       else if (reason === "blur") fireEvent.blur(window);
@@ -248,7 +234,7 @@ describe("ThreadInbox", () => {
       expect(list.hasAttribute("data-drag-preview")).toBe(false);
       expect(document.body.style.cursor).toBe(previousCursor);
       expect(document.body.style.userSelect).toBe(previousSelect);
-      fireEvent.pointerUp(window, { clientX: 20, clientY: 30, pointerId: 1 });
+      drag.drop();
       expect(pinnedReorders(rendered)).toHaveLength(0);
     },
   );
@@ -270,31 +256,7 @@ describe("ThreadInbox", () => {
 
     const card = await screen.findByRole("link", { name: "Pin A" });
     const target = screen.getByText("Pin B").closest("li")!;
-    vi.mocked(document.elementFromPoint).mockReturnValue(target);
-    vi.spyOn(target, "getBoundingClientRect").mockReturnValue({
-      top: 0,
-      bottom: 40,
-      left: 0,
-      right: 200,
-      width: 200,
-      height: 40,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    });
-
-    fireEvent.pointerDown(card, {
-      button: 0,
-      clientX: 20,
-      clientY: 0,
-      pointerId: 1,
-    });
-    fireEvent.pointerMove(window, {
-      buttons: 1,
-      clientX: 20,
-      clientY: 30,
-      pointerId: 1,
-    });
+    const drag = startDrag(card, target);
     await waitFor(() =>
       expect(within(screen.getByRole("region", { name: "Pinned" })).getAllByRole("listitem")[0]!.textContent).toContain(
         "Pin B",
@@ -302,11 +264,7 @@ describe("ThreadInbox", () => {
     );
 
     fireEvent.keyDown(window, { key: "Escape" });
-    fireEvent.pointerUp(window, {
-      clientX: 20,
-      clientY: 30,
-      pointerId: 1,
-    });
+    drag.drop();
 
     await waitFor(() =>
       expect(within(screen.getByRole("region", { name: "Pinned" })).getAllByRole("listitem")[0]!.textContent).toContain(
@@ -331,36 +289,7 @@ describe("ThreadInbox", () => {
 
     const card = await screen.findByRole("link", { name: "Pin A" });
     const target = screen.getByText("Pin B").closest("li")!;
-    vi.mocked(document.elementFromPoint).mockReturnValue(target);
-    vi.spyOn(target, "getBoundingClientRect").mockReturnValue({
-      top: 0,
-      bottom: 40,
-      left: 0,
-      right: 200,
-      width: 200,
-      height: 40,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    });
-
-    fireEvent.pointerDown(card, {
-      button: 0,
-      clientX: 20,
-      clientY: 0,
-      pointerId: 1,
-    });
-    fireEvent.pointerMove(window, {
-      buttons: 1,
-      clientX: 20,
-      clientY: 30,
-      pointerId: 1,
-    });
-    fireEvent.pointerUp(window, {
-      clientX: 20,
-      clientY: 30,
-      pointerId: 1,
-    });
+    startDrag(card, target).drop();
 
     const openCalls = () => rendered.linkCalls.length;
     const settled = openCalls();
@@ -434,37 +363,9 @@ describe("ThreadInbox", () => {
 
     const card = await screen.findByRole("link", { name: "Pin A" });
     const target = screen.getByText("Pin B").closest("li")!;
-    vi.mocked(document.elementFromPoint).mockReturnValue(target);
-    vi.spyOn(target, "getBoundingClientRect").mockReturnValue({
-      top: 0,
-      bottom: 40,
-      left: 0,
-      right: 200,
-      width: 200,
-      height: 40,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    });
-
-    fireEvent.pointerDown(card, {
-      button: 0,
-      clientX: 20,
-      clientY: 0,
-      pointerId: 1,
-    });
-    fireEvent.pointerMove(window, {
-      buttons: 1,
-      clientX: 20,
-      clientY: 30,
-      pointerId: 1,
-    });
+    const drag = startDrag(card, target);
     fireEvent.keyDown(window, { key: "Escape" });
-    fireEvent.pointerUp(window, {
-      clientX: 20,
-      clientY: 30,
-      pointerId: 1,
-    });
+    drag.drop();
     const openedBeforeClick = rendered.linkCalls.length;
     // The browser raises this once the gesture ends. Cancelling a drag must not
     // navigate into the row the drag started from.

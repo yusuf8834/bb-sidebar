@@ -14,6 +14,7 @@ import {
   pinnedOrderResponse,
   pinnedReorders,
   toastMocks,
+  startDrag,
 } from "./test-inbox";
 
 vi.mock("sonner", async () => (await import("./test-inbox")).sonnerMock());
@@ -315,42 +316,14 @@ describe("ThreadInbox", () => {
 
     const card = await screen.findByRole("link", { name: "Pin A" });
     const target = screen.getByText("Pin B").closest("li")!;
-    vi.mocked(document.elementFromPoint).mockReturnValue(target);
-    vi.spyOn(target, "getBoundingClientRect").mockReturnValue({
-      top: 0,
-      bottom: 40,
-      left: 0,
-      right: 200,
-      width: 200,
-      height: 40,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    });
-
     expect(card.draggable).toBe(false);
     expect(screen.queryByRole("button", { name: /Reorder Pin A/ })).toBeNull();
     expect(card.dataset.sidebarThreadId).toBe("a");
-    fireEvent.pointerDown(card, {
-      button: 0,
-      clientX: 20,
-      clientY: 0,
-      pointerId: 1,
-    });
-    fireEvent.pointerMove(window, {
-      buttons: 1,
-      clientX: 20,
-      clientY: 30,
-      pointerId: 1,
-    });
+    const drag = startDrag(card, target);
     const list = card.closest("ul")!;
     expect(list.hasAttribute("data-drag-preview")).toBe(true);
     expect(card.closest("[data-drag-visual]")).not.toBeNull();
-    fireEvent.pointerUp(window, {
-      clientX: 20,
-      clientY: 30,
-      pointerId: 1,
-    });
+    drag.drop();
     expect(list.hasAttribute("data-drag-preview")).toBe(false);
     await waitFor(() =>
       expect(reorderInput).toEqual({

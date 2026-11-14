@@ -3,7 +3,7 @@ import { expect, it, vi } from "vitest";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import { renderSlot } from "./test-slot";
-import { inbox, thread, listProps, loadInboxApp, rowLinks } from "./test-inbox";
+import { inbox, thread, listProps, loadInboxApp, rowLinks, startDrag } from "./test-inbox";
 
 vi.mock("sonner", async () => (await import("./test-inbox")).sonnerMock());
 await loadInboxApp();
@@ -206,13 +206,9 @@ it.each(["project", "shelf"].flatMap((fold) => ["keyboard", "pointer"].map((gest
       fireEvent.keyDown(row, { key: "ArrowDown", altKey: true });
       expect(screen.getByText("Search implementation moved to 2 of 2 in Active")).toBeDefined();
     } else {
-      vi.mocked(document.elementFromPoint).mockReturnValue(
-        screen.getByRole("link", { name: "Menu implementation" }).closest("li")!,
-      );
-      fireEvent.pointerDown(row, { button: 0, clientX: 20, clientY: 0, pointerId: 1 });
-      fireEvent.pointerMove(window, { buttons: 1, clientX: 20, clientY: 60, pointerId: 1 });
+      const drag = startDrag(row, screen.getByRole("link", { name: "Menu implementation" }).closest("li")!, 60);
       expect(visible()).toEqual(["Menu implementation", "Search implementation"]);
-      fireEvent.pointerUp(window, { clientX: 20, clientY: 60, pointerId: 1 });
+      drag.drop();
     }
     await waitFor(() =>
       expect(rendered.save).toHaveBeenCalledExactlyOnceWith({ inboxThreadIds: ["child", "c", "b", "a", "d"] }),
@@ -296,11 +292,9 @@ it("rebases an environment drag on host updates while preserving another project
     ],
   });
   const header = await screen.findByRole("button", { name: "search (2)" });
-  vi.mocked(document.elementFromPoint).mockReturnValue(screen.getByRole("link", { name: "C" }));
-  fireEvent.pointerDown(header, { button: 0, clientX: 20, clientY: 0, pointerId: 1 });
-  fireEvent.pointerMove(window, { buttons: 1, clientX: 20, clientY: 40, pointerId: 1 });
+  const drag = startDrag(header, screen.getByRole("link", { name: "C" }), 40);
   await rendered.pushOrder(["x", "b", "a", "c", "d"]);
-  fireEvent.pointerUp(window, { clientX: 20, clientY: 40, pointerId: 1 });
+  drag.drop();
   await waitFor(() => expect(rendered.save).toHaveBeenLastCalledWith({ inboxThreadIds: ["x", "c", "d", "b", "a"] }));
 });
 
@@ -313,15 +307,7 @@ it("targets the containing project when dragging a project over a nested environ
       thread({ id: "d", title: "D", projectId: "other", environment: worktree("menus") }),
     ],
   });
-  vi.mocked(document.elementFromPoint).mockReturnValue(screen.getByRole("link", { name: "C" }));
-  fireEvent.pointerDown(screen.getByRole("button", { name: "Sidebar (2)" }), {
-    button: 0,
-    clientX: 20,
-    clientY: 0,
-    pointerId: 1,
-  });
-  fireEvent.pointerMove(window, { buttons: 1, clientX: 20, clientY: 40, pointerId: 1 });
-  fireEvent.pointerUp(window, { clientX: 20, clientY: 40, pointerId: 1 });
+  startDrag(screen.getByRole("button", { name: "Sidebar (2)" }), screen.getByRole("link", { name: "C" }), 40).drop();
   await waitFor(() =>
     expect(JSON.parse(localStorage.getItem("bb-sidebar:project-order:v1") ?? "null")).toEqual(["other", "proj_1"]),
   );

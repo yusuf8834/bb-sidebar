@@ -62,6 +62,17 @@ Object.defineProperty(Document.prototype, "elementFromPoint", {
   value: vi.fn(),
 });
 
+/**
+ * Presses `row` and drags it `toY` pixels down onto `target`, the element
+ * under the pointer. Release with `drop()`.
+ */
+export function startDrag(row: Element, target: Element, toY = 30) {
+  vi.mocked(document.elementFromPoint).mockReturnValue(target);
+  fireEvent.pointerDown(row, { button: 0, clientX: 20, clientY: 0, pointerId: 1 });
+  fireEvent.pointerMove(window, { buttons: 1, clientX: 20, clientY: toY, pointerId: 1 });
+  return { drop: () => fireEvent.pointerUp(window, { clientX: 20, clientY: toY, pointerId: 1 }) };
+}
+
 // Load through the harness so the plugin's `@get-bb/plugin-sdk/app` import binds
 // to the test runtime; importing the component directly would bind it to an
 // empty runtime first.
