@@ -101,7 +101,7 @@ describe("ThreadInbox", () => {
     });
 
     storedIds = ["z", "a", "b"];
-    await rendered.emitRealtime("inbox-order", {});
+    await rendered.experimental_invalidateRpc(["inbox-order"]);
 
     fireEvent.pointerUp(window, {
       clientX: 20,
@@ -229,6 +229,7 @@ describe("ThreadInbox", () => {
 
   it("reorders inbox threads with the keyboard and persists the full order", async () => {
     let reorderInput: unknown = null;
+    let storedIds = ["a", "b"];
     renderSlot(inbox, listProps, {
       sidebarThreads: {
         status: "ready",
@@ -240,10 +241,11 @@ describe("ThreadInbox", () => {
       },
       rpc: {
         listLifecycle: () => ({ rows: [] }),
-        listInboxOrder: () => ({ inboxThreadIds: ["a", "b"] }),
+        listInboxOrder: () => ({ inboxThreadIds: storedIds }),
         reorderInbox: (input) => {
           reorderInput = input;
-          return { inboxThreadIds: ["b", "a"] };
+          storedIds = ["b", "a"];
+          return { inboxThreadIds: storedIds };
         },
       },
     });
@@ -256,6 +258,7 @@ describe("ThreadInbox", () => {
 
   it("does not let a stale order refresh overwrite a successful reorder", async () => {
     const staleRead = deferred<{ inboxThreadIds: string[] }>();
+    let reads = 0;
     renderSlot(inbox, listProps, {
       sidebarThreads: {
         status: "ready",
@@ -267,7 +270,8 @@ describe("ThreadInbox", () => {
       },
       rpc: {
         listLifecycle: () => ({ rows: [] }),
-        listInboxOrder: () => staleRead.promise,
+        // The first read predates the write; later reads see it.
+        listInboxOrder: () => (++reads === 1 ? staleRead.promise : { inboxThreadIds: ["b", "a"] }),
         reorderInbox: () => ({ inboxThreadIds: ["b", "a"] }),
       },
     });
@@ -281,6 +285,47 @@ describe("ThreadInbox", () => {
     await act(async () => staleRead.resolve({ inboxThreadIds: ["a", "b"] }));
     expect(JSON.parse(localStorage.getItem("bb-sidebar:inbox-order-cache:v1")!)).toEqual(["b", "a"]);
     expect(screen.getAllByRole("listitem")[0]!.textContent).toContain("Inbox B");
+  });
+
+  it("a reread that started during a reorder and answers after it cannot roll the order back", async () => {
+    const write = deferred<void>();
+    const preWrite = deferred<{ inboxThreadIds: string[] }>();
+    let stored = ["a", "b"];
+    let reads = 0;
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "a", title: "Inbox A", createdAt: 2 }),
+          thread({ id: "b", title: "Inbox B", createdAt: 1 }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: [] }),
+        listInboxOrder: () => (++reads === 2 ? preWrite.promise : { inboxThreadIds: stored }),
+        reorderInbox: async (input) => {
+          await write.promise;
+          stored = (input as { inboxThreadIds: string[] }).inboxThreadIds;
+          return { inboxThreadIds: stored };
+        },
+      },
+    });
+    const first = () => screen.getAllByRole("listitem")[0]!.textContent;
+    await waitFor(() => expect(reads).toBe(1));
+    fireEvent.keyDown(await screen.findByRole("link", { name: "Inbox B" }), { key: "ArrowUp", altKey: true });
+    await waitFor(() => expect(first()).toContain("Inbox B"));
+    // Another change rereads the order while the write is in flight, and the
+    // server answers it from before the write.
+    const invalidated = rendered.experimental_invalidateRpc(["inbox-order"]);
+    await vi.waitFor(() => expect(reads).toBe(2));
+    write.resolve();
+    // The acknowledged write rereads from after it.
+    await vi.waitFor(() => expect(reads).toBe(3));
+    preWrite.resolve({ inboxThreadIds: ["a", "b"] });
+    await invalidated;
+    await waitFor(() => expect(first()).toContain("Inbox B"));
+    expect(JSON.parse(localStorage.getItem("bb-sidebar:inbox-order-cache:v1")!)).toEqual(["b", "a"]);
   });
 
   it("rolls inbox order back when persistence fails", async () => {

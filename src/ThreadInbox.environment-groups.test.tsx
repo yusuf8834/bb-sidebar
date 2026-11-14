@@ -65,7 +65,7 @@ function setup({
     save,
     pushOrder: async (ids: string[]) => {
       order = ids;
-      await rendered.emitRealtime("inbox-order", {});
+      await rendered.experimental_invalidateRpc(["inbox-order"]);
     },
   };
 }

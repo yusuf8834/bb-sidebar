@@ -84,3 +84,27 @@ test("a project color saved elsewhere shows without a reload", async ({ page, re
     await rpc(request, "updateSidebarSettings", fixture.defaultSettings);
   }
 });
+
+const activeTitles = (page) =>
+  shelf(page, "Active")
+    .getByRole("link")
+    .evaluateAll((links) => links.map((link) => link.getAttribute("aria-label")));
+
+test("an inbox order saved elsewhere shows without a reload", async ({ page, request }) => {
+  await open(page);
+  await expect.poll(() => activeTitles(page)).toEqual(fixture.threads.map(({ title }) => title));
+  const reversed = [...fixture.threads].reverse();
+  await rpc(request, "reorderInbox", { inboxThreadIds: reversed.map(({ id }) => id) });
+  await expect.poll(() => activeTitles(page)).toEqual(reversed.map(({ title }) => title));
+});
+
+test("a reorder right after the sidebar loads shows at once and survives the reread", async ({ page }) => {
+  const [first, second, ...rest] = fixture.threads;
+  const expected = [second, first, ...rest].map(({ title }) => title);
+  await open(page);
+  // Inside the cache's two-second freshness window of the first read.
+  await shelf(page, "Active").getByRole("link", { name: second.title, exact: true }).press("Alt+ArrowUp");
+  await expect.poll(() => activeTitles(page), { timeout: 1_000 }).toEqual(expected);
+  await page.waitForTimeout(2_500);
+  expect(await activeTitles(page)).toEqual(expected);
+});

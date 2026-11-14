@@ -20,7 +20,7 @@ import {
   type EnvironmentPullRequest,
   type EnvironmentPullRequestRow,
 } from "./github-pr-status";
-import { PROJECT_COLORS_TAG, PROJECTS_TAG, SIDEBAR_SETTINGS_TAG } from "./rpc-tags";
+import { INBOX_ORDER_TAG, PROJECT_COLORS_TAG, PROJECTS_TAG, SIDEBAR_SETTINGS_TAG } from "./rpc-tags";
 
 export {
   experimental_useSidebarThreads as useSidebarThreads,
@@ -139,6 +139,7 @@ const sidebarReads = {
   getProjectColors: taggedRead<"getProjectColors">([PROJECT_COLORS_TAG]),
   getSidebarSettings: taggedRead<"getSidebarSettings">([SIDEBAR_SETTINGS_TAG]),
   listProjects: taggedRead<"listProjects">([PROJECTS_TAG]),
+  listInboxOrder: taggedRead<"listInboxOrder">([INBOX_ORDER_TAG]),
 } satisfies PluginRpcContract;
 
 interface SidebarRead<T> {

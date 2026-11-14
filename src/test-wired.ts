@@ -20,7 +20,13 @@ afterEach(async () => {
 /** Keep the SDK's validation and JSON wire drivers across the explicit host/app bridge. */
 export async function createWired(
   initial: PluginSidebarThread[],
-  options: { fixture?: string; rpcGate?: Promise<void>; terminals?: boolean } = {},
+  options: {
+    fixture?: string;
+    rpcGate?: Promise<void>;
+    terminals?: boolean;
+    /** Deliver what a call published before the app sees its reply, as bb's socket usually does. */
+    deliverBeforeReply?: boolean;
+  } = {},
 ) {
   let threads = [...initial];
   let terminalOpen = options.terminals ?? false;
@@ -208,6 +214,7 @@ export async function createWired(
         async (input: unknown) => {
           await options.rpcGate;
           const result = await harness.behavior.callRpc(method, input);
+          if (options.deliverBeforeReply) await flush();
           replies.push({ method, result });
           return result;
         },

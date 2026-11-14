@@ -238,10 +238,7 @@ describe("lifecycle RPC", () => {
     await expect(harness.behavior.callRpc("listInboxOrder", {})).resolves.toEqual({
       inboxThreadIds: ["thr_2", "thr_1"],
     });
-    expect(harness.inspection.realtimeSignals).toContainEqual({
-      channel: "inbox-order",
-      payload: {},
-    });
+    expect(harness.inspection.experimental_rpcInvalidations).toContainEqual(["inbox-order"]);
 
     const reloaded = await harness.lifecycle.reload(plugin);
     disposers.push(() => reloaded.harness.lifecycle.dispose());

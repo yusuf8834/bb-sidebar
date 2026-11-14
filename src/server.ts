@@ -1,7 +1,7 @@
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import type { ServerContext } from "./server-context";
 import { bbSidebarRpcContract } from "./contract";
-import { INBOX_ORDER_CHANNEL } from "./contract";
+import { INBOX_ORDER_TAG } from "./rpc-tags";
 import { createPortDiscovery } from "./port-discovery";
 import { createThreadPortActions } from "./thread-ports";
 import { createThreadPullRequests } from "./thread-pull-requests";
@@ -203,7 +203,7 @@ export default async function plugin(bb: BbPluginApi) {
     threadPullRequests.forgetThread(thread.id);
     const removed = ctx.db.prepare(`DELETE FROM inbox_order WHERE thread_id = ?`).run(thread.id);
     if (removed.changes > 0) {
-      ctx.bb.realtime.publish(INBOX_ORDER_CHANNEL, {});
+      ctx.bb.rpc.experimental_invalidate([INBOX_ORDER_TAG]);
     }
   });
 }

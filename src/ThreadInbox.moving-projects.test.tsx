@@ -70,7 +70,7 @@ describe("ThreadInbox", () => {
         window.localStorage.setItem("bb-sidebar:active-sort:v1", "project");
         window.localStorage.setItem("bb-sidebar:shelf-expansion:v1", JSON.stringify({ active: false }));
         const childIds = ["a1", "a2", "a3", "b1", ...(singleton ? ["x1"] : [])];
-        const storedIds = ["a", "x", "b", "c", ...childIds];
+        let storedIds = ["a", "x", "b", "c", ...childIds];
         const rendered = renderSlot(inbox, listProps, {
           sidebarThreads: {
             status: "ready",
@@ -110,7 +110,10 @@ describe("ThreadInbox", () => {
             getSidebarSettings: () => defaultSidebarSettings,
             listLifecycle: () => ({ rows: [] }),
             listInboxOrder: () => ({ inboxThreadIds: storedIds }),
-            reorderInbox: (input) => input,
+            reorderInbox: (input) => {
+              storedIds = (input as { inboxThreadIds: string[] }).inboxThreadIds;
+              return input;
+            },
           },
         });
         const active = await screen.findByRole("region", { name: "Active" });
@@ -279,7 +282,10 @@ describe("ThreadInbox", () => {
           getSidebarSettings: () => defaultSidebarSettings,
           listLifecycle: () => ({ rows: [] }),
           listInboxOrder: () => ({ inboxThreadIds: order }),
-          reorderInbox: (input) => input,
+          reorderInbox: (input) => {
+            order = (input as { inboxThreadIds: string[] }).inboxThreadIds;
+            return input;
+          },
         },
       });
       const active = screen.getByRole("region", { name: "Active" });
@@ -293,7 +299,7 @@ describe("ThreadInbox", () => {
       fireEvent.pointerMove(window, { buttons: 1, clientX: 20, clientY: 60, pointerId: 1 });
       expect(visible()).toEqual(["b", "a"]);
       order = ["z", "a", "hidden", "b", "ca", "cb"];
-      await rendered.behavior.emitRealtime("inbox-order", {});
+      await rendered.behavior.experimental_invalidateRpc(["inbox-order"]);
       fireEvent.pointerUp(window, { clientX: 20, clientY: 60, pointerId: 1 });
       await waitFor(() =>
         expect(rendered.rpcCalls.find((call) => call.method === "reorderInbox")?.input).toEqual({
@@ -370,7 +376,7 @@ describe("ThreadInbox", () => {
       }
       const expected = [...order];
       await rendered.behavior.emitRealtime("lifecycle", {});
-      await rendered.behavior.emitRealtime("inbox-order", {});
+      await rendered.behavior.experimental_invalidateRpc(["inbox-order"]);
       await waitFor(() => expect(visible()).toEqual(["a", "x", "y"]));
       fireEvent.pointerUp(window, { clientX: 20, clientY: 30, pointerId: 1 });
       await act(async () => {});
@@ -422,7 +428,7 @@ describe("ThreadInbox", () => {
       rows.splice(0, rows.length, ...rows.filter((row) => ["a", "ca"].includes(row.id)));
       order = ["a", "ca"];
       await rendered.behavior.emitRealtime("lifecycle", {});
-      await rendered.behavior.emitRealtime("inbox-order", {});
+      await rendered.behavior.experimental_invalidateRpc(["inbox-order"]);
       await waitFor(() => expect(visible()).toEqual(["a"]));
       fireEvent.pointerUp(window, { clientX: 20, clientY: 60, pointerId: 1 });
       await act(async () => {});

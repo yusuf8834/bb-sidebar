@@ -1,9 +1,9 @@
 import { STORAGE_KEYS } from "./lib/storage-keys";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { type PluginSidebarThread, useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
+import { type PluginSidebarThread, useRpc } from "@get-bb/plugin-sdk/app";
 import { toast } from "./lib/toast";
 import type { bbSidebarRpcContract } from "./contract";
-import { INBOX_ORDER_CHANNEL } from "./realtime-channels";
+import { useSidebarRead } from "./bb-sdk";
 import { orderInboxThreads } from "./pinned-order";
 import { createCachedRpcState } from "./lib/cached-rpc-state";
 import { inboxOrderCodec } from "./lib/inbox-order-codec";
@@ -26,34 +26,39 @@ function orderKey(ids: readonly string[]): string {
 /** Durable, optimistic inbox ordering backed by the plugin database. */
 export function useInboxReorder(inboxThreads: readonly PluginSidebarThread[]): InboxReorderApi {
   const rpc = useRpc<typeof bbSidebarRpcContract>();
-  const [storedIds, setStoredIds] = useState<readonly string[] | null>(() => orderCache.read(rpc));
+  const [saved] = useState(() => orderCache.read(rpc));
+  const { data, error, refresh } = useSidebarRead("listInboxOrder");
+  const serverIds = data?.inboxThreadIds;
+  // The order this client wrote. A read already in flight when the write
+  // lands may predate it, so the written order stands until a read started
+  // after the write answers (`reread`), or for good if that read fails.
+  const [written, setWritten] = useState<{ ids: readonly string[]; reread: boolean } | null>(null);
   const [optimisticIds, setOptimisticIds] = useState<readonly string[] | null>(null);
   const [isReordering, setIsReordering] = useState(false);
   const inFlight = useRef(false);
-  const requestSeq = useRef(0);
-
-  const refresh = useCallback(async () => {
-    const seq = ++requestSeq.current;
-    try {
-      const result = await rpc.call("listInboxOrder", {});
-      if (seq === requestSeq.current) {
-        setStoredIds(orderCache.write(rpc, [...result.inboxThreadIds]));
-      }
-    } catch {
-      // Keep the cached order if a backend reload briefly races this frontend.
-    }
-  }, [rpc]);
+  const loaded = useRef(false);
+  loaded.current = serverIds !== undefined;
+  const storedIds = written?.ids ?? serverIds ?? saved;
 
   useEffect(() => {
-    void refresh();
-    return () => {
-      requestSeq.current += 1;
-    };
-  }, [refresh]);
+    if (written?.reread && error === null) setWritten(null);
+  }, [written, error, serverIds]);
 
-  useRealtime(INBOX_ORDER_CHANNEL, () => {
-    void refresh();
-  });
+  useEffect(() => {
+    const current = written?.ids ?? serverIds;
+    if (current) orderCache.write(rpc, [...current]);
+  }, [written, serverIds, rpc]);
+
+  const confirmWrite = useCallback(
+    async (ids: readonly string[], firstLoad: boolean) => {
+      // With data loaded, a refetch cancels a read in flight and starts anew.
+      // A first load in flight is joined instead, so read once more after it.
+      await refresh();
+      if (firstLoad) await refresh();
+      setWritten((current) => (current?.ids === ids ? { ids, reread: true } : current));
+    },
+    [refresh],
+  );
 
   const threads = useMemo(
     () => orderInboxThreads(inboxThreads, optimisticIds ?? storedIds),
@@ -65,8 +70,6 @@ export function useInboxReorder(inboxThreads: readonly PluginSidebarThread[]): I
     async (nextIds: readonly string[]): Promise<boolean> => {
       if (inFlight.current || orderKey(nextIds) === orderKey(ids)) return false;
       inFlight.current = true;
-      // Any list read that started before this write is stale by definition.
-      requestSeq.current += 1;
       setIsReordering(true);
       setOptimisticIds([...nextIds]);
 
@@ -74,14 +77,12 @@ export function useInboxReorder(inboxThreads: readonly PluginSidebarThread[]): I
         const result = await rpc.call("reorderInbox", {
           inboxThreadIds: [...nextIds],
         });
-        // Ignore refreshes that raced the write. The mutation response is the
-        // authoritative order for this client.
-        requestSeq.current += 1;
-        setStoredIds(orderCache.write(rpc, [...result.inboxThreadIds]));
+        const ids = result.inboxThreadIds;
+        setWritten({ ids, reread: false });
         setOptimisticIds(null);
+        void confirmWrite(ids, !loaded.current);
         return true;
       } catch (error) {
-        requestSeq.current += 1;
         setOptimisticIds(null);
         void refresh();
         toast.error("Could not reorder inbox thread", {
@@ -93,7 +94,7 @@ export function useInboxReorder(inboxThreads: readonly PluginSidebarThread[]): I
         setIsReordering(false);
       }
     },
-    [ids, refresh, rpc],
+    [confirmWrite, ids, refresh, rpc],
   );
 
   return { threads, ids, loaded: storedIds !== null, isReordering, reorder };

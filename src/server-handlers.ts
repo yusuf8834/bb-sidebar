@@ -11,8 +11,8 @@ import type { createServerSettleCleanup } from "./server-settle-cleanup";
 import type { createPortDiscovery } from "./port-discovery";
 import type { createThreadPullRequests } from "./thread-pull-requests";
 import type { createTitleRegenerator } from "./regenerate-title";
-import { SIDEBAR_SETTINGS_CHANNEL, INBOX_ORDER_CHANNEL } from "./contract";
-import { SIDEBAR_SETTINGS_TAG } from "./rpc-tags";
+import { SIDEBAR_SETTINGS_CHANNEL } from "./contract";
+import { INBOX_ORDER_TAG, SIDEBAR_SETTINGS_TAG } from "./rpc-tags";
 import { runThreadTasks } from "./thread-tasks";
 
 const CATALOG_TTL_MS = 5 * 60_000;
@@ -259,7 +259,7 @@ export function createServerHandlers(
     },
     async reorderInbox({ inboxThreadIds }) {
       replaceInboxOrder(inboxThreadIds);
-      ctx.bb.realtime.publish(INBOX_ORDER_CHANNEL, {});
+      ctx.bb.rpc.experimental_invalidate([INBOX_ORDER_TAG]);
       return { inboxThreadIds: readInboxOrder() };
     },
     async evaluateAutoSettle() {

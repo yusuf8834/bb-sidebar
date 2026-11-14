@@ -11,7 +11,6 @@ import {
 import { configuredSnoozePresetError } from "./lifecycle";
 export {
   LIFECYCLE_CHANNEL,
-  INBOX_ORDER_CHANNEL,
   SIDEBAR_SETTINGS_CHANNEL,
   PROJECT_ICONS_CHANNEL,
   RATE_LIMITS_CHANNEL,

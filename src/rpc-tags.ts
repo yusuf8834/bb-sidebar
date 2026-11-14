@@ -6,5 +6,6 @@
  */
 export const PROJECT_COLORS_TAG = "project-colors";
 export const SIDEBAR_SETTINGS_TAG = "sidebar-settings";
+export const INBOX_ORDER_TAG = "inbox-order";
 /** The standard projects `listProjects` returns: their ids and names. */
 export const PROJECTS_TAG = "projects";
