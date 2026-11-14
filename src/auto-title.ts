@@ -5,7 +5,7 @@ import { type createTitleRegenerator, PermanentTitleError } from "./regenerate-t
 // first prompts shorter than five words, which still need a sidebar title.
 const RECOVERY_DELAY_MS = 10_000;
 const MAX_CONCURRENT_RECOVERIES = 2;
-// Attempts per thread, including the first. Codex attempts spawn a paid helper.
+// Attempts per thread, including the first. Each attempt is a paid AI call.
 const MAX_RECOVERY_ATTEMPTS = 3;
 
 export const AUTO_TITLE_RECOVERY_MIGRATION = `CREATE TABLE IF NOT EXISTS title_recovery_attempts (
@@ -83,7 +83,7 @@ export function createAutoTitleRecovery(bb: BbPluginApi, regenerateTitle: Return
     }
   }
 
-  // Events include hidden title helpers, which must never start another helper.
+  // Hidden threads, such as other plugins' helpers, are never named.
   const onThread = ({ thread }: { thread: Awaited<ReturnType<BbPluginApi["sdk"]["threads"]["get"]>> }) => {
     if (
       disposed ||

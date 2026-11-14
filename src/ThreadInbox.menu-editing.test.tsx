@@ -22,7 +22,7 @@ await loadInboxApp();
 
 describe("row context menu", () => {
   it("regenerates from the menu and disables repeated clicks while waiting", async () => {
-    const result = deferred<{ title: string }>();
+    const result = deferred<{ title: string; changed: boolean }>();
     const regenerateTitle = vi.fn((_input: unknown) => result.promise);
     renderSlot(inbox, listProps, {
       sidebarThreads: { status: "ready", threads: [thread({ title: "Original title" })], projects: [] },
@@ -36,12 +36,29 @@ describe("row context menu", () => {
     expect(screen.getByRole("status", { name: "Generating title" })).toBeTruthy();
     fireEvent.contextMenu(screen.getByText("Original title"));
     expect(screen.getByRole("menuitem", { name: "Regenerating title…" }).getAttribute("aria-disabled")).toBe("true");
-    result.resolve({ title: "New title" });
+    result.resolve({ title: "New title", changed: true });
     await waitFor(() =>
       expect(toastMocks.success).toHaveBeenCalledWith("Thread title regenerated", { className: "bb-sidebar-toast" }),
     );
     expect(screen.queryByRole("status", { name: "Generating title" })).toBeNull();
     expect(regenerateTitle).toHaveBeenCalledTimes(1);
+  });
+
+  it("says when bb keeps the current title", async () => {
+    renderSlot(inbox, listProps, {
+      sidebarThreads: { status: "ready", threads: [thread({ title: "Original title" })], projects: [] },
+      rpc: {
+        listLifecycle: () => ({ rows: [] }),
+        regenerateTitle: () => ({ title: "Original title", changed: false }),
+      },
+    });
+    fireEvent.contextMenu(await screen.findByText("Original title"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Regenerate title" }));
+    await waitFor(() =>
+      expect(toastMocks.success).toHaveBeenCalledWith("The current title still fits", {
+        className: "bb-sidebar-toast",
+      }),
+    );
   });
 
   it("shows regeneration errors and keeps the existing title", async () => {

@@ -28,8 +28,8 @@ A stable thread list for [bb](https://github.com/get-bb/bb). Threads stay where 
 - Configurable inactive-thread and automatic cleanup rules
 - Native bb navigation, split, rename, archive, and delete flows
 - Project submenu on thread cards for settings, rename, local paths, and removal
-- Regenerate a thread title from its last three accepted user messages
-- Automatically retry missing thread titles once in the background, respecting the selected AI title service and manual edits
+- Regenerate a thread title with bb's title generation and the AI service selected for thread titles
+- Name threads bb left untitled, such as those whose first prompt is shorter than five words, with up to three background attempts
 
 Park threads while waiting on someone else. Use **Park thread** in the context menu and **Resume** when ready. Parked threads have no timer and are excluded from automatic cleanup. Opening one leaves it parked; new thread activity brings it back to Active.
 

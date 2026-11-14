@@ -101,8 +101,8 @@ function RowMenuContents({
   const regenerate = async () => {
     if (!beginTitleGeneration(thread.id)) return;
     try {
-      await rpc.call("regenerateTitle", { threadId: thread.id });
-      toast.success("Thread title regenerated");
+      const { changed } = await rpc.call("regenerateTitle", { threadId: thread.id });
+      toast.success(changed ? "Thread title regenerated" : "The current title still fits");
     } catch (error) {
       toast.error("Could not regenerate title", {
         description: error instanceof Error ? error.message : undefined,

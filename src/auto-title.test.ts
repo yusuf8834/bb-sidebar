@@ -43,7 +43,7 @@ function setup(useRealGenerator = false) {
       },
     ],
   }));
-  const regenerate = vi.fn(async () => ({ title: "Review sidebar pull request" }));
+  const regenerate = vi.fn(async () => ({ title: "Review sidebar pull request", changed: true }));
   createAutoTitleRecovery(bb, useRealGenerator ? createTitleRegenerator(bb) : regenerate);
   disposers.push(() => harness.lifecycle.dispose());
   return {
@@ -162,24 +162,23 @@ describe("automatic title recovery", () => {
     expect(state.regenerate).toHaveBeenCalledTimes(5);
   });
 
-  it("spawns at most three Codex helpers for a thread whose helper always times out", async () => {
-    const state = setupCodex();
-    state.sdk.stub("threads.wait", async () => {
-      throw new Error("Timed out waiting for the thread");
+  it("asks bb at most three times for a thread whose generation always fails", async () => {
+    const state = setupCore();
+    state.sdk.stub("threads.experimental_regenerateTitle", async () => {
+      throw new Error("The title service timed out");
     });
     for (let i = 0; i < 5; i++) await state.attempt();
-    expect(state.sdk.callsTo("threads.spawn")).toHaveLength(3);
-    expect(state.sdk.callsTo("threads.delete")).toHaveLength(3);
+    expect(state.sdk.callsTo("threads.experimental_regenerateTitle")).toHaveLength(3);
     expect(state.claims()).toEqual([{ thread_id: "target" }]);
   });
 
   it("keeps the claim when a reload aborts an attempt in flight", async () => {
-    const state = setupCodex();
-    state.sdk.stub("threads.wait", async ({ signal }: { signal: AbortSignal }) => {
+    const state = setupCore();
+    state.sdk.stub("threads.experimental_regenerateTitle", async ({ signal }: { signal: AbortSignal }) => {
       await new Promise((_, reject) => signal.addEventListener("abort", () => reject(signal.reason)));
     });
     await state.attempt();
-    expect(state.sdk.callsTo("threads.spawn")).toHaveLength(1);
+    expect(state.sdk.callsTo("threads.experimental_regenerateTitle")).toHaveLength(1);
     let db!: ReturnType<typeof state.bb.storage.database>;
     const replacement = await state.harness.lifecycle.reload((bb) => {
       db = bb.storage.database();
@@ -192,32 +191,6 @@ describe("automatic title recovery", () => {
     });
     await vi.advanceTimersByTimeAsync(10_000);
     expect(state.regenerate).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    { mode: "service", attempts: 1 },
-    { mode: "automatic", attempts: 3 },
-  ])("treats an unsupported $mode title service as permanent only when selected", async ({ mode, attempts }) => {
-    const state = setupCodex();
-    const custom = {
-      id: "custom",
-      pluginId: "custom-ai",
-      displayName: "Custom AI",
-      tasks: ["thread-title"],
-      status: { ready: true },
-      automaticRank: 1,
-    };
-    const signingIn = { ...custom, id: "bb", pluginId: "bb-ai", status: { ready: false, message: "Signing in" } };
-    state.sdk.stub("system.aiServices", async () => ({
-      selections: {
-        "thread-title":
-          mode === "service" ? { mode, pluginId: "custom-ai", serviceId: "custom" } : { mode: "automatic" },
-      },
-      services: [custom, { ...signingIn, automaticRank: 0 }],
-    }));
-    for (let i = 0; i < 4; i++) await state.attempt();
-    expect(state.sdk.callsTo("threads.timeline")).toHaveLength(attempts);
-    expect(state.harness.logEntries.at(-1)?.message).toContain("does not support Custom AI yet");
   });
 
   it("cancels pending work and removes the attempt when a thread is deleted", async () => {
@@ -270,7 +243,7 @@ describe("automatic title recovery", () => {
     });
     state.regenerate.mockImplementation(async () => {
       await pending;
-      return { title: "Recovered title" };
+      return { title: "Recovered title", changed: true };
     });
     for (const id of ["one", "two", "three"]) {
       state.setThread({ id });
@@ -283,67 +256,31 @@ describe("automatic title recovery", () => {
     expect(state.regenerate).toHaveBeenCalledTimes(3);
   });
 
-  it.each(["Check this sidebar pull request", "Is this working?"])(
-    "names an untitled thread through selected Codex, including short prompts: %s",
-    async (text) => {
-      const state = setupCodex(text);
-      await state.active();
-      await vi.advanceTimersByTimeAsync(10_000);
-      expect(state.harness.logEntries).toEqual([]);
-      expect(state.sdk.callsTo("threads.wait")[0]![0]).toMatchObject({ timeoutMs: 45_000 });
-      expect(state.sdk.callsTo("threads.update")[0]![0]).toEqual({
-        threadId: "target",
-        title: "Review sidebar pull request",
-      });
-      expect(state.sdk.callsTo("plugins.callRpc")).toHaveLength(0);
-    },
-  );
+  it("names an untitled thread through bb with the selected service", async () => {
+    const state = setupCore();
+    await state.active();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(state.harness.logEntries).toEqual([]);
+    expect(state.sdk.callsTo("threads.experimental_regenerateTitle")[0]![0]).toMatchObject({ threadId: "target" });
+    expect(state.sdk.callsTo("threads.update")).toHaveLength(0);
+  });
 
-  it.each(["manual title", "titles off", "archived"])(
-    "keeps user changes made during generation: %s",
-    async (change) => {
-      const state = setupCodex();
-      state.sdk.stub("threads.wait", async () => {
-        if (change === "manual title") state.setThread({ title: "My title" });
-        else if (change === "titles off") state.setOff();
-        else state.setThread({ archivedAt: 1 });
-        return { matched: true };
-      });
-      await state.active();
-      await vi.advanceTimersByTimeAsync(10_000);
-      expect(state.sdk.callsTo("threads.spawn")).toHaveLength(1);
-      expect(state.sdk.callsTo("threads.update")).toHaveLength(0);
-      expect(state.sdk.callsTo("threads.delete")).toHaveLength(1);
-    },
-  );
+  it("does not ask bb when the thread got a title just before recovery", async () => {
+    const state = setupCore();
+    state.sdk.stub("system.aiServices", async () => {
+      state.setThread({ title: "My title" });
+      return { selections: { "thread-title": { mode: "automatic" } }, services: [] };
+    });
+    await state.active();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(state.sdk.callsTo("threads.experimental_regenerateTitle")).toHaveLength(0);
+  });
 });
 
-function setupCodex(text = "Check this sidebar pull request") {
+function setupCore() {
   const state = setup(true);
-  state.sdk.stub("threads.timeline", async () => ({
-    rows: [
-      {
-        kind: "conversation",
-        role: "user",
-        initiator: "user",
-        id: "message",
-        text,
-        createdAt: 1,
-        sourceSeqStart: 1,
-        turnRequest: { status: "accepted" },
-      },
-    ],
-    timelinePage: { olderCursor: null },
-  }));
-  state.sdk.stub("providers.list", async () => [{ id: "codex", available: true }]);
-  state.sdk.stub("providers.models", async () => ({
-    models: [{ id: "gpt-6-luna", model: "gpt-6-luna", isDefault: true }],
-  }));
-  state.sdk.stub("threads.spawn", async () => makeThreadResponse({ id: "helper" }));
-  state.sdk.stub("threads.wait", async () => ({ matched: true }));
-  state.sdk.stub("threads.output", async () => ({ output: '{"title":"Review sidebar pull request"}' }));
-  state.sdk.stub("threads.stop", async () => ({ ok: true }));
-  state.sdk.stub("threads.delete", async () => ({ ok: true }));
-  state.sdk.stub("threads.update", async () => makeThreadResponse({ title: "Review sidebar pull request" }));
+  state.sdk.stub("threads.experimental_regenerateTitle", async () =>
+    makeThreadResponse({ title: "Review sidebar pull request" }),
+  );
   return state;
 }

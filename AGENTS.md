@@ -54,7 +54,7 @@ live again). Snoozed, Parked and Inactive-shelf threads stay live.
 - Node server entry: `src/server.ts`. Node host entry: `src/ports-host.ts`.
   Flat `src/server-*.ts` modules share `ServerContext` explicitly.
   Their other supporting Node modules are `port-scan`, `auto-title`,
-  `cloud-title`, `regenerate-title`, `port-discovery`, `thread-ports`,
+  `regenerate-title`, `port-discovery`, `thread-ports`,
   `thread-pull-requests`, and `thread-tasks`, all under `src/`.
   Node/SDK server or host APIs are allowed. These modules must not import React,
   TSX, browser `.ts` modules, `use*` hooks, `lib/**`, or `components/**`, even
@@ -103,7 +103,9 @@ off the thread's saved Full Screen. Rows still call `onNavigate`; only clicks
 that are not links use `useBbNavigate`. Title saves use the optimistic SDK client.
 Root pinning keeps the lifecycle RPC's parent lock and atomic shelf clearing.
 Delete keeps `deleteThread` RPC after confirming the named tree. Parent, snooze,
-park, settle, project, title regeneration, and clean stay plugin-owned.
+park, settle, project, and clean stay plugin-owned. Title generation is bb's
+(`threads.experimental_regenerateTitle`); the sidebar owns only the menu item and
+automatic recovery of untitled threads. Do not add a sidebar title generator.
 Do not adopt the SDK's thread menu components for this sidebar.
 
 The sidebar RPC contract and its schemas live in shared `src/contract.ts` as
