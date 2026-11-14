@@ -148,7 +148,7 @@ describe("row context menu", () => {
     expect(rendered.sdkCalls.some((call) => call.method === "threads.update")).toBe(false);
   });
 
-  it("copies the branch, thread ID, and thread link", async () => {
+  it("copies the branch and thread ID, and lists Copy thread link first", async () => {
     const writeText = vi.fn(() => Promise.resolve());
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
@@ -187,35 +187,36 @@ describe("row context menu", () => {
     fireEvent.click(within(copyMenu).getByText("Copy thread ID"));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("thr_copy"));
 
-    copyMenu = await openCopyMenu();
-    fireEvent.click(within(copyMenu).getByText("Copy thread link"));
-    await waitFor(() =>
-      expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/projects/proj_1/threads/thr_copy`),
-    );
+    expect(
+      within(copyMenu)
+        .getAllByRole("menuitem")
+        .map((item) => item.textContent),
+    ).toEqual(["Copy thread link", "Copy branch", "Copy thread ID"]);
   });
 
-  it("copies personal thread links and reports clipboard failures", async () => {
+  // bb's Copy link builds the URL (personal projects have no /projects/ part)
+  // and shows "Thread link copied" or "Failed to copy thread link" itself.
+  it("copies the thread link with bb's Copy link action", async () => {
     const writeText = vi.fn(() => Promise.resolve());
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: { writeText },
     });
-    render(
-      [thread({ id: "thr_personal", title: "Personal thread" })],
-      [{ id: "proj_1", name: "Personal", isPersonal: true, href: "", settingsHref: "" }],
-    );
-    const copyLink = async () => {
-      fireEvent.contextMenu(await screen.findByText("Personal thread"));
-      fireEvent.click(screen.getByRole("menuitem", { name: "Copy" }));
-      fireEvent.click(await screen.findByText("Copy thread link"));
-    };
-    await copyLink();
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/threads/thr_personal`));
-    writeText.mockRejectedValueOnce(new Error("Clipboard denied"));
-    await copyLink();
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ id: "thr_personal", title: "Personal thread", projectId: "proj_personal" })],
+        projects: [{ id: "proj_personal", name: "Personal", isPersonal: true, href: "/", settingsHref: "" }],
+      },
+      rpc: { listLifecycle: () => ({ rows: [] }) },
+    });
+    fireEvent.contextMenu(await screen.findByText("Personal thread"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy" }));
+    fireEvent.click(await screen.findByText("Copy thread link"));
     await waitFor(() =>
-      expect(toastMocks.error).toHaveBeenCalledWith("Failed to copy thread link", { className: "bb-sidebar-toast" }),
+      expect(rendered.threadActionCalls).toEqual([{ key: "bb--core/copyLink", threadId: "thr_personal" }]),
     );
+    expect(writeText.mock.calls).toEqual([[`${window.location.origin}/threads/thr_personal`]]);
   });
 
   it("confirms deletion with the thread title, project and bb's delete cascade before deleting", async () => {

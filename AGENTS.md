@@ -96,11 +96,12 @@ Pull request data comes from the bundled GitHub PR Status plugin
 `unavailable` lookup is `unknown` and never settles a thread.
 
 Keep the sidebar's own menus and named delete confirmation. Bound core actions
-own unpin, read state, rename requests, split, and thread-tree archive. Thread
-rows, child rows, and hover-card subthreads are links to `thread.href`, so bb
-routes the click (Cmd/Ctrl opens a split); `navigate.toThread` would also turn
-off the thread's saved Full Screen. Rows still call `onNavigate`; only clicks
-that are not links use `useBbNavigate`. Title saves use the optimistic SDK client.
+own unpin, read state, rename requests, split, copy link, and thread-tree
+archive. Thread rows, child rows, and hover-card subthreads are links to
+`thread.href`, so bb routes the click (Cmd/Ctrl opens a split);
+`navigate.toThread` would also turn off the thread's saved Full Screen. Rows
+still call `onNavigate`; only clicks that are not links use `useBbNavigate`.
+Title saves use the optimistic SDK client.
 Root pinning keeps the lifecycle RPC's parent lock and atomic shelf clearing.
 Delete keeps `deleteThread` RPC after confirming the named tree. Parent, snooze,
 park, settle, project, and clean stay plugin-owned. Title generation is bb's

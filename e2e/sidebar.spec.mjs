@@ -126,7 +126,7 @@ test("settle moves to Settled and Undo restores Active", async ({ page, request 
   expect((await rpc(request, "listLifecycle")).rows.find((row) => row.threadId === cedar.id).settledAt).toBeNull();
 });
 
-test("right-click menu matches the sidebar action list", async ({ page }) => {
+test("right-click menu matches the sidebar action list", async ({ page, context }) => {
   await cli(["thread", "unread", delta.id]);
   await page.reload();
   const actions = await menu(page, delta.title);
@@ -147,4 +147,13 @@ test("right-click menu matches the sidebar action list", async ({ page }) => {
   ]);
   await page.keyboard.press("Escape");
   await expect(actions).toHaveCount(0);
+
+  // Copy thread link runs bb's own Copy link action.
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: fixture.url });
+  await (await menu(page, delta.title)).getByRole("menuitem", { name: "Copy", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Copy thread link", exact: true }).click();
+  await expect(page.getByText("Thread link copied")).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+    new URL(`/projects/${fixture.projectId}/threads/${delta.id}`, fixture.url).href,
+  );
 });

@@ -64,12 +64,20 @@ function RowMenuContents({
   onRename,
 }: Omit<RowContextMenuProps, "children">) {
   const actions = useThreadActions(thread, {
-    keys: ["bb--core/split", "bb--core/pin", "bb--core/read", "bb--core/rename", "bb--core/archive"],
+    keys: [
+      "bb--core/split",
+      "bb--core/copyLink",
+      "bb--core/pin",
+      "bb--core/read",
+      "bb--core/rename",
+      "bb--core/archive",
+    ],
     requestRename: () => onRename?.(),
   });
   const navigate = useBbNavigate();
-  // bb 0.46 always supplies pin/read/rename/archive for sidebar rows. Split is
-  // omitted in compact mode and for the focused pane; navigation handles both.
+  // bb 0.46 always supplies pin/read/rename/archive for sidebar rows, and bb
+  // 0.49 copyLink. Split is omitted in compact mode and for the focused pane;
+  // navigation handles both.
   const run = (key: string) => {
     const entry = actions.find((entry) => entry.key === `bb--core/${key}`);
     if (!entry && key === "split") return navigate.toThread(thread.id, { split: true });
@@ -231,7 +239,7 @@ function RowMenuContents({
               </Item>
               <Item onSelect={() => void run("read")}>{thread.isUnread ? "Mark read" : "Mark unread"}</Item>
               <Separator />
-              <CopySubmenu thread={thread} />
+              <CopySubmenu thread={thread} onCopyLink={() => void run("copyLink")} />
               <Separator />
               <Item disabled={!canArchive} onSelect={archive}>
                 Archive
@@ -251,24 +259,13 @@ function RowMenuContents({
   );
 }
 
-function CopySubmenu({ thread }: { thread: PluginSidebarThread }) {
-  const { projects } = useSidebarThreads();
+/** Copy thread link is bb's own Copy link action: same URL, toasts and errors. */
+function CopySubmenu({ thread, onCopyLink }: { thread: PluginSidebarThread; onCopyLink: () => void }) {
   const portalScope = usePortalScopeProps();
   const branchName = thread.environment?.branchName;
   const copy = (text: string) => {
     if (typeof navigator === "undefined" || !navigator.clipboard) return;
     void navigator.clipboard.writeText(text);
-  };
-  const copyThreadLink = async () => {
-    const isPersonal = projects.some((project) => project.id === thread.projectId && project.isPersonal);
-    const threadPath = `/threads/${encodeURIComponent(thread.id)}`;
-    const path = isPersonal ? threadPath : `/projects/${encodeURIComponent(thread.projectId)}${threadPath}`;
-    try {
-      await navigator.clipboard.writeText(new URL(path, window.location.origin).href);
-      toast.success("Thread link copied");
-    } catch {
-      toast.error("Failed to copy thread link");
-    }
   };
 
   return (
@@ -289,7 +286,7 @@ function CopySubmenu({ thread }: { thread: PluginSidebarThread }) {
           sideOffset={4}
           className="z-50 min-w-40 rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md"
         >
-          <Item onSelect={() => void copyThreadLink()}>Copy thread link</Item>
+          <Item onSelect={onCopyLink}>Copy thread link</Item>
           {branchName ? <Item onSelect={() => copy(branchName)}>Copy branch</Item> : null}
           <Item onSelect={() => copy(thread.id)}>Copy thread ID</Item>
         </ContextMenu.SubContent>

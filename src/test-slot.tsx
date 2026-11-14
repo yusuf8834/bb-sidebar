@@ -95,6 +95,11 @@ export function renderSlot<Props extends object>(
     });
     return [
       entry("split", "Open in split", () => navigate.toThread(thread.id, { split: true })),
+      // As bb 0.49: personal threads have no /projects/ part; bb owns the toasts.
+      entry("copyLink", "Copy link", () => {
+        const path = `${thread.projectId === "proj_personal" ? "" : `/projects/${thread.projectId}`}/threads/${thread.id}`;
+        return navigator.clipboard?.writeText(new URL(path, window.location.origin).href);
+      }),
       entry("pin", thread.pinnedAt === null ? "Pin" : "Unpin", async () => {
         try {
           await (thread.pinnedAt === null
