@@ -5,7 +5,7 @@ import type { useSdk } from "@get-bb/plugin-sdk/app";
 import { makeThreadResponse } from "@get-bb/plugin-sdk/testing";
 import { renderSlot } from "./test-slot";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
-import { deferred, idleSidebarThreadFields, runtimeStatusFor } from "./test-fixtures";
+import { deferred, sidebarThread } from "./test-fixtures";
 import type { SidebarProvider } from "./ProviderGlyph";
 
 export const toastMocks = {
@@ -106,41 +106,12 @@ export { DEFAULT_SIDEBAR_SETTINGS as defaultSidebarSettings } from "./sidebar-se
 let nextPinnedKey = 0;
 
 export function thread(overrides: Partial<PluginSidebarThread> = {}): PluginSidebarThread {
-  return {
-    ...idleSidebarThreadFields,
-    runtimeStatus: runtimeStatusFor(overrides),
+  return sidebarThread({
     // Confirmed pins carry keys in canonical BB; explicit null models a provisional pin.
     ...(overrides.isPinned ? { pinnedAt: 100, pinSortKey: `U${String(nextPinnedKey++).padStart(6, "0")}U` } : {}),
-    id: "thr_1",
-    projectId: "proj_1",
-    title: "A thread",
-    titleFallback: null,
-    parentThreadId: null,
-    sectionId: null,
-    originKind: null,
-    originPluginId: null,
-    providerId: "codex",
-    hasPendingInteraction: false,
-    activity: {
-      workflows: 0,
-      backgroundAgents: 0,
-      backgroundCommands: 0,
-      planMode: 0,
-    },
-    indicator: "none",
-    indicatorLabel: null,
-    isUnread: false,
-    isPinned: false,
-    isArchived: false,
-    environment: null,
-    host: null,
-    createdAt: 100,
-    updatedAt: 100,
-    lastReadAt: 100,
-    latestAttentionAt: 100,
     ...overrides,
     href: overrides.href ?? `/projects/${overrides.projectId ?? "proj_1"}/threads/${overrides.id ?? "thr_1"}`,
-  };
+  });
 }
 
 function provider(id: string, displayName: string, logoUrl: string | null): SidebarProvider {

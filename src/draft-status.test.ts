@@ -1,24 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import { threadWithDraft } from "./StatusSlot";
-import { idleSidebarThreadFields, runtimeStatusFor } from "./test-fixtures";
+import { sidebarThread as thread } from "./test-fixtures";
 
 const counts = { workflows: 0, backgroundAgents: 0, backgroundCommands: 0, planMode: 0 };
-
-function thread(overrides: Partial<PluginSidebarThread> = {}): PluginSidebarThread {
-  return {
-    ...idleSidebarThreadFields,
-    runtimeStatus: runtimeStatusFor(overrides),
-    id: "thr_1",
-    parentThreadId: null,
-    hasPendingInteraction: false,
-    isUnread: false,
-    activity: counts,
-    indicator: "none",
-    indicatorLabel: null,
-    ...overrides,
-  } as PluginSidebarThread;
-}
 const busy: Record<string, Partial<PluginSidebarThread>> = {
   runtime: { indicator: "runtime" },
   workflow: { indicator: "workflow", activity: { ...counts, workflows: 1 } },

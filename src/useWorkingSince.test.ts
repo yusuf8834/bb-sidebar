@@ -3,7 +3,7 @@ import { cleanup, renderHook } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import { STORAGE_KEYS } from "./lib/storage-keys";
-import { idleSidebarThreadFields } from "./test-fixtures";
+import { sidebarThread } from "./test-fixtures";
 import { useWorkingSince } from "./useWorkingSince";
 
 afterEach(() => {
@@ -14,31 +14,8 @@ afterEach(() => {
 const STARTED = 1_000_000_000;
 
 function working(id: string): PluginSidebarThread {
-  return {
-    ...idleSidebarThreadFields,
-    id,
-    projectId: "proj_1",
-    title: id,
-    titleFallback: null,
-    parentThreadId: null,
-    sectionId: null,
-    originKind: null,
-    originPluginId: null,
-    providerId: "codex",
-    hasPendingInteraction: false,
-    activity: { workflows: 0, backgroundAgents: 0, backgroundCommands: 0, planMode: 0 },
-    indicator: "runtime",
-    indicatorLabel: null,
-    isUnread: false,
-    isPinned: false,
-    isArchived: false,
-    environment: null,
-    host: null,
-    createdAt: STARTED,
-    updatedAt: STARTED,
-    lastReadAt: null,
-    latestAttentionAt: STARTED,
-  };
+  const times = { createdAt: STARTED, updatedAt: STARTED, latestAttentionAt: STARTED };
+  return sidebarThread({ ...times, id, title: id, indicator: "runtime", lastReadAt: null });
 }
 
 type Props = { threads: readonly PluginSidebarThread[]; status: "error" | "loading" | "ready" };

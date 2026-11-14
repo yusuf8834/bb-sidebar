@@ -27,12 +27,46 @@ export const idleSidebarThreadFields = {
  * `indicator: "runtime"` or an in-flight `status` also runs by this field.
  * An explicit `runtimeStatus` wins.
  */
-export function runtimeStatusFor(
+function runtimeStatusFor(
   overrides: Pick<Partial<PluginSidebarThread>, "indicator" | "runtimeStatus" | "status">,
 ): PluginSidebarThread["runtimeStatus"] {
   if (overrides.runtimeStatus !== undefined) return overrides.runtimeStatus;
   const status = overrides.status ?? idleSidebarThreadFields.status;
   return overrides.indicator === "runtime" && (status === "idle" || status === "error") ? "active" : status;
+}
+
+/**
+ * A sidebar thread for tests: idle and unpinned unless overridden, with a
+ * `runtimeStatus` that matches the status the overrides give it.
+ */
+export function sidebarThread(overrides: Partial<PluginSidebarThread> = {}): PluginSidebarThread {
+  return {
+    ...idleSidebarThreadFields,
+    runtimeStatus: runtimeStatusFor(overrides),
+    id: "thr_1",
+    projectId: "proj_1",
+    title: "A thread",
+    titleFallback: null,
+    parentThreadId: null,
+    sectionId: null,
+    originKind: null,
+    originPluginId: null,
+    providerId: "codex",
+    hasPendingInteraction: false,
+    activity: { workflows: 0, backgroundAgents: 0, backgroundCommands: 0, planMode: 0 },
+    indicator: "none",
+    indicatorLabel: null,
+    isUnread: false,
+    isPinned: false,
+    isArchived: false,
+    environment: null,
+    host: null,
+    createdAt: 100,
+    updatedAt: 100,
+    lastReadAt: 100,
+    latestAttentionAt: 100,
+    ...overrides,
+  };
 }
 
 export function deferred<T>() {

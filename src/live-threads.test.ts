@@ -2,36 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 import { portScanEnvironments, settledThreadIds } from "./live-threads";
 import type { ThreadLifecycleRow } from "./lifecycle";
-import { idleSidebarThreadFields } from "./test-fixtures";
-
-function thread(overrides: Partial<PluginSidebarThread> = {}): PluginSidebarThread {
-  return {
-    ...idleSidebarThreadFields,
-    id: "thr_1",
-    projectId: "proj_1",
-    title: "A thread",
-    titleFallback: null,
-    parentThreadId: null,
-    sectionId: null,
-    originKind: null,
-    originPluginId: null,
-    providerId: "codex",
-    hasPendingInteraction: false,
-    activity: { workflows: 0, backgroundAgents: 0, backgroundCommands: 0, planMode: 0 },
-    indicator: "none",
-    indicatorLabel: null,
-    isUnread: false,
-    isPinned: false,
-    isArchived: false,
-    environment: null,
-    host: null,
-    createdAt: 100,
-    updatedAt: 100,
-    lastReadAt: 100,
-    latestAttentionAt: 100,
-    ...overrides,
-  };
-}
+import { sidebarThread as thread } from "./test-fixtures";
 
 const settled = (threadId: string, extra: Partial<ThreadLifecycleRow> = {}): ThreadLifecycleRow => ({
   threadId,

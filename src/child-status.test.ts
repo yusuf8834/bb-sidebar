@@ -7,40 +7,8 @@ import {
   childSubtree,
   threadsWithAskingDescendants,
 } from "./child-status";
-import { runtimeStatusFor } from "./test-fixtures";
+import { sidebarThread as thread } from "./test-fixtures";
 import { isThreadWorkingForDisplay } from "./working-tree";
-
-function thread(overrides: Partial<PluginSidebarThread> = {}): PluginSidebarThread {
-  return {
-    id: "thr_1",
-    projectId: "proj_1",
-    title: "A thread",
-    titleFallback: null,
-    parentThreadId: null,
-    sectionId: null,
-    originKind: null,
-    originPluginId: null,
-    providerId: "codex",
-    hasPendingInteraction: false,
-    activity: {
-      workflows: 0,
-      backgroundAgents: 0,
-      backgroundCommands: 0,
-      planMode: 0,
-    },
-    indicator: "none",
-    indicatorLabel: null,
-    isUnread: false,
-    isPinned: false,
-    isArchived: false,
-    createdAt: 0,
-    updatedAt: 0,
-    status: "idle",
-    runtimeStatus: runtimeStatusFor(overrides),
-    queuedWork: "none",
-    ...overrides,
-  } as PluginSidebarThread;
-}
 
 const working = (candidate: PluginSidebarThread) => isThreadWorkingForDisplay(candidate, null);
 const kind = (candidate: PluginSidebarThread) => childStatusKind(candidate, working);
