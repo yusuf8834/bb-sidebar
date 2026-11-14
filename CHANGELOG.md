@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.3.11] - 2026-11-13
+
 ### Added
 
 - **Waiting longest** in the Active sort picker puts the thread whose news has waited longest at the top. A thread joins the end when its turn finishes and then keeps its place: reading, renaming, or pinning it does not move it, unlike Recent activity.
