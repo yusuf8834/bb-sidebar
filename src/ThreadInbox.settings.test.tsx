@@ -146,7 +146,7 @@ describe("sidebar settings", () => {
     };
     const row = (title: string) => screen.getByText(title).closest("li")!;
     await waitFor(() => expect(row("Compact card").querySelector(".h-8")).not.toBeNull());
-    for (const display of ["all", "full", "grouped", "none"]) {
+    for (const display of ["all", "full", "grouped", "none"] as const) {
       settings = { ...settings, projectColorDisplay: display };
       await rendered.experimental_invalidateRpc(["sidebar-settings"]);
       await waitFor(() => {

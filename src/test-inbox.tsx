@@ -101,27 +101,7 @@ export const SETTLED_NOTHING = {
   stoppedRuntime: false,
 };
 
-export const defaultSidebarSettings = {
-  snoozePresets: "30m, 2h, 1d, 1w",
-  inactiveThreadsEnabled: true,
-  inactiveAfterHours: 6,
-  showRunningChildrenWhenCollapsed: true,
-  autoSettleInactive: true,
-  autoSettleAfterDays: 3,
-  autoSettleOnMerge: true,
-  childSortField: "created",
-  childSortDirection: "ascending",
-  childIconStyle: "disc",
-  threadDisplay: "full",
-  compactProjectIconOnly: false,
-  keepPinnedThreadsFull: false,
-  keepWokeThreadsFull: false,
-  compactWorkingThreads: false,
-  workingShelf: false,
-  dockShelves: false,
-  projectColorsEnabled: false,
-  projectColorDisplay: "all",
-};
+export { DEFAULT_SIDEBAR_SETTINGS as defaultSidebarSettings } from "./sidebar-settings-values";
 
 let nextPinnedKey = 0;
 
