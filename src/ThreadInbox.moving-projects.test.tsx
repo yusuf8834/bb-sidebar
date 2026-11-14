@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { renderSlot } from "./test-slot";
-import { inbox, defaultSidebarSettings, thread, listProps, loadInboxApp, rowLinks } from "./test-inbox";
+import { inbox, defaultSidebarSettings, thread, listProps, loadInboxApp, rowLinks, pinnedReorders } from "./test-inbox";
 
 vi.mock("sonner", async () => (await import("./test-inbox")).sonnerMock());
 
@@ -156,9 +156,8 @@ describe("ThreadInbox", () => {
         fireEvent.click(within(active).getByRole("button", { name: /^Active/, expanded: false }));
         expect(within(active).getByRole("button", { name: "Web (3)" })).toBeDefined();
         expect(within(active).getByRole("link", { name: "Web c" })).toBeDefined();
-        expect(rendered.rpcCalls.filter((call) => /^(pin|setThreadParent|reorderPinned)$/.test(call.method))).toEqual(
-          [],
-        );
+        expect(rendered.rpcCalls.filter((call) => /^(pin|setThreadParent)$/.test(call.method))).toEqual([]);
+        expect(pinnedReorders(rendered)).toEqual([]);
       },
     );
 

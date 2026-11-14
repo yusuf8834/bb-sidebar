@@ -109,7 +109,7 @@ are deleted during teardown.
 
 Each behavior test resets pin/read/lifecycle/order state through the scratch
 CLI and plugin RPC, then gets a new browser context. The fourteen flows assert
-selection/rendering, pin persistence, Alt+ArrowUp manual order persistence,
+selection/rendering, pin and pinned Alt+ArrowUp order persistence, Alt+ArrowUp manual order persistence,
 snooze/wake, settle/Undo, the complete right-click menu, and a sidebar settings
 change that updates visible snooze options and persists after reload. They also
 cover park/resume across reload, project filtering, custom project name/stripe

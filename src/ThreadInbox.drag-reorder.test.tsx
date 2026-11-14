@@ -2,7 +2,17 @@
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { renderSlot } from "./test-slot";
-import { inbox, defaultSidebarSettings, thread, listProps, deferred, loadInboxApp, rowLinks } from "./test-inbox";
+import {
+  inbox,
+  defaultSidebarSettings,
+  thread,
+  listProps,
+  deferred,
+  loadInboxApp,
+  rowLinks,
+  pinnedOrderResponse,
+  pinnedReorders,
+} from "./test-inbox";
 
 vi.mock("sonner", async () => (await import("./test-inbox")).sonnerMock());
 
@@ -11,7 +21,7 @@ await loadInboxApp();
 describe("ThreadInbox", () => {
   it("retains attention root across reorder", async () => {
     window.localStorage.setItem("bb-sidebar:shelf-expansion:v1", JSON.stringify({ pinned: true }));
-    const pending = deferred<{ pinnedThreadIds: string[] }>();
+    const pending = deferred<ReturnType<typeof pinnedOrderResponse>>();
     let reorderInput: unknown = null;
     const rendered = renderSlot(
       inbox,
@@ -34,9 +44,13 @@ describe("ThreadInbox", () => {
         rpc: {
           getSidebarSettings: () => defaultSidebarSettings,
           listLifecycle: () => ({ rows: [] }),
-          reorderPinned: (input) => {
-            reorderInput = input;
-            return pending.promise;
+        },
+        sdk: {
+          threads: {
+            reorderPinned: (input) => {
+              reorderInput = input;
+              return pending.promise;
+            },
           },
         },
       },
@@ -80,7 +94,7 @@ describe("ThreadInbox", () => {
     expect(within(pinned).queryByRole("link", { name: "Idle root" })).toBeNull();
     expect(within(pinned).getByRole("link", { name: "Open child thread: Attention child, Needs you" })).toBeDefined();
     await act(async () => {
-      pending.resolve({ pinnedThreadIds: ["idle-root", "attention-root"] });
+      pending.resolve(pinnedOrderResponse(["idle-root", "attention-root"]));
       await pending.promise;
     });
     expect(rowLinks(pinned).map((row) => row.getAttribute("aria-label"))).toEqual(["Attention root"]);
@@ -114,9 +128,9 @@ describe("ThreadInbox", () => {
         rpc: {
           listLifecycle: () => ({ rows: [] }),
           listInboxOrder: () => ({ inboxThreadIds: ["a", "b"] }),
-          reorderPinned: () => ({ pinnedThreadIds: finalOrder }),
           reorderInbox: () => ({ inboxThreadIds: finalOrder }),
         },
+        sdk: { threads: { reorderPinned: async () => pinnedOrderResponse(finalOrder) } },
       });
       const card = await screen.findByRole("link", { name: movingId === "a" ? "Row A" : "Row B" });
       const list = card.closest("ul")!;
@@ -187,13 +201,12 @@ describe("ThreadInbox", () => {
         expect(scroll.scrollTop).toBeGreaterThan(0);
       }
       fireEvent.pointerUp(window, { clientX: 20, clientY: forward, pointerId: 1 });
-      await waitFor(() =>
-        expect(
-          rendered.rpcCalls.filter((call) => call.method === (pinned ? "reorderPinned" : "reorderInbox")),
-        ).toHaveLength(1),
-      );
-      const saved = rendered.rpcCalls.find((call) => call.method === (pinned ? "reorderPinned" : "reorderInbox"))!;
-      expect(saved.input).toEqual(
+      const saves = () =>
+        pinned
+          ? pinnedReorders(rendered)
+          : rendered.rpcCalls.filter((call) => call.method === "reorderInbox").map((call) => call.input);
+      await waitFor(() => expect(saves()).toHaveLength(1));
+      expect(saves()[0]).toEqual(
         pinned
           ? {
               threadId: movingId,
@@ -236,7 +249,7 @@ describe("ThreadInbox", () => {
       expect(document.body.style.cursor).toBe(previousCursor);
       expect(document.body.style.userSelect).toBe(previousSelect);
       fireEvent.pointerUp(window, { clientX: 20, clientY: 30, pointerId: 1 });
-      expect(rendered.rpcCalls.filter((call) => call.method === "reorderPinned")).toHaveLength(0);
+      expect(pinnedReorders(rendered)).toHaveLength(0);
     },
   );
 
@@ -300,7 +313,7 @@ describe("ThreadInbox", () => {
         "Pin A",
       ),
     );
-    expect(rendered.rpcCalls.filter((call) => call.method === "reorderPinned")).toHaveLength(0);
+    expect(pinnedReorders(rendered)).toHaveLength(0);
   });
 
   it("stops suppressing clicks once the drag's own click is swallowed", async () => {
@@ -400,7 +413,7 @@ describe("ThreadInbox", () => {
       pointerType: "touch",
     });
 
-    expect(rendered.rpcCalls.filter((call) => call.method === "reorderPinned")).toHaveLength(0);
+    expect(pinnedReorders(rendered)).toHaveLength(0);
     expect(within(screen.getByRole("region", { name: "Pinned" })).getAllByRole("listitem")[0]!.textContent).toContain(
       "Pin A",
     );

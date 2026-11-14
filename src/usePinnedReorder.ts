@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { type PluginSidebarThread, useRpc } from "@get-bb/plugin-sdk/app";
+import { type PluginSidebarThread, useSdk } from "@get-bb/plugin-sdk/app";
 import { toast } from "./lib/toast";
-import type { bbSidebarRpcContract } from "./contract";
 import { orderPinnedThreads, pinnedNeighbors, sortPinnedThreads } from "./pinned-order";
 
 interface OptimisticOrder {
@@ -23,7 +22,7 @@ function orderKey(ids: readonly string[]): string {
 
 /** Optimistic pinned order with one in-flight write and host-truth rollback. */
 export function usePinnedReorder(pinnedThreads: readonly PluginSidebarThread[]): PinnedReorderApi {
-  const rpc = useRpc<typeof bbSidebarRpcContract>();
+  const sdk = useSdk();
   const baseThreads = useMemo(() => sortPinnedThreads(pinnedThreads), [pinnedThreads]);
   const baseIds = useMemo(() => baseThreads.map((thread) => thread.id), [baseThreads]);
   const baseKey = orderKey(baseIds);
@@ -32,7 +31,7 @@ export function usePinnedReorder(pinnedThreads: readonly PluginSidebarThread[]):
   const inFlight = useRef(false);
 
   // The sidebar hook is live. Once it reports any newer pinned order, stop
-  // masking it with our last RPC result and trust the host again.
+  // masking it with our last saved order and trust the host again.
   useEffect(() => {
     if (!inFlight.current && optimistic && optimistic.baseKey !== baseKey) {
       setOptimistic(null);
@@ -70,11 +69,11 @@ export function usePinnedReorder(pinnedThreads: readonly PluginSidebarThread[]):
       setOptimistic({ ids: [...nextIds], baseKey });
 
       try {
-        const result = await rpc.call("reorderPinned", {
-          threadId: movingId,
-          ...neighbors,
+        const result = await sdk.threads.reorderPinned({ threadId: movingId, ...neighbors });
+        setOptimistic({
+          ids: result.filter((thread) => thread.pinnedAt !== null).map((thread) => thread.id),
+          baseKey,
         });
-        setOptimistic({ ids: result.pinnedThreadIds, baseKey });
         return true;
       } catch (error) {
         setOptimistic(null);
@@ -87,7 +86,7 @@ export function usePinnedReorder(pinnedThreads: readonly PluginSidebarThread[]):
         setIsReordering(false);
       }
     },
-    [baseKey, childIds, eligiblePinnedIds, ids, rpc],
+    [baseKey, childIds, eligiblePinnedIds, ids, sdk],
   );
 
   return { threads: orderedThreads, ids, isReordering, reorder };

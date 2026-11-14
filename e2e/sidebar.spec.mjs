@@ -19,13 +19,25 @@ test("selected sidebar renders all seeded threads in Active", async ({ page }) =
   }
 });
 
-test("pin persists in Pinned after reload", async ({ page }) => {
+test("pin and pinned keyboard order persist after reload", async ({ page }) => {
   await (await menu(page, atlas.title)).getByRole("menuitem", { name: "Pin", exact: true }).click();
   await expect(link(page, atlas.title, "Pinned")).toBeVisible();
   await expect(link(page, atlas.title)).toHaveCount(0);
   await expect.poll(async () => (await cli(["thread", "get", atlas.id])).thread.pinnedAt).not.toBeNull();
   await page.reload();
   await expect(link(page, atlas.title, "Pinned")).toBeVisible();
+
+  // The app saves pinned order through bb's own threads.reorderPinned.
+  await cli(["thread", "pin", birch.id]);
+  const pinned = shelf(page, "Pinned");
+  const order = () => pinned.getByRole("link").evaluateAll((els) => els.map((el) => el.getAttribute("aria-label")));
+  await expect.poll(async () => (await order()).toSorted()).toEqual([atlas.title, birch.title]);
+  const [first, second] = await order();
+  await link(page, second, "Pinned").focus();
+  await link(page, second, "Pinned").press("Alt+ArrowUp");
+  await expect.poll(order).toEqual([second, first]);
+  await page.reload();
+  await expect.poll(order).toEqual([second, first]);
 });
 
 // Rows link to the thread and bb routes the click in place. navigate.toThread

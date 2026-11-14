@@ -227,27 +227,6 @@ describe("lifecycle RPC", () => {
     await expect(harness.behavior.callRpc("listLifecycle", {})).resolves.toEqual({ rows: [] });
   });
 
-  it("persists pinned placement through the bb SDK", async () => {
-    const harness = await loadPlugin();
-
-    await expect(
-      harness.behavior.callRpc("reorderPinned", {
-        threadId: "thr_2",
-        previousThreadId: "thr_1",
-        nextThreadId: "thr_3",
-      }),
-    ).resolves.toEqual({ pinnedThreadIds: ["thr_2"] });
-    expect(harness.inspection.sdk.callsTo("threads.reorderPinned")).toEqual([
-      [
-        {
-          threadId: "thr_2",
-          previousThreadId: "thr_1",
-          nextThreadId: "thr_3",
-        },
-      ],
-    ]);
-  });
-
   it("persists inbox order in the plugin database and publishes it", async () => {
     const harness = await loadPlugin();
 

@@ -251,16 +251,6 @@ export function createServerHandlers(
       clear(threadId);
       return { ok: true };
     },
-    async reorderPinned({ threadId, previousThreadId, nextThreadId }) {
-      const reordered = await ctx.bb.sdk.threads.reorderPinned({
-        threadId,
-        previousThreadId,
-        nextThreadId,
-      });
-      return {
-        pinnedThreadIds: reordered.filter((thread) => thread.pinnedAt !== null).map((thread) => thread.id),
-      };
-    },
     async listInboxOrder() {
       return { inboxThreadIds: readInboxOrder() };
     },
@@ -293,7 +283,6 @@ export function createServerHandlers(
     | "releaseRuntimes"
     | "unsnooze"
     | "acknowledgeWake"
-    | "reorderPinned"
     | "listInboxOrder"
     | "reorderInbox"
     | "evaluateAutoSettle"

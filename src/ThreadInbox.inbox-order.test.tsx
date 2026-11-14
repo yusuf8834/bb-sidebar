@@ -3,7 +3,17 @@ import { describe, expect, it, vi } from "vitest";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { renderSlot } from "./test-slot";
 import { DEFAULT_SIDEBAR_SETTINGS } from "./sidebar-settings-values";
-import { inbox, defaultSidebarSettings, thread, listProps, deferred, toastMocks, loadInboxApp } from "./test-inbox";
+import {
+  inbox,
+  defaultSidebarSettings,
+  thread,
+  listProps,
+  deferred,
+  toastMocks,
+  loadInboxApp,
+  type pinnedOrderResponse,
+  pinnedReorders,
+} from "./test-inbox";
 
 vi.mock("sonner", async () => (await import("./test-inbox")).sonnerMock());
 
@@ -105,7 +115,7 @@ describe("ThreadInbox", () => {
   });
 
   it("rolls back a failed reorder and ignores another move while saving", async () => {
-    const pending = deferred<{ pinnedThreadIds: string[] }>();
+    const pending = deferred<ReturnType<typeof pinnedOrderResponse>>();
     const rendered = renderSlot(inbox, listProps, {
       sidebarThreads: {
         status: "ready",
@@ -117,18 +127,18 @@ describe("ThreadInbox", () => {
       },
       rpc: {
         listLifecycle: () => ({ rows: [] }),
-        reorderPinned: () => pending.promise,
       },
+      sdk: { threads: { reorderPinned: () => pending.promise } },
     });
 
     const cardA = await screen.findByRole("link", { name: "Pin A" });
     fireEvent.keyDown(cardA, { key: "ArrowDown", altKey: true });
-    await waitFor(() => expect(rendered.rpcCalls.filter((call) => call.method === "reorderPinned")).toHaveLength(1));
+    await waitFor(() => expect(pinnedReorders(rendered)).toHaveLength(1));
     const pinned = screen.getByRole("region", { name: "Pinned" });
     expect(within(pinned).getAllByRole("listitem")[0]!.textContent).toContain("Pin B");
 
     fireEvent.keyDown(cardA, { key: "ArrowDown", altKey: true });
-    expect(rendered.rpcCalls.filter((call) => call.method === "reorderPinned")).toHaveLength(1);
+    expect(pinnedReorders(rendered)).toHaveLength(1);
 
     pending.reject(new Error("order conflict"));
     await waitFor(() =>

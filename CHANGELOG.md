@@ -5,6 +5,7 @@
 ### Changed
 
 - **Provider icons are drawn by bb.** The agent icon on cards, compact rows, child chips, hover cards and the parent chip in a child thread's header now comes from bb's own provider icon, so it matches bb's thread list: logos keep their light and dark tints, an installed provider without a logo shows its declared glyph (or bb's code icon) rather than a grey dot, and an icon a provider plugin registers for its agent shows in the sidebar too. A thread whose provider is no longer installed or enabled still shows a grey dot.
+- **Moving a pinned thread saves straight to bb.** The new pinned order went through the sidebar's server, which only passed it on to bb. The sidebar now asks bb directly, so a move saves with one request instead of two, and the plugin's `reorderPinned` RPC method is gone. The order, the "Could not reorder pinned thread" message and the return to bb's order after a failure are unchanged.
 
 ## [0.3.11] - 2026-11-13
 

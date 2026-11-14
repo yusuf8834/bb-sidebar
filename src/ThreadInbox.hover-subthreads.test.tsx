@@ -2,7 +2,16 @@
 import { expect, it, vi } from "vitest";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { renderSlot } from "./test-slot";
-import { inbox, defaultSidebarSettings, thread, defaultProviders, listProps, render, loadInboxApp } from "./test-inbox";
+import {
+  inbox,
+  defaultSidebarSettings,
+  thread,
+  defaultProviders,
+  listProps,
+  render,
+  loadInboxApp,
+  pinnedOrderResponse,
+} from "./test-inbox";
 
 vi.mock("sonner", async () => (await import("./test-inbox")).sonnerMock());
 
@@ -101,10 +110,6 @@ it("binds collapsed-visible sidebar descendants without enabling parent reorder"
     sidebarThreads: { status: "ready", threads, projects: [] },
     rpc: {
       listLifecycle: () => ({ rows: [] }),
-      reorderPinned: () => {
-        mutations.push("reorderPinned");
-        return null;
-      },
       reorderInbox: () => {
         mutations.push("reorderInbox");
         return null;
@@ -112,6 +117,14 @@ it("binds collapsed-visible sidebar descendants without enabling parent reorder"
       setThreadParent: () => {
         mutations.push("setThreadParent");
         return null;
+      },
+    },
+    sdk: {
+      threads: {
+        reorderPinned: async () => {
+          mutations.push("reorderPinned");
+          return pinnedOrderResponse([]);
+        },
       },
     },
   });

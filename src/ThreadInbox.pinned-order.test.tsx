@@ -1,8 +1,20 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
+import { usePinnedReorder } from "./usePinnedReorder";
 import { renderSlot } from "./test-slot";
-import { inbox, thread, listProps, render, loadInboxApp, rowLinks } from "./test-inbox";
+import {
+  inbox,
+  thread,
+  listProps,
+  render,
+  loadInboxApp,
+  rowLinks,
+  pinnedOrderResponse,
+  pinnedReorders,
+  toastMocks,
+} from "./test-inbox";
 
 vi.mock("sonner", async () => (await import("./test-inbox")).sonnerMock());
 
@@ -52,9 +64,13 @@ describe("ThreadInbox", () => {
       },
       rpc: {
         listLifecycle: () => ({ rows: [] }),
-        reorderPinned: (input) => {
-          reorderInput = input;
-          return { pinnedThreadIds: ["b", "a", "c"] };
+      },
+      sdk: {
+        threads: {
+          reorderPinned: async (input) => {
+            reorderInput = input;
+            return pinnedOrderResponse(["b", "a", "c"]);
+          },
         },
       },
     });
@@ -105,22 +121,21 @@ describe("ThreadInbox", () => {
         },
         rpc: {
           listLifecycle: () => ({ rows: [] }),
-          reorderPinned: (input) => {
-            const { threadId, previousThreadId, nextThreadId } = input as {
-              threadId: string;
-              previousThreadId: string | null;
-              nextThreadId: string | null;
-            };
-            // Canonical BB excludes null-key rows from both moving roots and neighbours.
-            if ([threadId, previousThreadId, nextThreadId].includes("pending")) throw new Error("stale_neighbor");
-            return { pinnedThreadIds: ["b", "a", ...(withChild ? ["child"] : []), "pending"] };
+        },
+        sdk: {
+          threads: {
+            reorderPinned: async ({ threadId, previousThreadId, nextThreadId }) => {
+              // Canonical BB excludes null-key rows from both moving roots and neighbours.
+              if ([threadId, previousThreadId, nextThreadId].includes("pending")) throw new Error("stale_neighbor");
+              return pinnedOrderResponse(["b", "a", ...(withChild ? ["child"] : []), "pending"]);
+            },
           },
         },
       });
       const card = await screen.findByRole("link", { name: "Confirmed A" });
       fireEvent.keyDown(card, { key: "ArrowDown", altKey: true });
       await waitFor(() =>
-        expect(rendered.rpcCalls.find((call) => call.method === "reorderPinned")?.input).toEqual({
+        expect(pinnedReorders(rendered)[0]).toEqual({
           threadId: "a",
           previousThreadId: "b",
           nextThreadId: withChild ? "child" : null,
@@ -134,7 +149,7 @@ describe("ThreadInbox", () => {
       const pending = screen.getByRole("link", { name: "Provisional pin" });
       expect(pending.getAttribute("aria-keyshortcuts")).toBeNull();
       fireEvent.keyDown(pending, { key: "ArrowUp", altKey: true });
-      expect(rendered.rpcCalls.filter((call) => call.method === "reorderPinned")).toHaveLength(1);
+      expect(pinnedReorders(rendered)).toHaveLength(1);
     },
   );
 
@@ -156,9 +171,13 @@ describe("ThreadInbox", () => {
       },
       rpc: {
         listLifecycle: () => ({ rows: [] }),
-        reorderPinned: (input) => {
-          reorderInput = input;
-          return { pinnedThreadIds: ["a", "c", "b"] };
+      },
+      sdk: {
+        threads: {
+          reorderPinned: async (input) => {
+            reorderInput = input;
+            return pinnedOrderResponse(["a", "c", "b"]);
+          },
         },
       },
     });
@@ -200,9 +219,13 @@ describe("ThreadInbox", () => {
       },
       rpc: {
         listLifecycle: () => ({ rows: [] }),
-        reorderPinned: (input) => {
-          reorderInput = input;
-          return { pinnedThreadIds: ["a", "child", "c", "b"] };
+      },
+      sdk: {
+        threads: {
+          reorderPinned: async (input) => {
+            reorderInput = input;
+            return pinnedOrderResponse(["a", "child", "c", "b"]);
+          },
         },
       },
     });
@@ -237,9 +260,13 @@ describe("ThreadInbox", () => {
       },
       rpc: {
         listLifecycle: () => ({ rows: [] }),
-        reorderPinned: (input) => {
-          reorderInput = input;
-          return { pinnedThreadIds: ["a", "c", "child", "b"] };
+      },
+      sdk: {
+        threads: {
+          reorderPinned: async (input) => {
+            reorderInput = input;
+            return pinnedOrderResponse(["a", "c", "child", "b"]);
+          },
         },
       },
     });
@@ -275,9 +302,13 @@ describe("ThreadInbox", () => {
       },
       rpc: {
         listLifecycle: () => ({ rows: [] }),
-        reorderPinned: (input) => {
-          reorderInput = input;
-          return { pinnedThreadIds: ["b", "a", "c"] };
+      },
+      sdk: {
+        threads: {
+          reorderPinned: async (input) => {
+            reorderInput = input;
+            return pinnedOrderResponse(["b", "a", "c"]);
+          },
         },
       },
     });
@@ -342,8 +373,8 @@ describe("ThreadInbox", () => {
       },
       rpc: {
         listLifecycle: () => ({ rows: [] }),
-        reorderPinned: () => ({ pinnedThreadIds: ["b", "a"] }),
       },
+      sdk: { threads: { reorderPinned: async () => pinnedOrderResponse(["b", "a"]) } },
     });
 
     const card = await screen.findByRole("link", { name: "Pin A" });
@@ -359,5 +390,99 @@ describe("ThreadInbox", () => {
     );
     fireEvent.keyDown(card, { key: "ArrowDown", altKey: true });
     await waitFor(() => expect(screen.getByText("Pin A is already last in Pinned")).toBeDefined());
+  });
+});
+
+describe("usePinnedReorder", () => {
+  const pin = (id: string, pinSortKey: string) => thread({ id, title: `Pin ${id}`, isPinned: true, pinSortKey });
+  const base = [pin("a", "a"), pin("b", "b"), pin("c", "c")];
+  function PinnedOrder({ pinned }: { pinned: PluginSidebarThread[] }) {
+    const { ids, reorder } = usePinnedReorder(pinned);
+    return (
+      <>
+        <ol aria-label="Pinned order">
+          {ids.map((id) => (
+            <li key={id}>{id}</li>
+          ))}
+        </ol>
+        <button
+          type="button"
+          onClick={() => void reorder(["b", "a", ...ids.filter((id) => id !== "a" && id !== "b")], "b")}
+        >
+          Move b up
+        </button>
+      </>
+    );
+  }
+  const order = () =>
+    within(screen.getByRole("list", { name: "Pinned order" }))
+      .getAllByRole("listitem")
+      .map((item) => item.textContent);
+
+  it("saves through bb's threads.reorderPinned and keeps only the rows bb still has pinned", async () => {
+    const pinned = [...base, pin("x", "x")];
+    const rendered = renderSlot(
+      { component: PinnedOrder },
+      { pinned },
+      {
+        sdk: {
+          threads: {
+            // bb unpinned x elsewhere; its stale row must not take bb's place for it.
+            reorderPinned: async () => {
+              const rows = pinnedOrderResponse(["x", "b", "a", "c"]);
+              rows[0]!.pinnedAt = null;
+              return rows;
+            },
+          },
+        },
+      },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Move b up" }));
+    await waitFor(() =>
+      expect(pinnedReorders(rendered)).toEqual([{ threadId: "b", previousThreadId: null, nextThreadId: "a" }]),
+    );
+    await waitFor(() => expect(order()).toEqual(["b", "a", "c", "x"]));
+    expect(rendered.rpcCalls).toEqual([]);
+  });
+
+  it("rolls back and reports a reorder bb rejects", async () => {
+    renderSlot(
+      { component: PinnedOrder },
+      { pinned: base },
+      {
+        sdk: {
+          threads: {
+            reorderPinned: async () => {
+              throw new Error("HTTP 404: Thread not found");
+            },
+          },
+        },
+      },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Move b up" }));
+    expect(order()).toEqual(["b", "a", "c"]);
+    await waitFor(() =>
+      expect(toastMocks.error).toHaveBeenCalledWith("Could not reorder pinned thread", {
+        className: "bb-sidebar-toast",
+        description: "HTTP 404: Thread not found",
+      }),
+    );
+    expect(order()).toEqual(["a", "b", "c"]);
+  });
+
+  it("keeps the saved order until bb reports a newer one, then follows bb", async () => {
+    const rendered = renderSlot(
+      { component: PinnedOrder },
+      { pinned: base },
+      { sdk: { threads: { reorderPinned: async () => pinnedOrderResponse(["b", "a", "c"]) } } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Move b up" }));
+    await waitFor(() => expect(pinnedReorders(rendered)).toHaveLength(1));
+    // The live rows still hold the old keys; the saved order stays.
+    await waitFor(() => expect(order()).toEqual(["b", "a", "c"]));
+
+    // Another client moves c to the top: bb's order wins over the saved one.
+    rendered.rerender(<PinnedOrder pinned={[pin("a", "m"), pin("b", "n"), pin("c", "a")]} />);
+    await waitFor(() => expect(order()).toEqual(["c", "a", "b"]));
   });
 });

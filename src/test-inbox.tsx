@@ -1,6 +1,8 @@
 import { afterEach, vi } from "vitest";
 import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { loadPluginApp } from "@get-bb/plugin-sdk/testing/app";
+import type { useSdk } from "@get-bb/plugin-sdk/app";
+import { makeThreadResponse } from "@get-bb/plugin-sdk/testing";
 import { renderSlot } from "./test-slot";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 import { deferred, idleSidebarThreadFields, runtimeStatusFor } from "./test-fixtures";
@@ -251,6 +253,21 @@ export function nestedInteractiveControls(root: HTMLElement): string[] {
 }
 
 export { deferred };
+
+type PinnedOrderResponse = Awaited<ReturnType<ReturnType<typeof useSdk>["threads"]["reorderPinned"]>>;
+
+/**
+ * bb's reply to `threads.reorderPinned`: the pinned threads in their new
+ * order. The sidebar reads only `id` and `pinnedAt` from these list rows.
+ */
+export function pinnedOrderResponse(ids: readonly string[]): PinnedOrderResponse {
+  return ids.map((id, index) => makeThreadResponse({ id, pinnedAt: index + 1 })) as unknown as PinnedOrderResponse;
+}
+
+/** What the inbox asked bb's `threads.reorderPinned` to do, in call order. */
+export function pinnedReorders(rendered: { sdkCalls: ReadonlyArray<{ method: string; args: readonly unknown[] }> }) {
+  return rendered.sdkCalls.filter((call) => call.method === "threads.reorderPinned").map((call) => call.args[0]);
+}
 
 function cleanupInboxTest() {
   cleanup();

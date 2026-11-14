@@ -321,16 +321,6 @@ export const bbSidebarRpcContract = defineRpcContract({
     input: threadIdSchema,
     output: z.object({ ok: z.boolean() }),
   },
-  reorderPinned: {
-    input: z
-      .object({
-        threadId: z.string().trim().min(1),
-        previousThreadId: z.string().trim().min(1).nullable(),
-        nextThreadId: z.string().trim().min(1).nullable(),
-      })
-      .strict(),
-    output: z.object({ pinnedThreadIds: z.array(z.string()) }).strict(),
-  },
   listInboxOrder: {
     input: z.object({}).strict(),
     output: z.object({ inboxThreadIds: z.array(z.string()) }).strict(),
