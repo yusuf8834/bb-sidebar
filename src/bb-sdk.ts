@@ -1,17 +1,26 @@
-import { experimental_useRpcKeyedQuery, experimental_useThreadActions, type useSdk } from "@get-bb/plugin-sdk/app";
-import type { ComponentType } from "react";
+import {
+  experimental_useRpcKeyedQuery,
+  experimental_useRpcQuery,
+  experimental_useThreadActions,
+  type useSdk,
+} from "@get-bb/plugin-sdk/app";
+import { useCallback, useRef, type ComponentType } from "react";
 import type {
   PluginAppSlots,
   PluginRpcContract,
+  PluginRpcResult,
   PluginSidebarThread,
   PluginThreadActionsOptions,
   StandardSchemaV1,
+  experimental_PluginRpcCallError,
 } from "@get-bb/plugin-sdk/app";
+import type { bbSidebarRpcContract } from "./contract";
 import {
   GITHUB_PR_STATUS_PLUGIN_ID,
   type EnvironmentPullRequest,
   type EnvironmentPullRequestRow,
 } from "./github-pr-status";
+import { PROJECT_COLORS_TAG } from "./rpc-tags";
 
 export {
   experimental_useSidebarThreads as useSidebarThreads,
@@ -106,4 +115,52 @@ export function useEnvironmentPullRequest(environmentId: string | null): Environ
   });
   const row = environmentId ? data?.[environmentId] : undefined;
   return row?.outcome === "available" ? row.pullRequest : null;
+}
+
+type SidebarRpc = typeof bbSidebarRpcContract;
+type NoInput = Record<string, never>;
+
+/**
+ * One of the sidebar's own `{}` reads, for bb's query cache. bb computes a
+ * read's tags in the browser from this contract; the server still validates
+ * input and output against the zod contract, so these schemas only check shape.
+ */
+function taggedRead<Method extends keyof SidebarRpc>(tags: readonly string[]) {
+  return {
+    input: schema(
+      (value): value is NoInput => typeof value === "object" && value !== null && Object.keys(value).length === 0,
+    ),
+    output: schema((_value): _value is PluginRpcResult<SidebarRpc[Method]> => true),
+    tags: () => tags,
+  };
+}
+
+const sidebarReads = {
+  getProjectColors: taggedRead<"getProjectColors">([PROJECT_COLORS_TAG]),
+} satisfies PluginRpcContract;
+
+interface SidebarRead<T> {
+  /** The last server answer; undefined until the first one lands. */
+  data: T | undefined;
+  error: experimental_PluginRpcCallError | null;
+  /** Reread now, whatever the cache's freshness. Stable across renders. */
+  refresh(): Promise<void>;
+}
+
+/**
+ * Read the sidebar's own server through bb's shared query cache. Reads of
+ * the same method share one request, refresh when the server invalidates
+ * their tags, and refresh after bb reconnects. Server code that changes the
+ * data must call `bb.rpc.experimental_invalidate` with the read's tags.
+ */
+export function useSidebarRead<Method extends keyof typeof sidebarReads>(
+  method: Method,
+  { enabled = true }: { enabled?: boolean } = {},
+): SidebarRead<PluginRpcResult<(typeof sidebarReads)[Method]>> {
+  const query = experimental_useRpcQuery({ contract: sidebarReads, method, input: {}, enabled });
+  // The hook returns a new refetch on every render; keep callers' effects still.
+  const refetch = useRef(query.refetch);
+  refetch.current = query.refetch;
+  const refresh = useCallback(() => refetch.current(), []);
+  return { data: query.data, error: query.error, refresh };
 }

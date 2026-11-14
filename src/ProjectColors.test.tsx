@@ -48,12 +48,13 @@ it("reloads colors after a missed signal and reconnection", async () => {
     await Promise.resolve();
   });
   expect(loads()).toBe(2);
-  expect(style()).toBe("#abcdef");
-  await slot.behavior.emitRealtime("project-colors", {});
   await waitFor(() => expect(style()).toBe("#abcdef"));
+  colors = { p1: "#fedcba" };
+  await slot.behavior.experimental_invalidateRpc(["project-colors"]);
+  await waitFor(() => expect(style()).toBe("#fedcba"));
 });
 
-it("older color replies cannot overwrite the newest refresh", async () => {
+it("a change invalidated while a color read is in flight rereads instead of keeping the older reply", async () => {
   const older = deferred<{ colors: Record<string, string> }>();
   let loads = 0;
   const slot = renderSlot(
@@ -61,12 +62,11 @@ it("older color replies cannot overwrite the newest refresh", async () => {
     {},
     { rpc: { getProjectColors: () => (++loads === 1 ? older.promise : { colors: { p1: "#abcdef" } }) } },
   );
-  await slot.behavior.emitRealtime("project-colors", {});
-  await waitFor(() =>
-    expect(screen.getByTestId("name").style.getPropertyValue("--bb-sidebar-project")).toBe("#abcdef"),
-  );
-  await act(async () => {
-    older.resolve({ colors: { p1: "#123456" } });
-  });
-  expect(screen.getByTestId("name").style.getPropertyValue("--bb-sidebar-project")).toBe("#abcdef");
+  const style = () => screen.getByTestId("name").style.getPropertyValue("--bb-sidebar-project");
+  // bb keeps one read in flight per query: the change waits for it, then rereads.
+  const invalidated = slot.behavior.experimental_invalidateRpc(["project-colors"]);
+  older.resolve({ colors: { p1: "#123456" } });
+  await invalidated;
+  await waitFor(() => expect(style()).toBe("#abcdef"));
+  expect(loads).toBe(2);
 });

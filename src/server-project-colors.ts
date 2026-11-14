@@ -1,5 +1,5 @@
 import type { ServerContext, ServerHandlers } from "./server-context";
-import { PROJECT_COLORS_CHANNEL } from "./contract";
+import { PROJECT_COLORS_TAG } from "./rpc-tags";
 
 export function createServerProjectColors(ctx: ServerContext) {
   const handlers = {
@@ -21,7 +21,7 @@ export function createServerProjectColors(ctx: ServerContext) {
           )
           .run(projectId, color);
       }
-      ctx.bb.realtime.publish(PROJECT_COLORS_CHANNEL, { projectId });
+      ctx.bb.rpc.experimental_invalidate([PROJECT_COLORS_TAG]);
       return { ok: true };
     },
   } satisfies Pick<ServerHandlers, "getProjectColors" | "setProjectColor">;

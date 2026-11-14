@@ -1,42 +1,16 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useRealtime, useRealtimeConnectionState, useRpc } from "@get-bb/plugin-sdk/app";
-import type { bbSidebarRpcContract } from "./contract";
-import { PROJECT_COLORS_CHANNEL } from "./realtime-channels";
+import { createContext, useContext, useMemo, type ReactNode } from "react";
+import { useSidebarRead } from "./bb-sdk";
 import { automaticProjectColor, projectColorsById, projectColorStyle } from "./project-colors";
 import type { ProjectColorDisplay } from "./sidebar-settings";
 
 export type ProjectStripeView = "full" | "collapsed" | "group-full" | "group-collapsed";
 
+const NO_OVERRIDES: Record<string, string> = {};
+
+/** Saved project colors. Automatic colors stand in until the first answer and through a failed read. */
 export function useProjectColorOverrides(enabled = true) {
-  const rpc = useRpc<typeof bbSidebarRpcContract>();
-  const connection = useRealtimeConnectionState();
-  const previousConnection = useRef(connection);
-  const [overrides, setOverrides] = useState<Record<string, string>>({});
-  const request = useRef(0);
-  const load = useCallback(async () => {
-    if (!enabled) return;
-    const seq = ++request.current;
-    try {
-      const result = await rpc.call("getProjectColors", {});
-      if (seq === request.current) setOverrides(result.colors);
-    } catch {
-      // Keep automatic colors while the backend is reloading.
-    }
-  }, [enabled, rpc]);
-  useEffect(() => {
-    void load();
-    return () => {
-      request.current += 1;
-    };
-  }, [load]);
-  useRealtime(PROJECT_COLORS_CHANNEL, () => {
-    void load();
-  });
-  useEffect(() => {
-    if (connection === "connected" && previousConnection.current !== "connected") void load();
-    previousConnection.current = connection;
-  }, [connection, load]);
-  return { overrides, reload: load };
+  const { data, refresh } = useSidebarRead("getProjectColors", { enabled });
+  return { overrides: data?.colors ?? NO_OVERRIDES, reload: refresh };
 }
 
 const ProjectColorsContext = createContext<{

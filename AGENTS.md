@@ -111,9 +111,21 @@ Do not adopt the SDK's thread menu components for this sidebar.
 
 The sidebar RPC contract and its schemas live in shared `src/contract.ts` as
 `bbSidebarRpcContract`. App code imports its types with `import type`. The
-contract re-exports all six realtime channels from `src/realtime-channels.ts`;
+contract re-exports the realtime channels from `src/realtime-channels.ts`;
 browser value imports use that pure module to avoid loading schemas. The host
 port contract lives in `src/port-scan-contract.ts`.
+
+Read the sidebar's own server data with `useSidebarRead(method)` from
+`src/bb-sdk.ts` (bb's shared query cache), not `useRpc().call` with
+`useRealtime` and a request counter. Add the read to `sidebarReads` there with
+tags from shared `src/rpc-tags.ts`; the server code that changes the data
+calls `ctx.bb.rpc.experimental_invalidate([tag])` after the write. bb keeps
+one read in flight per method, rereads on invalidation and after a reconnect.
+Reads shown before the first answer keep their saved copy:
+`data ?? cachedValue` plus a write-through (`src/lib/cached-rpc-state.ts`).
+Keep a `realtime.publish` only while some `useRealtime` still listens to it.
+Wired tests deliver invalidations through `flush()`; app tests use
+`experimental_invalidateRpc([tag])`.
 
 ## Server modules
 

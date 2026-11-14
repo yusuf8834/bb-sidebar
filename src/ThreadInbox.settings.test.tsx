@@ -86,7 +86,7 @@ describe("sidebar settings", () => {
     expect(group.querySelectorAll("[data-project-stripe]")).toHaveLength(1);
     expect(within(group).getByRole("list").querySelector("[data-project-stripe]")).toBeNull();
     colors = { proj_1: "#fedcba" };
-    await rendered.emitRealtime("project-colors", { projectId: "proj_1" });
+    await rendered.experimental_invalidateRpc(["project-colors"]);
     await waitFor(() =>
       expect(
         (group.querySelector("[data-project-stripe]") as HTMLElement).style.getPropertyValue("--bb-sidebar-project"),

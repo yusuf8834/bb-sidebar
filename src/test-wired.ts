@@ -166,13 +166,32 @@ export async function createWired(
   }
   const slots = new Set<ReturnType<typeof renderSlot>>();
   const archiveRequests: Array<{ threadId: string; confirm: () => Promise<void>; cancel: () => void }> = [];
-  let delivered = 0;
-  // Publications stay in the fake host's normalized ledger. Explicit flush is
-  // the transport pump, so events can also be driven without an app RPC call.
+  // Publications and query invalidations stay in the fake host's two ledgers.
+  // Explicit flush is the transport pump, so events can also be driven without
+  // an app RPC call. bb sends both over one socket, so flush keeps the order
+  // the server produced them in: each invalidation records how many
+  // publications came before it.
+  const { realtimeSignals, experimental_rpcInvalidations: invalidations } = harness.inspection;
+  const invalidationPositions: number[] = [];
+  harness.inspection.experimental_onRpcInvalidation(() => {
+    invalidationPositions.push(realtimeSignals.length);
+  });
+  let deliveredSignals = 0;
+  let deliveredInvalidations = 0;
   async function flush() {
-    while (delivered < harness.inspection.realtimeSignals.length) {
-      const signal = harness.inspection.realtimeSignals[delivered++]!;
-      for (const slot of slots) await slot.behavior.emitRealtime(signal.channel, signal.payload);
+    for (;;) {
+      const invalidationAt =
+        deliveredInvalidations < invalidations.length ? invalidationPositions[deliveredInvalidations]! : Infinity;
+      if (deliveredSignals < realtimeSignals.length && deliveredSignals < invalidationAt) {
+        const signal = realtimeSignals[deliveredSignals++]!;
+        for (const slot of slots) await slot.behavior.emitRealtime(signal.channel, signal.payload);
+      } else if (invalidationAt !== Infinity) {
+        // null is bb.rpc.experimental_invalidateAll().
+        const tags = invalidations[deliveredInvalidations++] ?? null;
+        for (const slot of slots) await slot.behavior.experimental_invalidateRpc(tags);
+      } else {
+        return;
+      }
     }
   }
   function rpcHandlers(replies: Array<{ method: string; result: unknown }>) {

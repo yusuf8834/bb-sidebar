@@ -108,10 +108,7 @@ describe("project management", () => {
     ).resolves.toEqual({ ok: true });
     expect(harness.inspection.sdk.callsTo("projects.delete")).toEqual([[{ projectId: "proj_1" }]]);
     expect(await harness.behavior.callRpc("getProjectColors", {})).toEqual({ colors: {} });
-    expect(harness.inspection.realtimeSignals.at(-1)).toEqual({
-      channel: "project-colors",
-      payload: { projectId: "proj_1" },
-    });
+    expect(harness.inspection.experimental_rpcInvalidations.at(-1)).toEqual(["project-colors"]);
     await expect(harness.behavior.callRpc("listProjectIconSettings", {})).resolves.toEqual({
       projects: [
         {

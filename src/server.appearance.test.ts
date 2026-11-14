@@ -51,9 +51,6 @@ describe("lifecycle RPC", () => {
     await expect(restored.behavior.callRpc("getProjectColors", {})).resolves.toEqual({ colors: { proj_1: "#ab12cd" } });
     await restored.behavior.callRpc("setProjectColor", { projectId: "proj_1", color: null });
     await expect(restored.behavior.callRpc("getProjectColors", {})).resolves.toEqual({ colors: {} });
-    expect(restored.inspection.realtimeSignals).toContainEqual({
-      channel: "project-colors",
-      payload: { projectId: "proj_1" },
-    });
+    expect(restored.inspection.experimental_rpcInvalidations).toContainEqual(["project-colors"]);
   });
 });

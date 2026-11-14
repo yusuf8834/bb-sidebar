@@ -1,6 +1,7 @@
 import type { ServerContext, ServerHandlers } from "./server-context";
 import type { createServerProjectIcons } from "./server-project-icons";
-import { PROJECT_ICONS_CHANNEL, PROJECT_COLORS_CHANNEL } from "./contract";
+import { PROJECT_ICONS_CHANNEL } from "./contract";
+import { PROJECT_COLORS_TAG } from "./rpc-tags";
 
 export function createServerProjectManagement(ctx: ServerContext, icons: ReturnType<typeof createServerProjectIcons>) {
   const { defaultProjectHostIds, clearProjectIconCache } = icons;
@@ -59,7 +60,7 @@ export function createServerProjectManagement(ctx: ServerContext, icons: ReturnT
       defaultProjectHostIds.delete(projectId);
       clearProjectIconCache(projectId);
       ctx.bb.realtime.publish(PROJECT_ICONS_CHANNEL, { projectId });
-      ctx.bb.realtime.publish(PROJECT_COLORS_CHANNEL, { projectId });
+      ctx.bb.rpc.experimental_invalidate([PROJECT_COLORS_TAG]);
       return { ok: true as const };
     },
   } satisfies Pick<
