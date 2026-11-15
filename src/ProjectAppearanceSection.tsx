@@ -5,7 +5,7 @@ import {
   SettingsSection,
   SettingsGroup,
   SettingsSelect,
-  Switch,
+  SwitchRow,
   type SettingsDraftSectionProps,
 } from "./settings-ui";
 
@@ -19,16 +19,11 @@ const PROJECT_COLOR_DISPLAY_LABELS: Record<ProjectColorDisplay, string> = {
 export function ProjectAppearanceSection({ draft, update, status }: SettingsDraftSectionProps) {
   return (
     <SettingsSection title="Project appearance" status={status}>
-      <SettingRow
+      <SwitchRow
         title="Project colors"
         description="Color project names in every mode. Choose where their stripes appear below."
-        control={
-          <Switch
-            label="Project colors"
-            checked={draft.projectColorsEnabled}
-            onChange={(checked) => update("projectColorsEnabled", checked)}
-          />
-        }
+        checked={draft.projectColorsEnabled}
+        onChange={(checked) => update("projectColorsEnabled", checked)}
       >
         {draft.projectColorsEnabled ? (
           <div className="border-l-2 border-border">
@@ -52,7 +47,7 @@ export function ProjectAppearanceSection({ draft, update, status }: SettingsDraf
             />
           </div>
         ) : null}
-      </SettingRow>
+      </SwitchRow>
       <SettingsGroup title="Customize a project">
         <ProjectAppearanceSettings />
       </SettingsGroup>

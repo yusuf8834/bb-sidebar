@@ -5,7 +5,7 @@ import {
   SettingRow,
   SettingsSection,
   SettingsSelect,
-  Switch,
+  SwitchRow,
   type SettingsDraftSectionProps,
 } from "./settings-ui";
 
@@ -44,64 +44,39 @@ export function SidebarLayoutSettings({
       >
         {draft.threadDisplay === "compact-all" ? (
           <div className="border-l-2 border-border">
-            <SettingRow
+            <SwitchRow
               title="Keep pinned threads full"
               description="Pinned threads keep their full cards."
-              control={
-                <Switch
-                  label="Keep pinned threads full"
-                  checked={draft.keepPinnedThreadsFull}
-                  onChange={(checked) => update("keepPinnedThreadsFull", checked)}
-                />
-              }
+              checked={draft.keepPinnedThreadsFull}
+              onChange={(checked) => update("keepPinnedThreadsFull", checked)}
             />
-            <SettingRow
+            <SwitchRow
               title="Keep woken threads full"
               description="A snoozed thread that wakes shows a full card until you open it or dismiss its Woke marker."
-              control={
-                <Switch
-                  label="Keep woken threads full"
-                  checked={draft.keepWokeThreadsFull}
-                  onChange={(checked) => update("keepWokeThreadsFull", checked)}
-                />
-              }
+              checked={draft.keepWokeThreadsFull}
+              onChange={(checked) => update("keepWokeThreadsFull", checked)}
             />
           </div>
         ) : null}
       </SettingRow>
-      <SettingRow
+      <SwitchRow
         title="Hide project names in compact cards"
         description="Keep the project icon and hide its name on compact cards in Active, Pinned, and Working. Hover to see the project name."
-        control={
-          <Switch
-            label="Hide project names in compact cards"
-            checked={draft.compactProjectIconOnly}
-            onChange={(checked) => update("compactProjectIconOnly", checked)}
-          />
-        }
+        checked={draft.compactProjectIconOnly}
+        onChange={(checked) => update("compactProjectIconOnly", checked)}
       />
-      <SettingRow
+      <SwitchRow
         title="Working shelf"
         experimental
         description="Keep working threads in their own shelf. They return to Active when work finishes, fails, or needs you. Pinned threads stay pinned."
-        control={
-          <Switch
-            label="Working shelf"
-            checked={draft.workingShelf}
-            onChange={(checked) => update("workingShelf", checked)}
-          />
-        }
+        checked={draft.workingShelf}
+        onChange={(checked) => update("workingShelf", checked)}
       />
-      <SettingRow
+      <SwitchRow
         title="Inactive shelf"
         description="Move quiet, unpinned threads out of Active. New activity brings them back."
-        control={
-          <Switch
-            label="Inactive shelf"
-            checked={draft.inactiveThreadsEnabled}
-            onChange={(checked) => update("inactiveThreadsEnabled", checked)}
-          />
-        }
+        checked={draft.inactiveThreadsEnabled}
+        onChange={(checked) => update("inactiveThreadsEnabled", checked)}
       >
         {draft.inactiveThreadsEnabled ? (
           <InlineNumber
@@ -116,19 +91,14 @@ export function SidebarLayoutSettings({
             onChange={(value) => update("inactiveAfterHours", value)}
           />
         ) : null}
-      </SettingRow>
+      </SwitchRow>
 
-      <SettingRow
+      <SwitchRow
         title="Dock shelves to the bottom"
         experimental
         description="Keep shelves below Active at the bottom of the sidebar. Expanded shelves scroll with the thread list."
-        control={
-          <Switch
-            label="Dock shelves to the bottom"
-            checked={draft.dockShelves}
-            onChange={(checked) => update("dockShelves", checked)}
-          />
-        }
+        checked={draft.dockShelves}
+        onChange={(checked) => update("dockShelves", checked)}
       />
     </SettingsSection>
   );

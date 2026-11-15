@@ -6,7 +6,7 @@ import {
   type ChildThreadSortDirection,
   type ChildThreadSortField,
 } from "./sidebar-settings";
-import { SettingRow, SettingsSection, SettingsSelect, Switch, type SettingsDraftSectionProps } from "./settings-ui";
+import { SettingRow, SettingsSection, SettingsSelect, SwitchRow, type SettingsDraftSectionProps } from "./settings-ui";
 
 const CHILD_SORT_FIELD_LABELS: Record<ChildThreadSortField, string> = {
   created: "Date created",
@@ -24,16 +24,11 @@ const CHILD_SORT_DIRECTION_LABELS: Record<ChildThreadSortDirection, string> = {
 export function ChildThreadSettings({ draft, update, status }: SettingsDraftSectionProps) {
   return (
     <SettingsSection title="Child threads" status={status}>
-      <SettingRow
+      <SwitchRow
         title="Show children that need attention"
         description="Keep children with a status visible while their list is collapsed."
-        control={
-          <Switch
-            label="Show children that need attention"
-            checked={draft.showRunningChildrenWhenCollapsed}
-            onChange={(checked) => update("showRunningChildrenWhenCollapsed", checked)}
-          />
-        }
+        checked={draft.showRunningChildrenWhenCollapsed}
+        onChange={(checked) => update("showRunningChildrenWhenCollapsed", checked)}
       />
       <SettingRow
         title="Order"

@@ -201,7 +201,7 @@ function assertSettingsControls(container: HTMLElement, settings: (typeof snapsh
     ["Inactive shelf", "inactiveThreadsEnabled"],
     ["Dock shelves to the bottom", "dockShelves"],
     ["Project colors", "projectColorsEnabled"],
-    ["Settle inactive threads", "autoSettleInactive"],
+    ["Settle quiet threads", "autoSettleInactive"],
     ["Settle finished pull requests", "autoSettleOnMerge"],
     ["Show children that need attention", "showRunningChildrenWhenCollapsed"],
   ] as const) {
@@ -220,7 +220,7 @@ function assertSettingsControls(container: HTMLElement, settings: (typeof snapsh
   // check its cached value, then restore the original switch state.
   for (const [toggle, label, field] of [
     ["Inactive shelf", "Hours before inactive", "inactiveAfterHours"],
-    ["Settle inactive threads", "Days before auto-settle", "autoSettleAfterDays"],
+    ["Settle quiet threads", "Days before auto-settle", "autoSettleAfterDays"],
   ] as const) {
     const control = ui.getByRole("switch", { name: toggle });
     fireEvent.click(control);

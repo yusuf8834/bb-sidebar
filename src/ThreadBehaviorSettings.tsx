@@ -4,7 +4,7 @@ import {
   SettingRow,
   SettingsSection,
   SettingsGroup,
-  Switch,
+  SwitchRow,
   type SettingsDraftSectionProps,
 } from "./settings-ui";
 
@@ -61,16 +61,11 @@ export function ThreadBehaviorSettings({
         </SettingRow>
       </SettingsGroup>
       <SettingsGroup title="Automatic settle">
-        <SettingRow
+        <SwitchRow
           title="Settle quiet threads"
           description="Move threads to Settled after a longer quiet period."
-          control={
-            <Switch
-              label="Settle inactive threads"
-              checked={draft.autoSettleInactive}
-              onChange={(checked) => update("autoSettleInactive", checked)}
-            />
-          }
+          checked={draft.autoSettleInactive}
+          onChange={(checked) => update("autoSettleInactive", checked)}
         >
           {draft.autoSettleInactive ? (
             <InlineNumber
@@ -85,17 +80,12 @@ export function ThreadBehaviorSettings({
               onChange={(value) => update("autoSettleAfterDays", value)}
             />
           ) : null}
-        </SettingRow>
-        <SettingRow
+        </SwitchRow>
+        <SwitchRow
           title="Settle finished pull requests"
           description="Settles a thread when its pull request is merged or closed after the thread's last activity. Pull request status comes from the GitHub PR Status plugin; while it is off, threads with a workspace are not settled automatically."
-          control={
-            <Switch
-              label="Settle finished pull requests"
-              checked={draft.autoSettleOnMerge}
-              onChange={(checked) => update("autoSettleOnMerge", checked)}
-            />
-          }
+          checked={draft.autoSettleOnMerge}
+          onChange={(checked) => update("autoSettleOnMerge", checked)}
         />
       </SettingsGroup>
     </SettingsSection>

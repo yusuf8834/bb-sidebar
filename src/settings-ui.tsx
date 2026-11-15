@@ -129,7 +129,7 @@ export function SettingRow({
   );
 }
 
-export function Switch({
+function Switch({
   checked,
   disabled,
   label,
@@ -163,6 +163,19 @@ export function Switch({
       />
     </button>
   );
+}
+
+/** A setting turned on and off by a switch, which the row's title names. */
+export function SwitchRow({
+  checked,
+  onChange,
+  ...row
+}: Omit<ComponentProps<typeof SettingRow>, "title" | "control"> & {
+  title: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return <SettingRow {...row} control={<Switch label={row.title} checked={checked} onChange={onChange} />} />;
 }
 
 /**
