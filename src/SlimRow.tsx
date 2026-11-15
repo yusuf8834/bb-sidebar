@@ -5,8 +5,7 @@ import { Tooltip } from "./components/Tooltip";
 import { ChildThreadBadge, ChildThreadList, collapsedChildThreads } from "./ChildThreadList";
 import { CompactRow } from "./CompactRow";
 import { RowContextMenu } from "./RowContextMenu";
-import { StatusOrTime, useWorkingForDisplay } from "./StatusSlot";
-import { useThreadLimit } from "./RateLimits";
+import { StatusOrTime, useStatusLimit, useWorkingForDisplay } from "./StatusSlot";
 import { threadDisplayTitle } from "./inbox";
 import { snoozeWakeLabel } from "./lifecycle";
 import { useProjectColor } from "./ProjectColors";
@@ -72,7 +71,7 @@ export const SlimRow = memo(function SlimRow({
   const title = threadDisplayTitle(thread);
   const rowLabel = projectName ? `${projectName} · ${title}` : title;
   const [isRenaming, setIsRenaming] = useState(false);
-  const limit = useThreadLimit(thread);
+  const limit = useStatusLimit(thread);
 
   return (
     <RowContextMenu

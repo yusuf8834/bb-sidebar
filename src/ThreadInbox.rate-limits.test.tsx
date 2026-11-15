@@ -305,6 +305,39 @@ describe("sidebar rate-limit recovery", () => {
     );
   });
 
+  const asks = { hasPendingInteraction: true, indicator: "waiting-for-input" } as const;
+  const runs = {
+    status: "active",
+    runtimeStatus: "active",
+    indicator: "runtime",
+    indicatorLabel: "Working",
+    queuedWork: "waiting",
+  } as const;
+  it.each(
+    (["full", "compact-all", "child"] as const).flatMap((row) => [
+      [row, "asks", asks, "Needs you"] as const,
+      [row, "runs", runs, "Working"] as const,
+    ]),
+  )("a %s row and its hover card put the status first while the thread %s", async (row, state, overrides, status) => {
+    const { slot } = mount({ display: row === "child" ? "full" : row, child: row === "child", overrides });
+    if (row === "child") fireEvent.click(await screen.findByRole("button", { name: /^1 child thread/ }));
+    const name = row === "child" ? `Open child thread: Limited work, ${status}` : "Limited work";
+    const link = await screen.findByRole("link", { name });
+    await waitFor(() => expect(slot.inspection.rpcCalls.some((call) => call.method === "getThreadLimits")).toBe(true));
+    await act(async () => {});
+    expect(screen.getByText(status).className).toContain(
+      row === "compact-all" && state === "runs" ? "sr-only" : "font-medium",
+    );
+    expect(screen.queryByText("Limit reached")).toBeNull();
+    expect(screen.queryByRole("button", { name: /for Limited work$/ })).toBeNull();
+    if (row === "compact-all") return;
+    fireEvent.pointerMove(link, { pointerType: "mouse" });
+    const details = await screen.findByRole("dialog", { name: "Thread details" });
+    // The card still describes the limit, but the status is the thread's own.
+    expect(await within(details).findByText(/You've hit your session limit/)).toBeDefined();
+    expect(within(details).getByText(`Status: ${status}`)).toBeDefined();
+  });
+
   it("reconciles a schedule changed by another client after reconnecting", async () => {
     const { slot, setState } = mount();
     await screen.findByText("Limit reached");

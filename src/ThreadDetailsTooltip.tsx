@@ -8,7 +8,7 @@ import { threadDisplayTitle } from "./inbox";
 import { Icon, type IconName } from "./components/Icon";
 import { ProviderGlyph } from "./ProviderGlyph";
 import { StatusGlyph } from "./StatusGlyph";
-import { useThreadRowStatus, useThreadWithDraft } from "./StatusSlot";
+import { useStatusLimit, useThreadRowStatus, useThreadWithDraft } from "./StatusSlot";
 import { StillThreadStatusGlyph } from "./StillThreadStatusGlyph";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { projectIconUrl } from "./project-icons";
@@ -108,12 +108,13 @@ export function ThreadDetailsTooltip({
   const statusThread = useThreadWithDraft(thread);
   const rowStatus = useThreadRowStatus(thread);
   const limit = useThreadLimit(thread);
+  const statusLimit = useStatusLimit(thread);
   const project = projects.find((entry) => entry.id === thread.projectId);
   const isWorktree = thread.environment?.isWorktree === true;
   const status = thread.hasPendingInteraction
     ? "Needs you"
-    : limit
-      ? limitStatus(limit)
+    : statusLimit
+      ? limitStatus(statusLimit)
       : (statusThread.indicatorLabel ?? "Idle");
   const subthreads = visible
     ? threads

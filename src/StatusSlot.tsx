@@ -78,10 +78,7 @@ export function StatusOrTime({
   const thread = useThreadWithDraft(listedThread);
   const workingSince = useWorkingSinceContext();
   const rowStatus = useThreadRowStatus(listedThread);
-  const limit = useThreadLimit(listedThread);
-  if (limit && !thread.hasPendingInteraction && thread.indicator !== "runtime") {
-    return <RateLimitRecovery thread={listedThread} />;
-  }
+  if (useStatusLimit(listedThread)) return <RateLimitRecovery thread={listedThread} />;
   if (rowStatus) {
     // bb's glyph for another plugin's status, in place of the label; the age stays.
     return (
@@ -125,6 +122,16 @@ export function StatusOrTime({
   return (
     <span className="tabular-nums text-2xs text-muted-foreground">{relativeTimeLabel(thread.updatedAt, now)}</span>
   );
+}
+
+/**
+ * The provider limit when it owns the status, on every surface: a pending
+ * question wins, then a running turn, then the limit.
+ */
+export function useStatusLimit(thread: PluginSidebarThread) {
+  const shown = useThreadWithDraft(thread);
+  const limit = useThreadLimit(thread);
+  return shown.hasPendingInteraction || shown.indicator === "runtime" ? null : limit;
 }
 
 /**

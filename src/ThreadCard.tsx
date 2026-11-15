@@ -21,7 +21,7 @@ import { cn } from "./lib/utils";
 import { rowKeyshortcuts } from "./lib/keyshortcuts";
 import { RowContextMenu } from "./RowContextMenu";
 import { ProviderGlyph } from "./ProviderGlyph";
-import { limitSlotClass, STATUS_SLOT_CLASS, StatusOrTime, useWorkingForDisplay } from "./StatusSlot";
+import { limitSlotClass, STATUS_SLOT_CLASS, StatusOrTime, useStatusLimit, useWorkingForDisplay } from "./StatusSlot";
 import { CompactStatusOrTime } from "./StatusGlyph";
 import { threadDisplayTitle } from "./inbox";
 import { InlineThreadTitle } from "./InlineThreadTitle";
@@ -29,7 +29,6 @@ import { isWorkingTree } from "./working-tree";
 import { ProjectFavicon, ProjectStripe } from "./ProjectFavicon";
 import { useProjectColor } from "./ProjectColors";
 import { OpenPortsIndicator } from "./OpenPorts";
-import { useThreadLimit } from "./RateLimits";
 import { useInboxEnvironment, useInboxActions, useInboxActivity } from "./InboxContext";
 import { DEFAULT_SIDEBAR_SETTINGS } from "./sidebar-settings";
 import { useRowStatusRuns } from "./useLifecycle";
@@ -92,7 +91,7 @@ export function ThreadCard({
   onRenamingChange?: (editing: boolean) => void;
 }) {
   const [pin] = useThreadActions(thread, { keys: ["bb--core/pin"] });
-  const limit = useThreadLimit(thread);
+  const limit = useStatusLimit(thread);
   const {
     providerById,
     projectNameById,

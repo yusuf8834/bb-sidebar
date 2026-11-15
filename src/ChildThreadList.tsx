@@ -11,11 +11,11 @@ import {
   STATUS_SLOT_CLASS,
   StatusOrTime,
   threadStatusLabel,
+  useStatusLimit,
   useThreadWithDraft,
   useWorkingForDisplay,
 } from "./StatusSlot";
 import { RateLimitRecovery } from "./RateLimitRecovery";
-import { useThreadLimit } from "./RateLimits";
 import { limitStatus } from "./rate-limit-labels";
 import { useWorkingSinceContext } from "./useWorkingSince";
 import { threadDisplayTitle } from "./inbox";
@@ -355,7 +355,7 @@ function ChildThreadRow({
   const effectiveNow = now ?? Date.now();
   const workingSince = useWorkingSinceContext();
   const statusThread = useThreadWithDraft(thread);
-  const limit = useThreadLimit(thread);
+  const limit = useStatusLimit(thread);
   const visibleStatus = limit
     ? limitStatus(limit)
     : threadStatusLabel(statusThread, workingSince.get(thread.id), effectiveNow);

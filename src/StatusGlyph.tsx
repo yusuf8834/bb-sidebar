@@ -6,9 +6,15 @@ import { unhandledIndicator } from "./child-status";
 import { StillThreadStatusGlyph } from "./StillThreadStatusGlyph";
 import { cn } from "./lib/utils";
 import { relativeTimeLabel } from "./relative-time";
-import { shortStatusLabel, statusToneClass, StatusOrTime, threadShortStatus, useThreadWithDraft } from "./StatusSlot";
+import {
+  shortStatusLabel,
+  statusToneClass,
+  StatusOrTime,
+  threadShortStatus,
+  useStatusLimit,
+  useThreadWithDraft,
+} from "./StatusSlot";
 import { useWorkingSinceContext } from "./useWorkingSince";
-import { useThreadLimit } from "./RateLimits";
 import "./working-pulse.css";
 
 /**
@@ -162,7 +168,7 @@ export function CompactStatusOrTime({
 }) {
   const thread = useThreadWithDraft(listedThread);
   const workingSince = useWorkingSinceContext();
-  const limit = useThreadLimit(listedThread);
+  const limit = useStatusLimit(listedThread);
   const status = threadShortStatus(thread);
   if (limit || status === null || !status.showsDuration) return <StatusOrTime thread={listedThread} now={now} />;
   const startedAt = workingSince.get(thread.id);
