@@ -297,7 +297,7 @@ describe("lifecycle RPC", () => {
       {
         threadId: "thr_owner",
         resource: "terminal",
-        message: 'Kept 1 terminal open: shares a workspace with "thr_active", which is not settled',
+        message: 'Kept 1 terminal open: shares a workspace with "Untitled thread", which is not settled',
       },
     ]);
     expect(harness.inspection.sdk.callsTo("terminals.close").slice(closesBefore)).toEqual([]);

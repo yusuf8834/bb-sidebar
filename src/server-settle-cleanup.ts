@@ -6,6 +6,7 @@ import type { z } from "zod";
 import type { cleanupIssueSchema, cleanupPreviewSchema, cleanupResultSchema, ownedPortTargetSchema } from "./contract";
 import { randomUUID } from "node:crypto";
 import { canPark, resolveShelf } from "./lifecycle";
+import { threadStoredTitle } from "./inbox";
 import { EMPTY_RECLAIM, planTerminalReclaim, type ReclaimSummary } from "./reclaim";
 import { runThreadTasks } from "./thread-tasks";
 
@@ -111,8 +112,7 @@ export function createServerSettleCleanup(
         return "could not confirm that its workspace is not shared with active work";
       for (const key of workspaceKeys(thread)) {
         const owner = protectedWorkspaces.get(key);
-        if (owner)
-          return `shares a workspace with "${owner.title ?? owner.titleFallback ?? owner.id}", which is not settled`;
+        if (owner) return `shares a workspace with "${threadStoredTitle(owner)}", which is not settled`;
       }
       return null;
     };
@@ -269,7 +269,7 @@ export function createServerSettleCleanup(
             planned.push({ threadId, terminalIds, ports, workspace });
             threads.push({
               threadId,
-              title: thread.title ?? thread.titleFallback ?? threadId,
+              title: threadStoredTitle(thread),
               terminalCount: terminalIds.length,
               ports: [...new Set(ports.map((port) => port.port))],
             });

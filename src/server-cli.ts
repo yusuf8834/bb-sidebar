@@ -12,7 +12,7 @@ import {
   resolveRowShelf,
   waitsForScheduledContinue,
 } from "./lifecycle";
-import { placeOnRowShelves } from "./inbox";
+import { placeOnRowShelves, threadStoredTitle } from "./inbox";
 import { ancestorsOfAskingThreads } from "./child-status";
 
 type CliHandlers = Pick<
@@ -166,7 +166,7 @@ export function createServerCli(
               shelf === "snoozed" && row?.snoozedUntil ? ` until ${formatSnoozeWakeTime(row.snoozedUntil)}` : "";
             const pinned = thread.pinnedAt !== null ? " pinned" : "";
             const parent = thread.parentThreadId ? ` (child of ${thread.parentThreadId})` : "";
-            return `${thread.id}\t${shelf}${pinned}${until}\t${thread.title ?? "Untitled"}${parent}`;
+            return `${thread.id}\t${shelf}${pinned}${until}\t${threadStoredTitle(thread)}${parent}`;
           });
           if (total === 0) return { exitCode: 0, stdout: "No threads\n" };
           if (threads.length === 0) return { exitCode: 0, stdout: `No threads at offset ${offset}; ${total} match\n` };

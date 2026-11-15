@@ -92,10 +92,10 @@ describe("bb sidebar list places children on their parent's shelf", () => {
     expect(await ids(["--all", "--state", "settled"])).toEqual(["parent", "returned", "sibling", "woken"]);
 
     const text = await harness.behavior.runCli(["list", "--all"]);
-    expect(text.stdout).toContain("woken\tsettled\tUntitled (child of parent)");
-    expect(text.stdout).toContain("returned\tsettled\tUntitled (child of parent)");
+    expect(text.stdout).toContain("woken\tsettled\tUntitled thread (child of parent)");
+    expect(text.stdout).toContain("returned\tsettled\tUntitled thread (child of parent)");
     const active = await harness.behavior.runCli(["list", "--all", "--state", "active"]);
-    expect(active.stdout).toBe("other\tactive\tUntitled\n");
+    expect(active.stdout).toBe("other\tactive\tUntitled thread\n");
   });
 
   it("follows the top of a nested tree and resolves it before the project filter", async () => {

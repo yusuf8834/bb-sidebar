@@ -36,7 +36,7 @@ export function sortSettledThreads<
 }
 
 /** The title as stored, for editing: mentions stay tokens so a rename keeps them. */
-export function threadStoredTitle(thread: PluginSidebarThread): string {
+export function threadStoredTitle(thread: Pick<PluginSidebarThread, "title" | "titleFallback">): string {
   const title = thread.title?.trim();
   if (title) return title;
   const fallback = thread.titleFallback?.trim();

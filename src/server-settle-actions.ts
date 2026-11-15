@@ -4,6 +4,7 @@ import type { createServerSettleCleanup } from "./server-settle-cleanup";
 import { randomUUID } from "node:crypto";
 import { threadTreeIds } from "./thread-tree";
 import { canPark } from "./lifecycle";
+import { threadStoredTitle } from "./inbox";
 import { sortPinnedThreads } from "./pinned-order";
 import { EMPTY_RECLAIM } from "./reclaim";
 import { runThreadTasks } from "./thread-tasks";
@@ -56,7 +57,7 @@ export function createServerSettleActions(
       if (!tree.some((thread) => thread.id === threadId)) throw new Error("Thread is no longer available");
       const { currentTree, now, previous, cleanupRows, cleanupOwner } = await withThreadChanges([...ids], async () => {
         const busy = tree.find((thread) => !canPark(threadSignals(thread)));
-        if (busy) throw new Error(`Cannot settle while ${busy.title ?? "a thread"} is working or waiting for input`);
+        if (busy) throw new Error(`Cannot settle while ${threadStoredTitle(busy)} is working or waiting for input`);
         const beforeRows = new Map(tree.map((thread) => [thread.id, readOne(thread.id)]));
         const pins = sortPinnedThreads(
           allThreads.filter((thread) => thread.pinnedAt !== null && thread.parentThreadId === null),
@@ -127,7 +128,7 @@ export function createServerSettleActions(
                 nextThreadId: pins[index + 1]?.id ?? null,
               });
             } catch {
-              failed.push(original.title ?? original.id);
+              failed.push(threadStoredTitle(original));
             }
           }
           if (failed.length)
