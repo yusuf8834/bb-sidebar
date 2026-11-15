@@ -1,6 +1,7 @@
 import { useBbNavigate } from "@get-bb/plugin-sdk/app";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
+import { destructiveButtonClass, secondaryButtonClass } from "./settings-ui";
 import { useRpc } from "@get-bb/plugin-sdk/app";
 import { Icon } from "./components/Icon";
 import { usePortalScopeProps } from "./lib/portal-scope";
@@ -205,30 +206,17 @@ export function CleanSettledDialog({ threadIds, onNavigate }: { threadIds: strin
           ) : null}
           <div className="mt-5 flex justify-end gap-2">
             <Dialog.Close asChild>
-              <button
-                type="button"
-                disabled={busy && result === null}
-                className="h-8 rounded-md border border-border bg-background px-3 text-xs font-medium hover:bg-accent disabled:opacity-50"
-              >
+              <button type="button" disabled={busy && result === null} className={secondaryButtonClass}>
                 {result ? "Done" : "Cancel"}
               </button>
             </Dialog.Close>
             {error && !busy && !result ? (
-              <button
-                type="button"
-                onClick={() => setRefreshKey((key) => key + 1)}
-                className="h-8 rounded-md border border-border bg-background px-3 text-xs font-medium hover:bg-accent"
-              >
+              <button type="button" onClick={() => setRefreshKey((key) => key + 1)} className={secondaryButtonClass}>
                 Refresh preview
               </button>
             ) : null}
             {preview && !result && preview.threads.length > 0 ? (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void clean()}
-                className="h-8 rounded-md bg-destructive px-3 text-xs font-medium text-destructive-foreground hover:opacity-90 disabled:opacity-50"
-              >
+              <button type="button" disabled={busy} onClick={() => void clean()} className={destructiveButtonClass}>
                 {busy ? "Cleaning..." : "Clean resources"}
               </button>
             ) : null}

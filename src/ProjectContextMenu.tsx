@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as Dialog from "@radix-ui/react-dialog";
+import { destructiveButtonClass, primaryButtonClass, secondaryButtonClass } from "./settings-ui";
 import { useBbContext, useBbNavigate, useRpc, type PluginSidebarProject } from "@get-bb/plugin-sdk/app";
 import { toast } from "./lib/toast";
 import type { bbSidebarRpcContract } from "./contract";
@@ -202,18 +203,14 @@ function ProjectMenu({
               </label>
               <div className="mt-2 flex justify-end gap-2">
                 <Dialog.Close asChild>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    className="h-8 rounded-md border border-border bg-background px-3 text-xs font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
-                  >
+                  <button type="button" disabled={busy} className={secondaryButtonClass}>
                     Cancel
                   </button>
                 </Dialog.Close>
                 <button
                   type="submit"
                   disabled={busy || !valid}
-                  className={`h-8 rounded-md px-3 text-xs font-medium hover:opacity-90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 ${action === "remove" ? "bg-destructive text-destructive-foreground" : "bg-primary text-primary-foreground"}`}
+                  className={action === "remove" ? destructiveButtonClass : primaryButtonClass}
                 >
                   {busy ? "Saving..." : action === "remove" ? "Remove project" : "Save"}
                 </button>

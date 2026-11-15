@@ -1,6 +1,7 @@
 import { countDeleteCascade, useSidebarThreads } from "./bb-sdk";
 import { useEffect, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
+import { destructiveButtonClass, secondaryButtonClass } from "./settings-ui";
 import { useBbContext, useBbNavigate, useRpc, useSdk, type PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import { toast } from "./lib/toast";
 import type { bbSidebarRpcContract } from "./contract";
@@ -105,11 +106,7 @@ export function DeleteThreadDialog({
           </Dialog.Description>
           <div className="flex justify-end gap-2">
             <Dialog.Close asChild>
-              <button
-                type="button"
-                disabled={busy}
-                className="h-8 rounded-md border border-border bg-background px-3 text-xs font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
-              >
+              <button type="button" disabled={busy} className={secondaryButtonClass}>
                 Cancel
               </button>
             </Dialog.Close>
@@ -117,7 +114,7 @@ export function DeleteThreadDialog({
               type="button"
               disabled={busy || childCount === null}
               onClick={() => void submit()}
-              className="h-8 rounded-md bg-destructive px-3 text-xs font-medium text-destructive-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
+              className={destructiveButtonClass}
             >
               {busy ? "Deleting..." : "Delete thread"}
             </button>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
+import { primaryButtonClass, secondaryButtonClass } from "./settings-ui";
 import { Calendar } from "./components/Calendar";
 import { usePortalScopeProps } from "./lib/portal-scope";
 import { combineSnoozeDateTime, defaultPickedSnooze, formatPickedSnooze, MAX_SNOOZE_MS } from "./lifecycle";
@@ -115,18 +116,11 @@ export function SnoozePickerDialog({
             </p>
             <div className="flex justify-end gap-2">
               <Dialog.Close asChild>
-                <button
-                  type="button"
-                  className="h-8 rounded-md border border-border bg-background px-3 text-xs font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                >
+                <button type="button" className={secondaryButtonClass}>
                   Cancel
                 </button>
               </Dialog.Close>
-              <button
-                type="submit"
-                disabled={problem !== null}
-                className="h-8 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
-              >
+              <button type="submit" disabled={problem !== null} className={primaryButtonClass}>
                 Snooze
               </button>
             </div>

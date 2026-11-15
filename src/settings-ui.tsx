@@ -246,5 +246,9 @@ export function InlineNumber({
   );
 }
 
-export const secondaryButtonClass =
-  "h-8 shrink-0 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
+// Every settings and dialog button: one height, and one keyboard focus ring.
+const buttonClass =
+  "h-8 shrink-0 rounded-md px-3 text-xs font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
+export const secondaryButtonClass = `${buttonClass} border border-border bg-background text-foreground hover:bg-accent`;
+export const primaryButtonClass = `${buttonClass} bg-primary text-primary-foreground hover:opacity-90`;
+export const destructiveButtonClass = `${buttonClass} bg-destructive text-destructive-foreground hover:opacity-90`;

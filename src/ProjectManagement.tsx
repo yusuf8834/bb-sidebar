@@ -4,7 +4,13 @@ import { toast } from "./lib/toast";
 import type { bbSidebarRpcContract } from "./contract";
 import { useSidebarRead } from "./bb-sdk";
 import { cn } from "./lib/utils";
-import { SettingRow, SettingsSection, SettingsSelect, secondaryButtonClass } from "./settings-ui";
+import {
+  SettingRow,
+  SettingsSection,
+  SettingsSelect,
+  destructiveButtonClass,
+  secondaryButtonClass,
+} from "./settings-ui";
 
 interface ProjectChoice {
   id: string;
@@ -116,7 +122,7 @@ export function ProjectManagement() {
                   type="button"
                   disabled={removing}
                   onClick={() => void remove()}
-                  className="h-8 rounded-md bg-destructive px-3 text-xs font-medium text-destructive-foreground hover:bg-destructive/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  className={destructiveButtonClass}
                 >
                   {removing ? "Removing..." : "Remove from BB"}
                 </button>
