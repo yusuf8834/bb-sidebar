@@ -105,17 +105,11 @@ export function ThreadDetailsTooltip({
   useEffect(() => lookUp(isOpen), [lookUp, isOpen]);
 
   const { sort: childSort } = useChildThreadDisplay();
-  const statusThread = useThreadWithDraft(thread);
+  const status = useCardStatus(thread);
   const rowStatus = useThreadRowStatus(thread);
   const limit = useThreadLimit(thread);
-  const statusLimit = useStatusLimit(thread);
   const project = projects.find((entry) => entry.id === thread.projectId);
   const isWorktree = thread.environment?.isWorktree === true;
-  const status = thread.hasPendingInteraction
-    ? "Needs you"
-    : statusLimit
-      ? limitStatus(statusLimit)
-      : (statusThread.indicatorLabel ?? "Idle");
   const subthreads = visible
     ? threads
         .filter((child) => !child.isArchived && child.parentThreadId === thread.id && child.id !== thread.id)
@@ -151,9 +145,9 @@ export function ThreadDetailsTooltip({
               provider={provider ?? null}
               className="size-3.5 [&_span]:size-3.5"
             />
-            {statusThread.indicator !== "none" ? (
+            {status.indicator !== "none" ? (
               <span className="absolute -bottom-1 -right-1 rounded-full bg-popover">
-                <StatusGlyph indicator={statusThread.indicator} label={status} className="size-2.5" />
+                <StatusGlyph indicator={status.indicator} label={status.label} className="size-2.5" />
               </span>
             ) : null}
           </span>
@@ -169,7 +163,7 @@ export function ThreadDetailsTooltip({
             ) : null}
           </span>
         </div>
-        <span className="sr-only">Status: {status}</span>
+        <span className="sr-only">Status: {status.label}</span>
         {limit ? <DetailRow icon="Clock" label="Provider limit" value={limitDescription(limit)} /> : null}
         {rowStatus ? (
           // Another plugin's row status, spelled out: the row only has room for its glyph.
@@ -228,13 +222,20 @@ export function ThreadDetailsTooltip({
   );
 }
 
+/** The status of the card and of each subthread, worded once so its glyph and its text agree. */
+function useCardStatus(thread: PluginSidebarThread) {
+  const shown = useThreadWithDraft(thread);
+  const limit = useStatusLimit(thread);
+  if (thread.hasPendingInteraction) return { label: "Needs you", indicator: "waiting-for-input" } as const;
+  return { label: limit ? limitStatus(limit) : (shown.indicatorLabel ?? "Idle"), indicator: shown.indicator };
+}
+
 /** bb's link routing opens the subthread; `onOpen` only closes the card. */
 function SubthreadRow({ thread, onOpen }: { thread: PluginSidebarThread; onOpen: () => void }) {
   const { splitProps } = useSidebarThreadSplit(thread.id);
   const { providers } = useProviders();
   const provider = providers.find((entry) => entry.id === thread.providerId);
-  const statusThread = useThreadWithDraft(thread);
-  const status = thread.hasPendingInteraction ? "Needs you" : (statusThread.indicatorLabel ?? "Idle");
+  const status = useCardStatus(thread);
   return (
     <a
       href={thread.href}
@@ -256,13 +257,9 @@ function SubthreadRow({ thread, onOpen }: { thread: PluginSidebarThread; onOpen:
         <span className="line-clamp-2 break-words">{threadDisplayTitle(thread)}</span>
         <span className="flex items-center gap-1 text-[11px] leading-4 text-muted-foreground">
           <span className="truncate">
-            {provider?.displayName ?? thread.providerId} · {status}
+            {provider?.displayName ?? thread.providerId} · {status.label}
           </span>
-          <StatusGlyph
-            indicator={thread.hasPendingInteraction ? "waiting-for-input" : statusThread.indicator}
-            label={null}
-            className="size-2.5"
-          />
+          <StatusGlyph indicator={status.indicator} label={null} className="size-2.5" />
         </span>
       </span>
     </a>

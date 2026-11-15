@@ -182,3 +182,11 @@ it("orders hover card subthreads by the saved child sort", async () => {
     ).toEqual(["Open subthread: New", "Open subthread: Old"]);
   });
 });
+
+it("draws the question glyph for a thread that asks while bb reports a failure", async () => {
+  render([thread({ id: "asks", title: "Asking work", hasPendingInteraction: true, indicator: "unread-error" })]);
+  act(() => screen.getByRole("link", { name: "Asking work" }).focus());
+  const details = await screen.findByRole("dialog", { name: "Thread details" });
+  expect(within(details).getByText("Status: Needs you")).toBeDefined();
+  expect(within(details).getByLabelText("Needs you").getAttribute("data-icon")).toBe("CircleQuestion");
+});

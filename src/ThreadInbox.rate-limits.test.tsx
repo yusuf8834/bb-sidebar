@@ -338,6 +338,16 @@ describe("sidebar rate-limit recovery", () => {
     expect(within(details).getByText(`Status: ${status}`)).toBeDefined();
   });
 
+  it("names the limit for a subthread in its parent's hover card", async () => {
+    mount({ child: true });
+    fireEvent.click(await screen.findByRole("button", { name: /^1 child thread/ }));
+    await screen.findByText("Limit reached");
+    fireEvent.pointerMove(screen.getByRole("link", { name: "Parent work" }), { pointerType: "mouse" });
+    const details = await screen.findByRole("dialog", { name: "Thread details" });
+    fireEvent.click(within(details).getByRole("button", { name: "Subthreads (1)" }));
+    expect(within(details).getByRole("list", { name: "Subthreads" }).textContent).toContain("codex · Limit reached");
+  });
+
   it("reconciles a schedule changed by another client after reconnecting", async () => {
     const { slot, setState } = mount();
     await screen.findByText("Limit reached");
