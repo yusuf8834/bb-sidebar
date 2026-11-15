@@ -338,6 +338,21 @@ describe("sidebar rate-limit recovery", () => {
     expect(within(details).getByText(`Status: ${status}`)).toBeDefined();
   });
 
+  it.each([
+    ["only a limit", {}, true],
+    ["a limit and a question", asks, false],
+  ] as const)("gives a card's limit label its own width only while it shows (%s)", async (_case, overrides, shown) => {
+    const { slot } = mount({ overrides });
+    const link = await screen.findByRole("link", { name: "Limited work" });
+    await waitFor(() => expect(slot.inspection.rpcCalls.some((call) => call.method === "getThreadLimits")).toBe(true));
+    await act(async () => {});
+    const classes = link.closest("li")!.querySelector(".group\\/status-slot")!.className.split(" ");
+    expect(screen.queryByText("Limit reached") !== null).toBe(shown);
+    expect(classes.includes("[&_[data-limit-control]]:static")).toBe(shown);
+    // At rest the label stays in flow, so the title truncates before it.
+    expect(classes).not.toContain("[&_[role=status]]:absolute");
+  });
+
   it("names the limit for a subthread in its parent's hover card", async () => {
     mount({ child: true });
     fireEvent.click(await screen.findByRole("button", { name: /^1 child thread/ }));
