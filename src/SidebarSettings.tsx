@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
-import { toast } from "./lib/toast";
+import { errorDetail, toast } from "./lib/toast";
 import type { bbSidebarRpcContract } from "./contract";
 import { SIDEBAR_SETTINGS_CHANNEL } from "./realtime-channels";
 import {
@@ -109,9 +109,7 @@ export function SidebarSettings() {
       setDraft(draftRef.current);
     } catch (error) {
       if (seq !== loadRequestSeq.current) return;
-      toast.error("Could not load sidebar settings", {
-        description: error instanceof Error ? error.message : undefined,
-      });
+      toast.error("Could not load sidebar settings", { description: errorDetail(error) });
     } finally {
       if (seq === loadRequestSeq.current) setLoading(false);
     }
@@ -176,9 +174,7 @@ export function SidebarSettings() {
           }
         } catch (error) {
           if (section && mounted.current) setSaveFeedback({ section, status: "error" });
-          toast.error("Could not save sidebar settings", {
-            description: error instanceof Error ? error.message : undefined,
-          });
+          toast.error("Could not save sidebar settings", { description: errorDetail(error) });
           break;
         }
       }

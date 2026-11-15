@@ -1,7 +1,7 @@
 import { STORAGE_KEYS } from "./lib/storage-keys";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type PluginSidebarThread, useRpc } from "@get-bb/plugin-sdk/app";
-import { toast } from "./lib/toast";
+import { errorDetail, toast } from "./lib/toast";
 import type { bbSidebarRpcContract } from "./contract";
 import { useSidebarRead } from "./bb-sdk";
 import { orderInboxThreads } from "./pinned-order";
@@ -85,9 +85,7 @@ export function useInboxReorder(inboxThreads: readonly PluginSidebarThread[]): I
       } catch (error) {
         setOptimisticIds(null);
         void refresh();
-        toast.error("Could not reorder inbox thread", {
-          description: error instanceof Error ? error.message : undefined,
-        });
+        toast.error("Could not reorder inbox thread", { description: errorDetail(error) });
         return false;
       } finally {
         inFlight.current = false;

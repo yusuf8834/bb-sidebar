@@ -1,7 +1,7 @@
 import { useRef, useState, type MutableRefObject } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { useSdk, type PluginSidebarThread } from "@get-bb/plugin-sdk/app";
-import { toast } from "./lib/toast";
+import { errorDetail, toast } from "./lib/toast";
 import { Icon } from "./components/Icon";
 import { usePortalScopeProps } from "./lib/portal-scope";
 
@@ -77,9 +77,7 @@ export function ParentNotificationsMenu({
       () => undefined,
       (error: unknown) => {
         setValue(previous);
-        toast.error("Could not update parent notifications", {
-          description: error instanceof Error ? error.message : undefined,
-        });
+        toast.error("Could not update parent notifications", { description: errorDetail(error) });
       },
     );
     pendingSave.current = save;

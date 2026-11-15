@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { destructiveButtonClass, secondaryButtonClass } from "./settings-ui";
 import { useBbContext, useBbNavigate, useRpc, useSdk, type PluginSidebarThread } from "@get-bb/plugin-sdk/app";
-import { toast } from "./lib/toast";
+import { errorDetail, toast } from "./lib/toast";
 import type { bbSidebarRpcContract } from "./contract";
 import { threadDisplayTitle } from "./inbox";
 import { usePortalScopeProps } from "./lib/portal-scope";
@@ -48,9 +48,7 @@ export function DeleteThreadDialog({
       },
       (error) => {
         if (controller.signal.aborted) return;
-        toast.error("Could not check which threads would be deleted", {
-          description: error instanceof Error ? error.message : undefined,
-        });
+        toast.error("Could not check which threads would be deleted", { description: errorDetail(error) });
         onOpenChange(false);
       },
     );
@@ -67,9 +65,7 @@ export function DeleteThreadDialog({
       if (context.threadId === thread.id) navigate.toCompose({ projectId: thread.projectId, focusPrompt: true });
       onOpenChange(false);
     } catch (error) {
-      toast.error("Could not delete thread", {
-        description: error instanceof Error ? error.message : undefined,
-      });
+      toast.error("Could not delete thread", { description: errorDetail(error) });
     } finally {
       submitting.current = false;
       setBusy(false);

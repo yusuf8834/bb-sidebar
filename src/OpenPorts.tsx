@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { UrlLink, useRpc, type PluginSidebarThread } from "@get-bb/plugin-sdk/app";
-import { toast } from "./lib/toast";
+import { errorDetail, toast } from "./lib/toast";
 import { BROWSER_EVENTS } from "./lib/browser-events";
 import type { bbSidebarRpcContract, OpenPort, PortSnapshot } from "./contract";
 import { portsByEnvironment } from "./open-ports";
@@ -323,9 +323,7 @@ function StopPortButton({
         toast.message(`Nothing is listening on :${port} as PID ${pid} anymore`);
       }
     } catch (error) {
-      toast.error(`Could not stop the process on :${port}`, {
-        description: error instanceof Error ? error.message : String(error),
-      });
+      toast.error(`Could not stop the process on :${port}`, { description: errorDetail(error) ?? String(error) });
     } finally {
       setState("idle");
       refreshPorts(environmentId);

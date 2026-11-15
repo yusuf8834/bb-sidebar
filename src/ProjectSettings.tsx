@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
-import { toast } from "./lib/toast";
+import { errorDetail, toast } from "./lib/toast";
 import type { bbSidebarRpcContract } from "./contract";
 import { useSidebarRead } from "./bb-sdk";
 import { PROJECT_ICONS_CHANNEL } from "./realtime-channels";
@@ -63,9 +63,7 @@ export function ProjectAppearanceSettings() {
       setIconSettings(icons.projects);
     } catch (error) {
       if (seq !== loadRequestSeq.current) return;
-      toast.error("Could not load project icons", {
-        description: error instanceof Error ? error.message : undefined,
-      });
+      toast.error("Could not load project icons", { description: errorDetail(error) });
     }
     setIconsLoading(false);
   }, [rpc]);
@@ -111,9 +109,7 @@ export function ProjectAppearanceSettings() {
       applyIconResult(await rpc.call("setProjectIcon", { projectId: selectedId, path: null }));
       toast.success("Using automatic icon detection");
     } catch (error) {
-      toast.error("Could not reset the project icon", {
-        description: error instanceof Error ? error.message : undefined,
-      });
+      toast.error("Could not reset the project icon", { description: errorDetail(error) });
     } finally {
       setSaving(false);
     }
@@ -144,9 +140,7 @@ export function ProjectAppearanceSettings() {
       );
       toast.success("Project icon saved");
     } catch (error) {
-      toast.error("Could not save the project icon", {
-        description: error instanceof Error ? error.message : undefined,
-      });
+      toast.error("Could not save the project icon", { description: errorDetail(error) });
     } finally {
       setSaving(false);
       if (fileInputRef.current) fileInputRef.current.value = "";

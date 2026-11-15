@@ -6,7 +6,7 @@ import {
   type PluginSidebarThreadRowStatus,
 } from "@get-bb/plugin-sdk/app";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
-import { toast } from "./lib/toast";
+import { errorDetail, toast } from "./lib/toast";
 import type { bbSidebarRpcContract } from "./contract";
 import { describeReclaim } from "./reclaim";
 import { promptToCloseSettledPorts } from "./settled-port-prompt";
@@ -109,12 +109,6 @@ function runningRowStatusThread(
   const live = threads.filter((thread) => !thread.isArchived);
   const ids = new Set(wholeTree ? threadTreeIds(live, threadId) : [threadId]);
   return live.find((thread) => ids.has(thread.id) && rowStatuses.get(thread.id)?.tone === "running");
-}
-
-function errorDescription(error: unknown): string | undefined {
-  if (!(error instanceof Error)) return undefined;
-  const message = error.message.trim();
-  return message.length > 0 ? message : undefined;
 }
 
 /**
@@ -220,7 +214,7 @@ export function useLifecycle(threads: readonly PluginSidebarThread[], lifecycleR
           await rpc.call(method, { threadId });
         }
       } catch (error) {
-        const description = errorDescription(error);
+        const description = errorDetail(error);
         toast.error(ERROR_MESSAGE[method], {
           // The server names threads by their stored titles.
           description: description && resolveThreadTitlesIn(description, latestThreads.current),

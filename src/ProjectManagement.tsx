@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRpc } from "@get-bb/plugin-sdk/app";
-import { toast } from "./lib/toast";
+import { errorDetail, toast } from "./lib/toast";
 import type { bbSidebarRpcContract } from "./contract";
 import { useSidebarRead } from "./bb-sdk";
 import { cn } from "./lib/utils";
@@ -48,9 +48,7 @@ export function ProjectManagement() {
       setConfirming(false);
       toast.success(`${removed.name} removed from BB`);
     } catch (error) {
-      toast.error("Could not remove the project", {
-        description: error instanceof Error ? error.message : undefined,
-      });
+      toast.error("Could not remove the project", { description: errorDetail(error) });
     } finally {
       setRemoving(false);
     }

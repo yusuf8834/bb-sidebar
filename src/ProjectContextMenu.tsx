@@ -3,7 +3,7 @@ import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as Dialog from "@radix-ui/react-dialog";
 import { destructiveButtonClass, primaryButtonClass, secondaryButtonClass } from "./settings-ui";
 import { useBbContext, useBbNavigate, useRpc, type PluginSidebarProject } from "@get-bb/plugin-sdk/app";
-import { toast } from "./lib/toast";
+import { errorDetail, toast } from "./lib/toast";
 import type { bbSidebarRpcContract } from "./contract";
 import { usePortalScopeProps } from "./lib/portal-scope";
 
@@ -101,7 +101,7 @@ function ProjectMenu({
       }
       setAction(null);
     } catch (error) {
-      toast.error("Could not update project", { description: error instanceof Error ? error.message : undefined });
+      toast.error("Could not update project", { description: errorDetail(error) });
     } finally {
       submitting.current = false;
       setBusy(false);

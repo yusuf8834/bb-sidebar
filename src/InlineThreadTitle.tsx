@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useSdk, type PluginSidebarThread } from "@get-bb/plugin-sdk/app";
-import { toast } from "./lib/toast";
+import { errorDetail, toast } from "./lib/toast";
 import { cn } from "./lib/utils";
 import { threadDisplayTitle, threadStoredTitle, threadTitleHasMentions } from "./inbox";
 import { ThreadTitle } from "./ThreadTitle";
@@ -94,8 +94,6 @@ export function InlineThreadTitle({
 function saveTitle(sdk: ReturnType<typeof useSdk>, threadId: string, title: string) {
   void sdk.threads.update({ threadId, title }).catch((error) => {
     // The SDK rolls back; preserve the former sidebar rename's error feedback.
-    toast.error("Failed to update thread", {
-      description: error instanceof Error ? error.message.replace(/^HTTP \d+: /, "") : undefined,
-    });
+    toast.error("Failed to update thread", { description: errorDetail(error) });
   });
 }

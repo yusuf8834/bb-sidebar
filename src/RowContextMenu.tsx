@@ -2,7 +2,7 @@ import { useThreadActions, useSidebarThreads } from "./bb-sdk";
 import { useRef, useState, type ReactNode } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { useBbNavigate, useRpc, type PluginSidebarThread } from "@get-bb/plugin-sdk/app";
-import { toast } from "./lib/toast";
+import { errorDetail, toast } from "./lib/toast";
 import type { bbSidebarRpcContract } from "./contract";
 import { ParentThreadMenu } from "./ParentThreadMenu";
 import { notifiesParent, ParentNotificationsMenu } from "./ParentNotificationsMenu";
@@ -112,9 +112,7 @@ function RowMenuContents({
       const { changed } = await rpc.call("regenerateTitle", { threadId: thread.id });
       toast.success(changed ? "Thread title regenerated" : "The current title still fits");
     } catch (error) {
-      toast.error("Could not regenerate title", {
-        description: error instanceof Error ? error.message : undefined,
-      });
+      toast.error("Could not regenerate title", { description: errorDetail(error) });
     } finally {
       finishTitleGeneration(thread.id);
     }
@@ -138,9 +136,7 @@ function RowMenuContents({
     try {
       await rpc.call("pin", { threadId: thread.id });
     } catch (error) {
-      toast.error("Could not pin thread", {
-        description: error instanceof Error ? error.message : undefined,
-      });
+      toast.error("Could not pin thread", { description: errorDetail(error) });
     }
   };
 

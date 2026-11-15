@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type PluginSidebarThread, useSdk } from "@get-bb/plugin-sdk/app";
-import { toast } from "./lib/toast";
+import { errorDetail, toast } from "./lib/toast";
 import { orderPinnedThreads, pinnedNeighbors, sortPinnedThreads } from "./pinned-order";
 
 interface OptimisticOrder {
@@ -77,9 +77,7 @@ export function usePinnedReorder(pinnedThreads: readonly PluginSidebarThread[]):
         return true;
       } catch (error) {
         setOptimistic(null);
-        toast.error("Could not reorder pinned thread", {
-          description: error instanceof Error ? error.message : undefined,
-        });
+        toast.error("Could not reorder pinned thread", { description: errorDetail(error) });
         return false;
       } finally {
         inFlight.current = false;

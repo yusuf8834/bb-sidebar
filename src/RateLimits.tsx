@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useRealtime, useRealtimeConnectionState, useRpc, type PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import type { bbSidebarRpcContract, ThreadLimitState } from "./contract";
 import { RATE_LIMITS_CHANNEL } from "./realtime-channels";
-import { toast } from "./lib/toast";
+import { errorDetail, toast } from "./lib/toast";
 import { useOnDemandLookups } from "./useOnDemandLookups";
 
 type LimitRows = Record<string, ThreadLimitState | null>;
@@ -128,9 +128,7 @@ export function RateLimitsProvider({
       await action();
       return true;
     } catch (error) {
-      toast.error("Could not update scheduled Continue", {
-        description: error instanceof Error ? error.message : undefined,
-      });
+      toast.error("Could not update scheduled Continue", { description: errorDetail(error) });
       return false;
     } finally {
       mutations.current.delete(threadId);

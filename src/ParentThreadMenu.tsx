@@ -2,7 +2,7 @@ import { useSidebarThreads } from "./bb-sdk";
 import { useEffect, useRef, useState } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { useRpc, type PluginSidebarThread } from "@get-bb/plugin-sdk/app";
-import { toast } from "./lib/toast";
+import { errorDetail, toast } from "./lib/toast";
 import type { bbSidebarRpcContract } from "./contract";
 import { Icon } from "./components/Icon";
 import { threadDisplayTitle } from "./inbox";
@@ -64,9 +64,7 @@ export function ParentThreadMenu({ thread }: { thread: PluginSidebarThread }) {
         toast.success(parentThreadId === null ? "Parent removed" : "Parent updated");
       }
     } catch (error) {
-      toast.error("Could not update parent", {
-        description: error instanceof Error ? error.message : undefined,
-      });
+      toast.error("Could not update parent", { description: errorDetail(error) });
     } finally {
       inFlight.current = false;
       setSaving(false);

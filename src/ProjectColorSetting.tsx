@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useRpc } from "@get-bb/plugin-sdk/app";
-import { toast } from "./lib/toast";
+import { errorDetail, toast } from "./lib/toast";
 import type { bbSidebarRpcContract } from "./contract";
 import { useProjectColorOverrides } from "./ProjectColors";
 import { automaticProjectColor, projectColorsById } from "./project-colors";
@@ -21,7 +21,7 @@ export function ProjectColorSetting({ projectId, projectIds }: { projectId: stri
       setDraft(null);
       toast.success(value ? "Project color saved" : "Using automatic project color");
     } catch (error) {
-      toast.error("Could not save project color", { description: error instanceof Error ? error.message : undefined });
+      toast.error("Could not save project color", { description: errorDetail(error) });
     } finally {
       setSaving(false);
     }

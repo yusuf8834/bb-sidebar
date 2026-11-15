@@ -1,4 +1,4 @@
-import { toast } from "./lib/toast";
+import { errorDetail, toast } from "./lib/toast";
 import type { OwnedPortTarget } from "./contract";
 
 export async function promptToCloseSettledPorts(
@@ -35,9 +35,7 @@ export async function promptToCloseSettledPorts(
               toast.message("No matching thread-owned ports are still running");
             }
           } catch (error) {
-            toast.error("Could not close thread ports", {
-              description: error instanceof Error ? error.message : String(error),
-            });
+            toast.error("Could not close thread ports", { description: errorDetail(error) ?? String(error) });
           }
         },
       },
@@ -45,7 +43,7 @@ export async function promptToCloseSettledPorts(
   } catch (error) {
     if (isCurrent())
       toast.error("Thread settled, but its ports could not be checked", {
-        description: error instanceof Error ? error.message : String(error),
+        description: errorDetail(error) ?? String(error),
       });
   }
 }
