@@ -18,6 +18,7 @@ import { Tooltip } from "./components/Tooltip";
 import { ThreadDetailsTooltip } from "./ThreadDetailsTooltip";
 import { SnoozeSelect } from "./SnoozeSelect";
 import { cn } from "./lib/utils";
+import { DRAG_LIFT_CLASS } from "./drag-preview";
 import { rowKeyshortcuts } from "./lib/keyshortcuts";
 import { RowContextMenu } from "./RowContextMenu";
 import { ProviderGlyph } from "./ProviderGlyph";
@@ -338,13 +339,7 @@ export function ThreadCard({
                 // A thread open in another pane gets a weaker tint than the active
                 // row, so the two states stay distinguishable.
                 !isActive && layout !== null && "bg-sidebar-accent/30",
-                // Lifted, not faded: the row under the cursor is the one the user
-                // is acting on, so it should read as the most present thing on the
-                // shelf. The two stacked gradients put an opaque sidebar base under
-                // the accent tint, because a translucent row would let the rows it
-                // passes over show straight through it.
-                reorder?.isDragging &&
-                  "bg-[linear-gradient(var(--sidebar-accent),var(--sidebar-accent)),linear-gradient(var(--sidebar),var(--sidebar))] shadow-lg ring-1 ring-sidebar-border",
+                reorder?.isDragging && DRAG_LIFT_CLASS,
               )}
             >
               {isSettling ? <span aria-hidden="true" className="bb-sidebar-settle-sweep" /> : null}

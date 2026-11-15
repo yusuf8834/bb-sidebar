@@ -4,6 +4,7 @@ import { InlineThreadTitle } from "./InlineThreadTitle";
 import { ProjectFavicon, ProjectStripe } from "./ProjectFavicon";
 import { ThreadDetailsTooltip } from "./ThreadDetailsTooltip";
 import { cn } from "./lib/utils";
+import { DRAG_LIFT_CLASS } from "./drag-preview";
 
 /** Shared one-line layout; callers own navigation, menus, and trailing actions. */
 export function CompactRow({
@@ -62,9 +63,7 @@ export function CompactRow({
         !muted && "flex h-8 items-center gap-2 text-xs",
         isActive ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60",
         !isActive && isSplitOpen && "bg-sidebar-accent/30",
-        // Keep the lifted row opaque while other rows pass underneath it.
-        isDragging &&
-          "bg-[linear-gradient(var(--sidebar-accent),var(--sidebar-accent)),linear-gradient(var(--sidebar),var(--sidebar))] shadow-lg ring-1 ring-sidebar-border",
+        isDragging && DRAG_LIFT_CLASS,
       )}
     >
       {beforeContent}

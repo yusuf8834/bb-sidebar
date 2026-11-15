@@ -1,3 +1,13 @@
+/**
+ * A dragged row or group. Lifted, not faded: the unit under the cursor is the
+ * one the user is acting on, so it should read as the most present thing on
+ * the shelf. The two stacked gradients put an opaque sidebar base under the
+ * accent tint, because a translucent unit would let the rows it passes over
+ * show straight through it.
+ */
+export const DRAG_LIFT_CLASS =
+  "bg-[linear-gradient(var(--sidebar-accent),var(--sidebar-accent)),linear-gradient(var(--sidebar),var(--sidebar))] shadow-lg ring-1 ring-sidebar-border";
+
 /** FLIP only the visual layer; insertion continues to use untransformed li slots. */
 export function createDragPreview(list: HTMLElement) {
   const effects = new Map<HTMLElement, Animation>();

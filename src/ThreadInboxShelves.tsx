@@ -11,7 +11,7 @@ import { CleanSettledDialog } from "./CleanSettledDialog";
 import { TRAILING_GLYPH_BOX_CLASS } from "./StatusSlot";
 import { projectIconUrl } from "./project-icons";
 import type { GroupAlert, ProjectViewUnit } from "./inbox-layout";
-import { EnvironmentGroup } from "./EnvironmentGroup";
+import { DRAG_LIFT_CLASS } from "./drag-preview";
 import { GroupAlertDots, groupAlertPhrase } from "./GroupAlertDots";
 import { environmentLabel } from "./environment-groups";
 import { useInboxEnvironment, useInboxActions, useInboxActivity } from "./InboxContext";
@@ -171,20 +171,29 @@ export function CollapsibleShelf({
           </span>
           <span className="h-px flex-1 bg-sidebar-border" />
           {action ? <span aria-hidden="true" className="size-4 shrink-0" /> : null}
-          <span className={TRAILING_GLYPH_BOX_CLASS}>
-            <Icon
-              name="ChevronDown"
-              className={cn(
-                "size-3 text-muted-foreground/70 transition-transform duration-150 ease-out motion-reduce:transition-none",
-                expanded && "rotate-180",
-              )}
-            />
-          </span>
+          <HeaderChevron expanded={expanded} className="text-muted-foreground/70" />
         </button>
         {action}
       </div>
       {children}
     </section>
+  );
+}
+
+/** A shelf's or group's folding chevron, on the same axis as every row's trailing glyph. */
+function HeaderChevron({ expanded, className }: { expanded: boolean; className: string }) {
+  return (
+    <span className={TRAILING_GLYPH_BOX_CLASS}>
+      <Icon
+        name="ChevronDown"
+        aria-hidden
+        className={cn(
+          "size-3 transition-transform duration-150 ease-out motion-reduce:transition-none",
+          className,
+          expanded && "rotate-180",
+        )}
+      />
+    </span>
   );
 }
 
@@ -219,11 +228,7 @@ function ActiveProjectGroup({
     // target when projects are dragged around each other.
     <li
       data-reorder-unit={unitKey}
-      className={cn(
-        "list-none rounded-md",
-        reorder.isDragging &&
-          "relative z-20 bg-[linear-gradient(var(--sidebar-accent),var(--sidebar-accent)),linear-gradient(var(--sidebar),var(--sidebar))] shadow-lg ring-1 ring-sidebar-border",
-      )}
+      className={cn("list-none rounded-md", reorder.isDragging && ["relative z-20", DRAG_LIFT_CLASS])}
     >
       <section data-drag-visual="" className="relative" aria-label={`${projectName} project`}>
         <ProjectStripe projectId={projectId} view={stripeView} className="z-10" />
@@ -258,17 +263,64 @@ function ActiveProjectGroup({
           <span className="shrink-0 text-2xs text-muted-foreground/50">{threadCount}</span>
           <GroupAlertDots alerts={alerts} />
           <span className="h-px flex-1 bg-sidebar-border/50" />
-          <span className={TRAILING_GLYPH_BOX_CLASS}>
-            <Icon
-              name="ChevronDown"
-              className={cn(
-                "size-3 text-muted-foreground/50 transition-transform duration-150 ease-out motion-reduce:transition-none",
-                expanded && "rotate-180",
-              )}
-            />
-          </span>
+          <HeaderChevron expanded={expanded} className="text-muted-foreground/50" />
         </button>
         <ul ref={attachListMotionRef} aria-label={`${projectName} active threads`} className="flex flex-col gap-px">
+          {children}
+        </ul>
+      </section>
+    </li>
+  );
+}
+
+function EnvironmentGroup({
+  unit,
+  onToggle,
+  reorder,
+  children,
+}: {
+  unit: Extract<ProjectViewUnit, { kind: "group" }>;
+  onToggle: () => void;
+  reorder: ThreadReorderControls;
+  children: React.ReactNode;
+}) {
+  const attachListRef = useListMotion<HTMLUListElement>();
+  const environment = unit.environment!;
+  const label = environmentLabel(environment);
+  const host = unit.threads.find((thread) => thread.host)?.host;
+  return (
+    <li
+      data-reorder-unit={unit.key}
+      className={cn("list-none rounded-md", reorder.isDragging && ["relative z-20", DRAG_LIFT_CLASS])}
+    >
+      <section data-drag-visual="" aria-label={`${label} worktree`}>
+        <button
+          type="button"
+          data-reorder-key={unit.key}
+          aria-expanded={unit.expanded}
+          aria-label={`${label} (${unit.threadCount})${groupAlertPhrase(unit.alerts)}`}
+          aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
+          title={[environment.name, environment.path, host?.name].filter(Boolean).join("\n")}
+          onClick={onToggle}
+          onPointerDown={reorder.onPointerDown}
+          onKeyDown={reorder.onKeyDown}
+          className={cn(
+            "flex w-full touch-pan-y items-center gap-1.5 px-2.5 pb-1 pt-2 text-left text-2xs text-muted-foreground",
+            !reorder.disabled && "cursor-grab active:cursor-grabbing",
+          )}
+        >
+          <Icon name="FolderGit" className="size-3 shrink-0 text-muted-foreground/60" aria-hidden />
+          <span className="min-w-0 truncate font-mono">{label}</span>
+          <span className="shrink-0 text-muted-foreground/50">{unit.threadCount}</span>
+          <GroupAlertDots alerts={unit.alerts} />
+          <span className="flex-1" />
+          <HeaderChevron expanded={unit.expanded} className="text-muted-foreground/50" />
+        </button>
+        <ul
+          ref={attachListRef}
+          aria-label={`${label} active threads`}
+          className="ml-2 flex flex-col gap-px border-l border-sidebar-border/60 pl-1"
+        >
           {children}
         </ul>
       </section>
