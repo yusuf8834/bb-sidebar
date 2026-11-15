@@ -21,7 +21,7 @@ import { cn } from "./lib/utils";
 import { rowKeyshortcuts } from "./lib/keyshortcuts";
 import { RowContextMenu } from "./RowContextMenu";
 import { ProviderGlyph } from "./ProviderGlyph";
-import { STATUS_SLOT_CLASS, StatusOrTime, useWorkingForDisplay } from "./StatusSlot";
+import { limitSlotClass, STATUS_SLOT_CLASS, StatusOrTime, useWorkingForDisplay } from "./StatusSlot";
 import { CompactStatusOrTime } from "./StatusGlyph";
 import { threadDisplayTitle } from "./inbox";
 import { InlineThreadTitle } from "./InlineThreadTitle";
@@ -428,7 +428,7 @@ export function ThreadCard({
                       "group/status-slot pointer-events-auto relative h-5",
                       showParkActions && "[@media(hover:none)]:w-auto [@media(hover:none)]:gap-1.5",
                       (limit || !showParkActions) && "w-auto min-w-20",
-                      limit && "[&_[data-limit-control]]:static [&_[role=status]]:absolute [&_[role=status]]:right-0",
+                      limit && limitSlotClass("slot", showParkActions, holdParkActions),
                       !showProject && "w-auto min-w-0",
                       !showProject &&
                         showParkActions &&
@@ -454,7 +454,7 @@ export function ThreadCard({
                         className={cn(
                           "pointer-events-none absolute inset-y-0 right-0 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 ease-out has-[:focus-visible]:pointer-events-auto has-[:focus-visible]:opacity-100 group-hover/card:pointer-events-auto group-hover/card:opacity-100 [@media(hover:none)]:static [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100 motion-reduce:transition-none",
                           holdParkActions && "pointer-events-auto opacity-100",
-                          limit && "relative ml-1.5",
+                          limit && limitSlotClass("actions", showParkActions, holdParkActions),
                         )}
                       >
                         {unpinButton}

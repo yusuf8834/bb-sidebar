@@ -39,6 +39,28 @@ export const STATUS_SLOT_CLASS = "flex w-20 shrink-0 items-center justify-end";
 export const TRAILING_GLYPH_BOX_CLASS = "flex size-3.5 shrink-0 items-center justify-center";
 
 /**
+ * A card's status slot while a provider limit shows, and its shelf controls.
+ *
+ * At rest the limit label ("Scheduled · 6:20pm") takes its own width, so the
+ * title truncates before it instead of running under it. Once the shelf
+ * controls show (hover, keyboard focus, touch, or an open snooze menu), the
+ * label is hidden and steps out of flow, and the controls take its place.
+ */
+export function limitSlotClass(part: "slot" | "actions", showParkActions: boolean, holdParkActions: boolean): string {
+  if (part === "actions") {
+    return holdParkActions
+      ? "relative ml-1.5"
+      : "group-hover/card:relative group-hover/card:ml-1.5 group-has-[:focus-visible]/status-slot:relative group-has-[:focus-visible]/status-slot:ml-1.5 [@media(hover:none)]:ml-1.5";
+  }
+  return cn(
+    "[&_[data-limit-control]]:static [&_[role=status]]:right-0",
+    showParkActions &&
+      "group-hover/card:[&_[role=status]]:absolute has-[:focus-visible]:[&_[role=status]]:absolute has-[:focus-visible]:[&_[role=status]]:opacity-0 [@media(hover:none)]:[&_[role=status]]:absolute",
+    holdParkActions && "[&_[role=status]]:absolute",
+  );
+}
+
+/**
  * Status OR age, never both: the glyph already implies the row is current, and
  * the age only earns its place once the thread has nothing to say.
  *
