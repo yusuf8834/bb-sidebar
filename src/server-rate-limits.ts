@@ -39,6 +39,7 @@ export function createServerRateLimits({ bb }: ServerContext, lifecycle: ReturnT
   for (const event of ["thread.failed", "thread.active", "thread.idle", "thread.deleted"] as const) {
     bb.events.on(event, threadChanged);
   }
+  bb.events.on("thread.failed", ({ thread }) => keepWaitingOnContinue(thread.id));
 
   async function scheduledContinue(threadId: string) {
     const queue = await bb.sdk.threads.queuedMessages.list({ threadId });
@@ -93,6 +94,37 @@ export function createServerRateLimits({ bb }: ServerContext, lifecycle: ReturnT
         failed: scheduled.state === "failed_exhausted" || scheduled.state === "failed_retrying",
       },
     };
+  }
+
+  /**
+   * A turn that hits the same provider limit while the thread waits on its
+   * scheduled Continue, such as a child-completed message bb delivers to a
+   * limited parent, says nothing new. Its attention would wake the snooze, so
+   * restart the snooze's wake history instead. Only a snooze still matching
+   * a pending Continue is kept: a cleared, changed, or failed one is left alone.
+   */
+  async function keepWaitingOnContinue(threadId: string) {
+    if (controller.signal.aborted || lifecycle.readOne(threadId)?.snoozedUntil == null) return;
+    try {
+      await withLock(threadId, async () => {
+        const entry = await scheduledContinue(threadId);
+        if (!entry?.sendAt || entry.sendAt <= Date.now() || entry.state !== "scheduled") return;
+        const events = await bb.sdk.threads.events.list({
+          threadId,
+          order: "desc",
+          limit: "100",
+          types: ["provider/error", "system/error", "provider/rateLimits/updated", "turn/started", "turn/completed"],
+        });
+        if (!rateLimitDetails(events)) return;
+        await lifecycle.withPinParentChange(threadId, async () => {
+          const row = lifecycle.readOne(threadId);
+          if (row?.snoozedUntil !== entry.sendAt) return;
+          lifecycle.write({ ...row, snoozedAt: Date.now() });
+        });
+      });
+    } catch {
+      // The thread shows as woken, as it would without this; nothing to undo.
+    }
   }
 
   async function withLock<T>(threadId: string, action: () => Promise<T>): Promise<T> {

@@ -11,6 +11,7 @@
 
 ### Fixed
 
+- **A thread waiting on its scheduled Continue stays snoozed.** A thread stopped by a provider limit goes to Snoozed until its scheduled Continue. When one of its children finished in the meantime, bb messaged the parent, that turn hit the same limit and failed, and the failure woke the snooze, so a thread with many children kept coming back to Active. Such a failure no longer wakes it. Any other failure, a question for you, or a failed Continue still does.
 - **The sidebar catches up after a dropped connection.** A thread settled, snoozed, parked or woken while bb's connection was down, from another window, the `bb sidebar` command or the automatic-settle check, stayed on its old shelf until the sidebar was opened again. The shelves, the inbox order, the sidebar settings the thread list applies, and the project lists on the settings page now reload when bb reconnects, as project colors already did. The settings page's own fields and the project icon list still do not.
 
 ## [0.3.11] - 2026-11-13

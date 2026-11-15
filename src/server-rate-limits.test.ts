@@ -331,6 +331,38 @@ describe("scheduled Continue RPC", () => {
     expect(harness.inspection.sdk.callsTo("threads.send")).toHaveLength(0);
   });
 
+  it("keeps a scheduled Continue's snooze when the same limit fails another turn", async () => {
+    const { call, harness, setEvents } = await setup();
+    const thread = makeThreadResponse({ id: "thr_1", status: "error" });
+    await call("scheduleLimitContinue", { threadId: "thr_1" });
+    for (const at of [failedAt + 10_000, failedAt + 20_000]) {
+      vi.setSystemTime(at);
+      await harness.behavior.emitThreadEvent("thread.failed", { thread, error: null });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(await call("listLifecycle", {})).toMatchObject({
+        rows: [{ threadId: "thr_1", snoozedUntil: resetsAt + 30_000, snoozedAt: at }],
+      });
+    }
+    // Any other failure is news, so it wakes the thread as before.
+    setEvents([{ ...systemFailure, data: { message: "Tool crashed" } }, started]);
+    vi.setSystemTime(failedAt + 30_000);
+    await harness.behavior.emitThreadEvent("thread.failed", { thread, error: null });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await call("listLifecycle", {})).toMatchObject({ rows: [{ snoozedAt: failedAt + 20_000 }] });
+  });
+
+  it("leaves an acknowledged wake in Active when the limit fails again", async () => {
+    const { call, harness } = await setup();
+    await call("scheduleLimitContinue", { threadId: "thr_1" });
+    await call("acknowledgeWake", { threadId: "thr_1" });
+    await harness.behavior.emitThreadEvent("thread.failed", {
+      thread: makeThreadResponse({ id: "thr_1", status: "error" }),
+      error: null,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await call("listLifecycle", {})).toEqual({ rows: [] });
+  });
+
   it("preserves a later manual snooze when cancelling Continue", async () => {
     const { call } = await setup();
     await call("scheduleLimitContinue", { threadId: "thr_1" });
