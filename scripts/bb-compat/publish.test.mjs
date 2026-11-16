@@ -116,7 +116,11 @@ test("missing or invalid channel results count as failures", () => {
   assert.equal(results[2].bbApp, undefined);
 });
 
-const git = (cwd, ...args) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+// A git hook run from a linked worktree exports GIT_DIR (and its kin) as an
+// absolute path, which overrides `cwd`: the fixture's commit and push would
+// land in the real repository and its origin. Fixture git never inherits them.
+const fixtureGitEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")));
+const git = (cwd, ...args) => execFileSync("git", args, { cwd, env: fixtureGitEnv, encoding: "utf8" }).trim();
 
 /** A clone of a local bare repo holding the real package.json and lockfile. */
 function bumpFixture({ tamper } = {}) {
