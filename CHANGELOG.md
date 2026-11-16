@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Side chats show under the thread they came from.** bb's Side chat plugin keeps each side chat as a hidden thread, which bb's thread list and the sidebar left out. The sidebar now lists each side chat you have written in as a child of the thread it was opened from, named "Side chat - " and its title, or the message it replies to when it has none (a trailing "(fork)" is left off). The child list, its badge and the hover card's subthreads include it. Side chats nobody wrote in, and those of a settled thread, stay out. Settings → Child threads → "Show side chats as children" is on by default; off, the sidebar does not look them up. Opening one still opens the side chat as a full thread, and actions on the parent (such as Park children) include its side chats.
+
 ## [0.3.12] - 2026-11-16
 
 ### Changed

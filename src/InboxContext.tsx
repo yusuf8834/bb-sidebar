@@ -185,6 +185,11 @@ export function useInboxEnvironment() {
   return useRequiredContext(InboxEnvironmentContext);
 }
 
+/** The inbox's children by parent, side chats included; null outside the inbox. */
+export function useInboxChildrenByParent() {
+  return useContext(InboxEnvironmentContext)?.childrenByParentId ?? null;
+}
+
 export function useInboxActions() {
   return useRequiredContext(InboxActionsContext);
 }

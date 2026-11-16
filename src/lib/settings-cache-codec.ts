@@ -42,6 +42,8 @@ export function decodeSettingsCache(input: unknown): SidebarSettingsValues | nul
     compactProjectIconOnly: value.compactProjectIconOnly === true,
     keepPinnedThreadsFull: value.keepPinnedThreadsFull === true,
     keepWokeThreadsFull: value.keepWokeThreadsFull === true,
+    // On by default, so a cache from before the setting keeps it on.
+    showSideChatsAsChildren: value.showSideChatsAsChildren !== false,
     compactWorkingThreads: threadDisplayOf(value) !== "full",
     workingShelf: value.workingShelf === true,
     dockShelves: value.dockShelves === true,

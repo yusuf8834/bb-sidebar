@@ -145,3 +145,49 @@ it("honors disabled attention retention for fourth-level descendants", async () 
   fireEvent.click(screen.getByRole("button", { name: "Active" }));
   expect(screen.queryByRole("link", { name: "Root" })).toBeNull();
 });
+
+describe("side chats", () => {
+  const sideChat = {
+    id: "side",
+    projectId: "proj_1",
+    sourceThreadId: "main",
+    providerId: "codex",
+    title: null,
+    titleFallback: "Replying to this earlier message in the conversation: Why?",
+    status: "idle",
+    runtimeStatus: "idle",
+    createdAt: 10,
+    updatedAt: 20,
+    lastReadAt: 20,
+    latestAttentionAt: 20,
+  };
+  const renderWith = (showSideChatsAsChildren: boolean) =>
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        projects: [],
+        threads: [thread({ id: "main", title: "Main", updatedAt: Date.now() })],
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: [] }),
+        listSideChats: () => ({ sideChats: [sideChat] }),
+        getSidebarSettings: () => ({ ...defaultSidebarSettings, showSideChatsAsChildren }),
+      },
+    });
+
+  it("lists a side chat under the thread it came from", async () => {
+    renderWith(true);
+    const badge = await screen.findByRole("button", { name: /^1 child thread/ });
+    fireEvent.pointerDown(badge, { button: 0 });
+    fireEvent.click(badge);
+    expect(await screen.findByText("Side chat - Why?")).toBeDefined();
+  });
+
+  it("does not read side chats when the setting is off", async () => {
+    const rendered = renderWith(false);
+    await waitFor(() => expect(rendered.rpcCalls.map((call) => call.method)).toContain("getSidebarSettings"));
+    await waitFor(() => expect(screen.getByRole("link", { name: "Main" })).toBeDefined());
+    expect(rendered.rpcCalls.map((call) => call.method)).not.toContain("listSideChats");
+    expect(screen.queryByRole("button", { name: /child thread/ })).toBeNull();
+  });
+});

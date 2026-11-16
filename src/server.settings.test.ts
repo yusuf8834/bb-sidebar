@@ -309,3 +309,25 @@ it("keeps settling finished pull requests on for installs that already had sideb
     autoSettleOnMerge: false,
   });
 });
+
+it("shows side chats as children unless the user turned it off", async () => {
+  expect(DEFAULT_SIDEBAR_SETTINGS.showSideChatsAsChildren).toBe(true);
+  const { bb, harness } = createFakePluginHost({ pluginId: "bb-sidebar" });
+  await plugin(bb);
+  disposers.push(() => harness.lifecycle.dispose());
+  const store = bb.storage.database().prepare("UPDATE sidebar_settings SET settings_json = ? WHERE id = 1");
+  // Settings saved before the switch existed, and a value it cannot read.
+  for (const stored of [{ dockShelves: true }, { dockShelves: true, showSideChatsAsChildren: "no" }]) {
+    store.run(JSON.stringify(stored));
+    await expect(harness.behavior.callRpc("getSidebarSettings", {})).resolves.toMatchObject({
+      dockShelves: true,
+      showSideChatsAsChildren: true,
+    });
+  }
+  await expect(
+    harness.behavior.callRpc("updateSidebarSettings", { ...DEFAULT_SIDEBAR_SETTINGS, showSideChatsAsChildren: false }),
+  ).resolves.toMatchObject({ showSideChatsAsChildren: false });
+  await expect(harness.behavior.callRpc("getSidebarSettings", {})).resolves.toMatchObject({
+    showSideChatsAsChildren: false,
+  });
+});

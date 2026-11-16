@@ -86,7 +86,7 @@ export function parkBlocker(signals: ParkSignals): ParkBlocker | null {
 }
 
 /** A turn bb has accepted and not yet finished, in either thread view. */
-function isTurnInFlight(status: PluginSidebarThread["status"]): boolean {
+export function isTurnInFlight(status: PluginSidebarThread["status"]): boolean {
   return status === "active" || status === "pending" || status === "starting" || status === "stopping";
 }
 
