@@ -1,4 +1,5 @@
 import { useProviders, useSidebarThreadSplit, useSidebarThreads } from "./bb-sdk";
+import { useInboxChildrenByParent } from "./InboxContext";
 import { useCallback, useEffect, useId, useRef, useState, type ReactElement } from "react";
 import { useRpc, useRealtime, type PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import type { bbSidebarRpcContract } from "./contract";
@@ -110,11 +111,14 @@ export function ThreadDetailsTooltip({
   const limit = useThreadLimit(thread);
   const project = projects.find((entry) => entry.id === thread.projectId);
   const isWorktree = thread.environment?.isWorktree === true;
-  const subthreads = visible
-    ? threads
-        .filter((child) => !child.isArchived && child.parentThreadId === thread.id && child.id !== thread.id)
-        .sort(compareChildThreads(childSort))
-    : [];
+  const inboxChildren = useInboxChildrenByParent();
+  const subthreads = !visible
+    ? []
+    : inboxChildren
+      ? (inboxChildren.get(thread.id) ?? [])
+      : threads
+          .filter((child) => !child.isArchived && child.parentThreadId === thread.id && child.id !== thread.id)
+          .sort(compareChildThreads(childSort));
   const label = (
     <div className="flex flex-col gap-2">
       <div className="line-clamp-2 break-words text-xs font-semibold leading-4 text-popover-foreground">

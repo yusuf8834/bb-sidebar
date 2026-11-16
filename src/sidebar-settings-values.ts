@@ -25,6 +25,8 @@ export interface SidebarSettingsValues {
   inactiveThreadsEnabled: boolean;
   inactiveAfterHours: number;
   showRunningChildrenWhenCollapsed: boolean;
+  /** Show bb side chats under the thread they came from; off leaves them out. */
+  showSideChatsAsChildren: boolean;
   autoSettleInactive: boolean;
   autoSettleAfterDays: number;
   autoSettleOnMerge: boolean;
@@ -58,6 +60,7 @@ export const DEFAULT_SIDEBAR_SETTINGS: SidebarSettingsValues = {
   inactiveThreadsEnabled: true,
   inactiveAfterHours: DEFAULT_INACTIVE_AFTER_HOURS,
   showRunningChildrenWhenCollapsed: true,
+  showSideChatsAsChildren: true,
   autoSettleInactive: true,
   autoSettleAfterDays: 3,
   autoSettleOnMerge: false,

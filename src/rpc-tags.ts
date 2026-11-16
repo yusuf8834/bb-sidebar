@@ -10,3 +10,5 @@ export const INBOX_ORDER_TAG = "inbox-order";
 export const LIFECYCLE_TAG = "lifecycle";
 /** The standard projects `listProjects` returns: their ids and names. */
 export const PROJECTS_TAG = "projects";
+/** Side chats from bb's Side chat plugin, which bb's own sidebar view leaves out. */
+export const SIDE_CHATS_TAG = "side-chats";

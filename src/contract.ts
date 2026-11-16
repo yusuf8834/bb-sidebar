@@ -133,6 +133,25 @@ const projectIconPathSchema = z
   .refine((path) => normalizeProjectIconPath(path) !== null, {
     message: "Choose a relative SVG, PNG, ICO, JPEG, GIF, AVIF, or WebP path",
   });
+/** A hidden side chat from bb's Side chat plugin, with what its child row shows. */
+const sideChatRowSchema = z
+  .object({
+    id: z.string(),
+    projectId: z.string(),
+    sourceThreadId: z.string(),
+    providerId: z.string(),
+    title: z.string().nullable(),
+    titleFallback: z.string().nullable(),
+    status: z.string(),
+    runtimeStatus: z.string(),
+    createdAt: z.number(),
+    updatedAt: z.number(),
+    lastReadAt: z.number().nullable(),
+    latestAttentionAt: z.number(),
+  })
+  .strict();
+export type SideChatRow = z.infer<typeof sideChatRowSchema>;
+
 export const sidebarSettingsSchema = z
   .object({
     snoozePresets: z
@@ -146,6 +165,7 @@ export const sidebarSettingsSchema = z
     inactiveThreadsEnabled: z.boolean(),
     inactiveAfterHours: z.number().int().min(MIN_INACTIVE_AFTER_HOURS).max(MAX_INACTIVE_AFTER_HOURS),
     showRunningChildrenWhenCollapsed: z.boolean(),
+    showSideChatsAsChildren: z.boolean(),
     autoSettleInactive: z.boolean(),
     autoSettleAfterDays: z.number().int().min(MIN_AUTO_SETTLE_AFTER_DAYS).max(MAX_AUTO_SETTLE_AFTER_DAYS),
     autoSettleOnMerge: z.boolean(),
@@ -319,6 +339,10 @@ export const bbSidebarRpcContract = defineRpcContract({
   acknowledgeWake: {
     input: threadIdSchema,
     output: z.object({ ok: z.boolean() }),
+  },
+  listSideChats: {
+    input: z.object({}).strict(),
+    output: z.object({ sideChats: z.array(sideChatRowSchema) }).strict(),
   },
   listInboxOrder: {
     input: z.object({}).strict(),

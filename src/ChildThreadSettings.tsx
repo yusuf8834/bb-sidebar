@@ -30,6 +30,12 @@ export function ChildThreadSettings({ draft, update, status }: SettingsDraftSect
         checked={draft.showRunningChildrenWhenCollapsed}
         onChange={(checked) => update("showRunningChildrenWhenCollapsed", checked)}
       />
+      <SwitchRow
+        title="Show side chats as children"
+        description="List side chats under the thread they came from. Off hides them."
+        checked={draft.showSideChatsAsChildren}
+        onChange={(checked) => update("showSideChatsAsChildren", checked)}
+      />
       <SettingRow
         title="Order"
         description="Also used for subthreads in hover cards."

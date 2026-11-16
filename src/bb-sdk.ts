@@ -20,7 +20,14 @@ import {
   type EnvironmentPullRequest,
   type EnvironmentPullRequestRow,
 } from "./github-pr-status";
-import { INBOX_ORDER_TAG, LIFECYCLE_TAG, PROJECT_COLORS_TAG, PROJECTS_TAG, SIDEBAR_SETTINGS_TAG } from "./rpc-tags";
+import {
+  INBOX_ORDER_TAG,
+  LIFECYCLE_TAG,
+  PROJECT_COLORS_TAG,
+  PROJECTS_TAG,
+  SIDE_CHATS_TAG,
+  SIDEBAR_SETTINGS_TAG,
+} from "./rpc-tags";
 
 export {
   experimental_useSidebarThreads as useSidebarThreads,
@@ -141,6 +148,8 @@ const sidebarReads = {
   listProjects: taggedRead<"listProjects">([PROJECTS_TAG]),
   listInboxOrder: taggedRead<"listInboxOrder">([INBOX_ORDER_TAG]),
   listLifecycle: taggedRead<"listLifecycle">([LIFECYCLE_TAG]),
+  // Settling or waking a source thread changes which side chats are listed.
+  listSideChats: taggedRead<"listSideChats">([SIDE_CHATS_TAG, LIFECYCLE_TAG]),
 } satisfies PluginRpcContract;
 
 interface SidebarRead<T> {

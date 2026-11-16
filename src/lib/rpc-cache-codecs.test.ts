@@ -59,6 +59,15 @@ describe("settings cache codec", () => {
       }),
     ).toEqual({ ...DEFAULT_SIDEBAR_SETTINGS, ...oldSettings });
   });
+  it("keeps side chats as children on for a cache saved before the switch", () => {
+    expect(decodeSettingsCache(oldSettings)?.showSideChatsAsChildren).toBe(true);
+    expect(decodeSettingsCache({ ...oldSettings, showSideChatsAsChildren: "false" })?.showSideChatsAsChildren).toBe(
+      true,
+    );
+    expect(decodeSettingsCache({ ...oldSettings, showSideChatsAsChildren: false })?.showSideChatsAsChildren).toBe(
+      false,
+    );
+  });
   it("retains the icon-only project preference", () => {
     expect(decodeSettingsCache({ ...oldSettings, compactProjectIconOnly: true })).toEqual({
       ...DEFAULT_SIDEBAR_SETTINGS,

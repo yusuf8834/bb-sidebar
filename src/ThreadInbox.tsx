@@ -37,6 +37,7 @@ import { useInboxProjectGroups } from "./useInboxProjectGroups";
 import { environmentUnitKey } from "./environment-groups";
 import { useWorkingSince } from "./useWorkingSince";
 import { useSidebarSettings } from "./useSidebarSettings";
+import { useThreadsWithSideChats } from "./useSideChats";
 import { useProjectScope } from "./useProjectScope";
 import { threadDisplayTitle } from "./inbox";
 import { movePinnedIdByOffset, orderPinnedThreads, rebaseMovedId } from "./pinned-order";
@@ -85,10 +86,11 @@ function ThreadInboxContent({
   lifecycleRows: LifecycleRows;
   portScope: PortScanScope;
 }) {
-  const { status, threads, projects } = snapshot;
+  const { status, projects } = snapshot;
+  const sidebarSettings = useSidebarSettings();
+  const threads = useThreadsWithSideChats(snapshot.threads, sidebarSettings);
   const workingSince = useWorkingSince(threads, status);
   const { providers } = useProviders();
-  const sidebarSettings = useSidebarSettings();
   const lifecycle = useLifecycle(threads, lifecycleRows);
   const projectIconRevision = useProjectIconRevision();
   const listAnimationController = useMemo(() => createListAnimationController(!isCompactViewport), [isCompactViewport]);
