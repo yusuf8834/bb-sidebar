@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { renderSlot } from "./test-slot";
+import { cacheSidebarSettings } from "./sidebar-settings";
 import {
   inbox,
   sidebarSettings,
@@ -18,9 +19,17 @@ vi.mock("sonner", async () => (await import("./test-inbox")).sonnerMock());
 await loadInboxApp();
 
 describe("sidebar settings", () => {
-  it("keeps project colors opt-in and ignores the removed archive preview settings", async () => {
+  it("keeps project colors off once turned off and ignores the removed archive preview settings", async () => {
     localStorage.setItem("bb-sidebar:shelf-expansion:v1", JSON.stringify({ settled: true, archived: true }));
-    let settings = { ...defaultSidebarSettings, archivedShelfEnabled: true };
+    let settings = {
+      ...defaultSidebarSettings,
+      inactiveThreadsEnabled: false,
+      projectColorsEnabled: false,
+      projectColorDisplay: "all" as const,
+      archivedShelfEnabled: true,
+    };
+    // A user who turned colors off has them cached that way before settings load.
+    cacheSidebarSettings({}, settings);
     const rendered = renderSlot(inbox, listProps, {
       sidebarThreads: {
         status: "ready",
@@ -71,6 +80,7 @@ describe("sidebar settings", () => {
         getSidebarSettings: () => ({
           ...defaultSidebarSettings,
           projectColorsEnabled: true,
+          projectColorDisplay: "all",
           inactiveThreadsEnabled: false,
         }),
         getProjectColors: () => ({ colors }),
@@ -175,7 +185,7 @@ describe("sidebar settings", () => {
   });
 
   it("saves the color switch and lets users choose and reset a project's color", async () => {
-    let saved = { ...defaultSidebarSettings };
+    let saved = { ...defaultSidebarSettings, projectColorsEnabled: false, projectColorDisplay: "all" as const };
     let colors: Record<string, string> = {};
     const setProjectColor = vi.fn((input: unknown) => {
       const { projectId, color } = input as { projectId: string; color: string | null };
@@ -291,7 +301,8 @@ describe("sidebar settings", () => {
     ]);
     expect(screen.queryByRole("navigation", { name: "Settings sections" })).toBeNull();
     const layout = screen.getByRole("region", { name: "Sidebar layout" });
-    expect(within(layout).getAllByText("Experimental")).toHaveLength(3);
+    // Thread display and Working shelf; Dock shelves to the bottom is no longer experimental.
+    expect(within(layout).getAllByText("Experimental")).toHaveLength(2);
     expect(within(layout).getByRole("switch", { name: "Working shelf" })).toBeDefined();
     expect(within(layout).queryByRole("switch", { name: "Archived shelf" })).toBeNull();
     const appearance = screen.getByRole("region", { name: "Project appearance" });
@@ -317,10 +328,10 @@ describe("sidebar settings", () => {
       target: { value: "activity" },
     });
     fireEvent.change(screen.getByLabelText("Child threads sort direction"), {
-      target: { value: "descending" },
+      target: { value: "ascending" },
     });
     fireEvent.change(screen.getByLabelText("Child thread icon"), {
-      target: { value: "provider" },
+      target: { value: "disc" },
     });
     await waitFor(() =>
       expect(saved).toEqual({
@@ -328,8 +339,8 @@ describe("sidebar settings", () => {
         snoozePresets: "1h, Wait refresh=5h, Tonight=evening@20:00, Morning=tomorrow@08:30, Monday=next-week@10:00",
         showRunningChildrenWhenCollapsed: false,
         childSortField: "activity",
-        childSortDirection: "descending",
-        childIconStyle: "provider",
+        childSortDirection: "ascending",
+        childIconStyle: "disc",
       }),
     ); // The section edited last says it saved; the others stay quiet.
     await waitFor(() =>

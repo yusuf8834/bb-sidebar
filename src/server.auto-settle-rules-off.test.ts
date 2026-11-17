@@ -4,6 +4,7 @@ import plugin from "./server";
 import {
   createFakePluginHost,
   disposers,
+  legacySettings,
   projectThread,
   projectsWith,
   pullRequestStatus,
@@ -18,7 +19,7 @@ type Rules = { autoSettleInactive: boolean; autoSettleOnMerge: boolean };
 
 // With both rules off and nothing the policy settled, a pass can change
 // nothing, so it skips listing every thread. Counts full thread listings.
-async function load(threads: ProjectThread[], rules?: Rules) {
+async function load(threads: ProjectThread[], rules: Rules) {
   let lists = 0;
   const missing = new Set<string>();
   const listed = () => threads.filter((thread) => !missing.has(thread.id));
@@ -37,9 +38,7 @@ async function load(threads: ProjectThread[], rules?: Rules) {
       plugins: {
         callRpc: pullRequestStatus(() => ({ outcome: "absent" })),
         // Legacy settings imported on first start set the rules without a pass.
-        ...(rules && {
-          getSettings: async () => ({ ok: true as const, schema: {}, values: { ...rules } }),
-        }),
+        getSettings: legacySettings(rules),
       },
     },
   });
@@ -59,6 +58,8 @@ async function load(threads: ProjectThread[], rules?: Rules) {
 }
 
 const off = { autoSettleInactive: false, autoSettleOnMerge: false };
+// New installs start with both rules off; these flows start from quiet-thread settling.
+const quietOnly = { autoSettleInactive: true, autoSettleOnMerge: false };
 
 describe("automatic settle with both rules off", () => {
   it("lists threads on the first pass only", async () => {
@@ -88,7 +89,10 @@ describe("automatic settle with both rules off", () => {
   });
 
   it("runs one full pass after the rules are turned off, then skips", async () => {
-    const policy = await load([projectThread({ id: "thr", environmentId: "env_thr", updatedAt: Date.now() })]);
+    const policy = await load(
+      [projectThread({ id: "thr", environmentId: "env_thr", updatedAt: Date.now() })],
+      quietOnly,
+    );
     await policy.evaluate();
     await policy.evaluate();
     expect(policy.lists()).toBe(2);
@@ -106,7 +110,7 @@ describe("automatic settle with both rules off", () => {
     ["working", { status: "active" as const }],
   ])("returns a policy-settled thread missing from the re-check once it is back %s", async (_, change) => {
     const threads = [projectThread({ id: "thr", environmentId: "env_thr", ...quiet })];
-    const policy = await load(threads);
+    const policy = await load(threads, quietOnly);
     await expect(policy.evaluate()).resolves.toEqual({ changedThreadIds: ["thr"] });
     // The re-check after the rules go off cannot see the thread, so its row
     // survives.

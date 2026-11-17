@@ -48,7 +48,7 @@ export interface SidebarSettingsValues {
   compactWorkingThreads: boolean;
   /** Experimental: move threads with live work to their own shelf. */
   workingShelf: boolean;
-  /** Experimental: keep the shelves below Active docked to the bottom. */
+  /** Keep the shelves below Active docked to the bottom. */
   dockShelves: boolean;
   projectColorsEnabled: boolean;
   /** Where project stripes appear; enabled project names are always colored. */
@@ -61,21 +61,21 @@ export const DEFAULT_SIDEBAR_SETTINGS: SidebarSettingsValues = {
   inactiveAfterHours: DEFAULT_INACTIVE_AFTER_HOURS,
   showRunningChildrenWhenCollapsed: true,
   showSideChatsAsChildren: true,
-  autoSettleInactive: true,
+  autoSettleInactive: false,
   autoSettleAfterDays: 3,
   autoSettleOnMerge: false,
   childSortField: "created",
-  childSortDirection: "ascending",
-  childIconStyle: "disc",
+  childSortDirection: "descending",
+  childIconStyle: "provider",
   threadDisplay: "full",
   compactProjectIconOnly: false,
   keepPinnedThreadsFull: false,
   keepWokeThreadsFull: false,
   compactWorkingThreads: false,
   workingShelf: false,
-  dockShelves: false,
-  projectColorsEnabled: false,
-  projectColorDisplay: "all",
+  dockShelves: true,
+  projectColorsEnabled: true,
+  projectColorDisplay: "none",
 };
 
 export function childThreadSortOf(settings: SidebarSettingsValues | null): ChildThreadSort {

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { renderSlot } from "./test-slot";
 import { DEFAULT_SIDEBAR_SETTINGS } from "./sidebar-settings-values";
 import { inbox, defaultSidebarSettings, thread, listProps, deferred, loadInboxApp } from "./test-inbox";
@@ -19,6 +19,8 @@ describe("parking threads", () => {
         projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: {
+        // The muted project name below is the look without project colors.
+        getSidebarSettings: () => ({ ...defaultSidebarSettings, projectColorsEnabled: false }),
         listLifecycle: () => ({
           rows: [
             {
@@ -35,7 +37,7 @@ describe("parking threads", () => {
     fireEvent.click(within(shelf).getByRole("button"));
     expect(within(shelf).getByText("2h")).toBeDefined();
     expect(within(shelf).getByLabelText("bb · Later")).toBeDefined();
-    expect(within(shelf).getByText("bb").className).toContain("text-muted-foreground/50");
+    await waitFor(() => expect(within(shelf).getByText("bb").className).toContain("text-muted-foreground/50"));
     expect(within(shelf).getByText("·").className).toContain("text-sm");
     expect(within(shelf).getByText("Later").className).toContain("text-foreground/80");
     expect(within(shelf).getByLabelText("Wake thread now")).toBeDefined();

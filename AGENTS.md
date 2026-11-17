@@ -150,7 +150,8 @@ Wired tests deliver invalidations through `flush()`; app tests use
 Settings live in the single `sidebar_settings.settings_json` column, validated
 with `sidebarSettingsSchema`; RPC input validation stays strict. Per-field
 fallbacks come from `DEFAULT_SIDEBAR_SETTINGS`, except that installs marked in
-`install_defaults` keep `autoSettleOnMerge` on until they save settings. The
+`install_defaults` keep `autoSettleOnMerge` (`settle-finished-pull-requests`)
+or `autoSettleInactive` (`settle-quiet-threads`) on until they save settings. The
 old columns are unused: a compatibility row satisfies their NOT NULL
 constraints, NULL JSON still permits the legacy SDK settings import, and
 dropping them needs a table rebuild in a later major. The app reads server

@@ -49,9 +49,10 @@ it("shows direct subthreads in the hover card and opens them by keyboard or clic
   expect(toggle.getAttribute("aria-expanded")).toBe("true");
   const list = within(details).getByRole("list", { name: "Subthreads" });
   const items = within(list).getAllByRole("link");
+  // Newest first, the default child order.
   expect(items.map((item) => item.getAttribute("aria-label"))).toEqual([
-    "Open subthread: Implementation",
     "Open subthread: Review",
+    "Open subthread: Implementation",
   ]);
   expect(list.textContent).toContain("Codex · Working");
   expect(list.textContent).toContain("Claude Code · Needs you");

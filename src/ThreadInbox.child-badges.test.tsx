@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { renderSlot } from "./test-slot";
+import { cacheSidebarSettings } from "./sidebar-settings";
 import { inbox, defaultSidebarSettings, thread, defaultProviders, listProps, render, loadInboxApp } from "./test-inbox";
 
 vi.mock("sonner", async () => (await import("./test-inbox")).sonnerMock());
@@ -23,6 +24,8 @@ const childProviders = [
 
 describe("ThreadInbox", () => {
   it("shows a child count badge with provider dots only on parent cards", () => {
+    // Colour circles give each child its own dot; provider icons would show Codex once.
+    cacheSidebarSettings({}, { ...defaultSidebarSettings, inactiveThreadsEnabled: false, childIconStyle: "disc" });
     const minute = Math.floor(Date.now() / 60_000) * 60_000;
     render([
       thread({
@@ -339,6 +342,8 @@ describe("ThreadInbox", () => {
           ...defaultSidebarSettings,
           inactiveThreadsEnabled: false,
           childIconStyle: "provider",
+          // The badge follows the child order; oldest first puts Codex first.
+          childSortDirection: "ascending",
         }),
         listLifecycle: () => ({ rows: [] }),
       },
@@ -401,9 +406,10 @@ describe("ThreadInbox", () => {
     });
     const badge = await screen.findByRole("button", { name: /^1 child thread/ });
     const row = screen.getByRole("link", { name: /^Open child thread: Child/ });
+    // Provider icons are the default until the saved colour circles load.
+    await waitFor(() => expect(within(row).queryByRole("img", { name: "Codex" })).toBeNull());
     const disc = badge.querySelector<HTMLElement>("[data-child-thread-dot] span");
     expect(disc?.style.backgroundColor).toContain("oklch");
-    expect(within(row).queryByRole("img", { name: "Codex" })).toBeNull();
 
     childIconStyle = "provider";
     await rendered.experimental_invalidateRpc(["sidebar-settings"]);

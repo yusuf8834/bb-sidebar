@@ -13,6 +13,16 @@ const oldSettings = {
   autoSettleAfterDays: 7,
   autoSettleOnMerge: false,
 };
+// What a version from before these settings showed; its cache lacks them.
+const beforeTheseSettings = {
+  childSortField: "created",
+  childSortDirection: "ascending",
+  childIconStyle: "disc",
+  dockShelves: false,
+  projectColorsEnabled: false,
+  projectColorDisplay: "all",
+} as const;
+const oldDecoded = { ...DEFAULT_SIDEBAR_SETTINGS, ...beforeTheseSettings, ...oldSettings };
 const row = {
   threadId: "a",
   parkedAt: 10,
@@ -30,7 +40,15 @@ describe("settings cache codec", () => {
     );
   });
   it("fills newer settings in the older accepted shape", () => {
-    expect(decodeSettingsCache(oldSettings)).toEqual({ ...DEFAULT_SIDEBAR_SETTINGS, ...oldSettings });
+    expect(decodeSettingsCache(oldSettings)).toEqual(oldDecoded);
+  });
+  it("decodes settings a cache predates to what its version showed, not today's defaults", () => {
+    // The server still holds those values for an install that saved settings back then.
+    expect(decodeSettingsCache(oldSettings)).toMatchObject(beforeTheseSettings);
+    expect(decodeSettingsCache({ ...oldSettings, projectColorsEnabled: true })).toMatchObject({
+      projectColorsEnabled: true,
+      projectColorDisplay: "all",
+    });
   });
   it("rejects missing and wrongly typed required fields", () => {
     for (const input of [null, undefined, {}, [], "settings"]) expect(decodeSettingsCache(input)).toBeNull();
@@ -42,8 +60,7 @@ describe("settings cache codec", () => {
   it("retains permissive numeric checks and optional-setting fallbacks", () => {
     // The old reader accepted numbers without range or finite checks.
     expect(decodeSettingsCache({ ...oldSettings, inactiveAfterHours: -1, autoSettleAfterDays: Infinity })).toEqual({
-      ...DEFAULT_SIDEBAR_SETTINGS,
-      ...oldSettings,
+      ...oldDecoded,
       inactiveAfterHours: -1,
       autoSettleAfterDays: Infinity,
     });
@@ -57,7 +74,13 @@ describe("settings cache codec", () => {
         workingShelf: 1,
         projectColorDisplay: "unknown",
       }),
-    ).toEqual({ ...DEFAULT_SIDEBAR_SETTINGS, ...oldSettings });
+      // Unreadable values take today's defaults; missing ones what the older version showed.
+    ).toEqual({
+      ...oldDecoded,
+      childSortField: DEFAULT_SIDEBAR_SETTINGS.childSortField,
+      childIconStyle: DEFAULT_SIDEBAR_SETTINGS.childIconStyle,
+      projectColorDisplay: DEFAULT_SIDEBAR_SETTINGS.projectColorDisplay,
+    });
   });
   it("keeps side chats as children on for a cache saved before the switch", () => {
     expect(decodeSettingsCache(oldSettings)?.showSideChatsAsChildren).toBe(true);
@@ -70,8 +93,7 @@ describe("settings cache codec", () => {
   });
   it("retains the icon-only project preference", () => {
     expect(decodeSettingsCache({ ...oldSettings, compactProjectIconOnly: true })).toEqual({
-      ...DEFAULT_SIDEBAR_SETTINGS,
-      ...oldSettings,
+      ...oldDecoded,
       compactProjectIconOnly: true,
     });
   });

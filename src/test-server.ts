@@ -168,6 +168,20 @@ export function availablePullRequest(
   };
 }
 
+/**
+ * A `plugins.getSettings` fake that answers with settings from the previous
+ * settings generation. The server imports them on first start, so the rules
+ * hold from the first pass without a settings change.
+ */
+export function legacySettings(
+  values: Awaited<ReturnType<BbPluginApi["sdk"]["plugins"]["getSettings"]>>["values"],
+): BbPluginApi["sdk"]["plugins"]["getSettings"] {
+  return async () => ({ ok: true as const, schema: {}, values });
+}
+
+// Test hosts start as new installs, which no longer settle quiet threads.
+export const settleQuietThreads = legacySettings({ autoSettleInactive: true });
+
 type PullRequestStatusRow =
   | ReturnType<typeof availablePullRequest>
   | { outcome: "absent" }
@@ -202,13 +216,17 @@ afterEach(async () => {
   await Promise.all(disposers.splice(0).map((dispose) => dispose()));
 });
 
-export async function loadPlugin(
-  unpin: (input: { threadId: string }) => Promise<ReturnType<typeof makeThreadResponse>> = async ({ threadId }) =>
-    makeThreadResponse({ id: threadId }),
-) {
+export async function loadPlugin({
+  unpin = async ({ threadId }) => makeThreadResponse({ id: threadId }),
+  getSettings,
+}: {
+  unpin?: (input: { threadId: string }) => Promise<ReturnType<typeof makeThreadResponse>>;
+  getSettings?: BbPluginApi["sdk"]["plugins"]["getSettings"];
+} = {}) {
   const { bb, harness } = createFakePluginHost({
     pluginId: "bb-sidebar",
     sdk: {
+      ...(getSettings && { plugins: { getSettings } }),
       projects: { list: async () => projectsWith([projectThread({ id: "thr_1" })]) },
       threads: {
         get: async ({ threadId }) => makeThreadResponse({ id: threadId }),

@@ -116,7 +116,11 @@ describe("parking threads", () => {
         ],
       },
       rpc: {
-        getSidebarSettings: () => ({ ...defaultSidebarSettings, projectColorsEnabled: true }),
+        getSidebarSettings: () => ({
+          ...defaultSidebarSettings,
+          projectColorsEnabled: true,
+          projectColorDisplay: "all",
+        }),
         getProjectColors: () => ({ colors: {} }),
         listLifecycle: () => ({
           rows: settled.map((item) => ({

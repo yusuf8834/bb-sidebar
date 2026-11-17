@@ -6,6 +6,7 @@ import {
   projectsWith,
   terminalSession,
   loadPlugin,
+  settleQuietThreads,
   deferred,
   type LifecycleListResult,
   type ProjectThread,
@@ -13,7 +14,8 @@ import {
 
 describe("release lifecycle safety", () => {
   async function host(threads: ProjectThread[]) {
-    const harness = await loadPlugin();
+    // These flows cover automatic settling of quiet threads, off for new installs.
+    const harness = await loadPlugin({ getSettings: settleQuietThreads });
     // Match the real host: projects hide helpers; the paged thread list does not.
     harness.inspection.sdk.stub("projects.list", async () =>
       projectsWith(threads.filter((t) => t.visibility === "visible")),

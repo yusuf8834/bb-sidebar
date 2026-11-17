@@ -13,17 +13,17 @@ describe("lifecycle RPC", () => {
       inactiveThreadsEnabled: true,
       inactiveAfterHours: 6,
       showRunningChildrenWhenCollapsed: true,
-      autoSettleInactive: true,
+      autoSettleInactive: false,
       autoSettleAfterDays: 3,
       autoSettleOnMerge: false,
       childSortField: "created",
-      childSortDirection: "ascending",
-      childIconStyle: "disc",
+      childSortDirection: "descending",
+      childIconStyle: "provider",
       compactWorkingThreads: false,
       workingShelf: false,
-      dockShelves: false,
-      projectColorsEnabled: false,
-      projectColorDisplay: "all",
+      dockShelves: true,
+      projectColorsEnabled: true,
+      projectColorDisplay: "none",
     });
     await expect(
       harness.behavior.callRpc("updateSidebarSettings", {
@@ -31,16 +31,16 @@ describe("lifecycle RPC", () => {
         inactiveThreadsEnabled: false,
         inactiveAfterHours: 12,
         showRunningChildrenWhenCollapsed: false,
-        autoSettleInactive: false,
+        autoSettleInactive: true,
         autoSettleAfterDays: 7,
         autoSettleOnMerge: false,
         childSortField: "activity",
-        childSortDirection: "descending",
-        childIconStyle: "provider",
+        childSortDirection: "ascending",
+        childIconStyle: "disc",
         compactWorkingThreads: true,
         workingShelf: true,
-        dockShelves: true,
-        projectColorsEnabled: true,
+        dockShelves: false,
+        projectColorsEnabled: false,
         projectColorDisplay: "grouped",
       }),
     ).resolves.toEqual({
@@ -49,17 +49,17 @@ describe("lifecycle RPC", () => {
       inactiveThreadsEnabled: false,
       inactiveAfterHours: 12,
       showRunningChildrenWhenCollapsed: false,
-      autoSettleInactive: false,
+      autoSettleInactive: true,
       autoSettleAfterDays: 7,
       autoSettleOnMerge: false,
       childSortField: "activity",
-      childSortDirection: "descending",
-      childIconStyle: "provider",
+      childSortDirection: "ascending",
+      childIconStyle: "disc",
       threadDisplay: "compact-working",
       compactWorkingThreads: true,
       workingShelf: true,
-      dockShelves: true,
-      projectColorsEnabled: true,
+      dockShelves: false,
+      projectColorsEnabled: false,
       projectColorDisplay: "grouped",
     });
     // A client that predates the setting leaves it out and must not reset it.
@@ -69,19 +69,19 @@ describe("lifecycle RPC", () => {
         inactiveThreadsEnabled: false,
         inactiveAfterHours: 12,
         showRunningChildrenWhenCollapsed: false,
-        autoSettleInactive: false,
+        autoSettleInactive: true,
         autoSettleAfterDays: 7,
         autoSettleOnMerge: false,
         childSortField: "activity",
-        childSortDirection: "descending",
-        childIconStyle: "provider",
+        childSortDirection: "ascending",
+        childIconStyle: "disc",
       }),
     ).resolves.toMatchObject({
       threadDisplay: "compact-working",
       compactWorkingThreads: true,
       workingShelf: true,
-      dockShelves: true,
-      projectColorsEnabled: true,
+      dockShelves: false,
+      projectColorsEnabled: false,
       projectColorDisplay: "grouped",
     });
     expect(harness.inspection.realtimeSignals).toContainEqual({
@@ -96,7 +96,11 @@ describe("lifecycle RPC", () => {
   it("persists color display mode across reloads and rejects unknown modes", async () => {
     const harness = await loadPlugin();
     const settings = (await harness.behavior.callRpc("getSidebarSettings", {})) as Record<string, unknown>;
-    await harness.behavior.callRpc("updateSidebarSettings", { ...settings, projectColorDisplay: "full" });
+    await harness.behavior.callRpc("updateSidebarSettings", {
+      ...settings,
+      projectColorsEnabled: false,
+      projectColorDisplay: "full",
+    });
     await expect(
       harness.behavior.callRpc("updateSidebarSettings", { ...settings, projectColorDisplay: "invalid" }),
     ).rejects.toThrow("rpc input validation failed");
@@ -178,13 +182,13 @@ describe("lifecycle RPC", () => {
       autoSettleAfterDays: 14,
       autoSettleOnMerge: false,
       childSortField: "created",
-      childSortDirection: "ascending",
-      childIconStyle: "disc",
+      childSortDirection: "descending",
+      childIconStyle: "provider",
       compactWorkingThreads: false,
       workingShelf: false,
-      dockShelves: false,
-      projectColorsEnabled: false,
-      projectColorDisplay: "all",
+      dockShelves: true,
+      projectColorsEnabled: true,
+      projectColorDisplay: "none",
     });
   });
 });

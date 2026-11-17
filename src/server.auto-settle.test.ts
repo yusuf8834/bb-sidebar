@@ -10,6 +10,7 @@ import {
   pullRequestStatus,
   loadPlugin,
   deferred,
+  settleQuietThreads,
   type LifecycleListResult,
 } from "./test-server";
 
@@ -131,6 +132,7 @@ describe("automatic settle evaluation", () => {
               await release.promise;
               return { outcome: "absent" };
             }),
+            getSettings: settleQuietThreads,
           },
         },
       });
@@ -172,7 +174,10 @@ describe("automatic settle evaluation", () => {
       sdk: {
         projects: { list: async () => projectsWith(threads) },
         threads: { get: async ({ threadId }) => makeThreadResponse({ id: threadId }), list: async () => threads },
-        plugins: { callRpc: pullRequestStatus(() => availablePullRequest(prOpen ? "open" : "merged"), batches) },
+        plugins: {
+          callRpc: pullRequestStatus(() => availablePullRequest(prOpen ? "open" : "merged"), batches),
+          getSettings: settleQuietThreads,
+        },
       },
     });
     await plugin(bb);
@@ -214,6 +219,7 @@ describe("automatic settle evaluation", () => {
             await held?.promise;
             return availablePullRequest(prOpen ? "open" : "merged");
           }),
+          getSettings: settleQuietThreads,
         },
       },
     });
@@ -242,7 +248,10 @@ describe("automatic settle evaluation", () => {
     let child = projectThread({ id: "child", parentThreadId: "parent", projectId: "other", updatedAt: Date.now() });
     const { bb, harness } = createFakePluginHost({
       pluginId: "bb-sidebar",
-      sdk: { projects: { list: async () => projectsWith([projectThread({ id: "parent", ...quiet }), child]) } },
+      sdk: {
+        projects: { list: async () => projectsWith([projectThread({ id: "parent", ...quiet }), child]) },
+        plugins: { getSettings: settleQuietThreads },
+      },
     });
     await plugin(bb);
     disposers.push(() => harness.lifecycle.dispose());
@@ -277,6 +286,7 @@ describe("automatic settle evaluation", () => {
               }),
             ]),
         },
+        plugins: { getSettings: settleQuietThreads },
       },
     });
     await plugin(bb);
@@ -328,6 +338,7 @@ describe("automatic settle evaluation", () => {
               projectThread({ id: "thr_hidden", ...quiet, visibility: "hidden" }),
             ]),
         },
+        plugins: { getSettings: settleQuietThreads },
       },
     });
     await plugin(bb);
@@ -391,7 +402,7 @@ describe("automatic settle evaluation", () => {
               }),
             ]),
         },
-        plugins: { callRpc: pullRequestStatus(() => ({ outcome: "absent" })) },
+        plugins: { callRpc: pullRequestStatus(() => ({ outcome: "absent" })), getSettings: settleQuietThreads },
       },
     });
     await plugin(bb);
@@ -524,6 +535,7 @@ describe("automatic settle evaluation", () => {
             pullRequestCalls += 1;
             return pullRequestCalls === 1 ? firstPullRequest : availablePullRequest("merged");
           }),
+          getSettings: settleQuietThreads,
         },
       },
     });
@@ -673,6 +685,7 @@ describe("automatic settle evaluation", () => {
               }),
             ]),
         },
+        plugins: { getSettings: settleQuietThreads },
       },
     });
     await plugin(bb);

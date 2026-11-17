@@ -214,14 +214,14 @@ describe("child threads", () => {
     });
   });
 
-  it("lists a thread's children oldest first", () => {
+  it("lists a thread's children newest first by default", () => {
     const children = childThreadsByParent([
       thread({ id: "parent" }),
-      thread({ id: "b", parentThreadId: "parent", createdAt: 20 }),
       thread({ id: "a", parentThreadId: "parent", createdAt: 10 }),
+      thread({ id: "b", parentThreadId: "parent", createdAt: 20 }),
       thread({ id: "other", parentThreadId: "elsewhere" }),
     ]);
-    expect(children.get("parent")?.map((t) => t.id)).toEqual(["a", "b"]);
+    expect(children.get("parent")?.map((t) => t.id)).toEqual(["b", "a"]);
   });
 
   it("lists a thread's children by the configured sort", () => {
@@ -291,13 +291,14 @@ describe("child threads", () => {
       thread({ id: "b", parentThreadId: "parent", createdAt: 10 }),
       thread({ id: "a", parentThreadId: "parent", createdAt: 10 }),
     ];
+    const oldestFirst = { field: "created", direction: "ascending" } as const;
     expect(
-      childThreadsByParent(threads)
+      childThreadsByParent(threads, oldestFirst)
         .get("parent")
         ?.map((t) => t.id),
     ).toEqual(["a", "b"]);
     expect(
-      childThreadsByParent([...threads].reverse())
+      childThreadsByParent([...threads].reverse(), oldestFirst)
         .get("parent")
         ?.map((t) => t.id),
     ).toEqual(["a", "b"]);

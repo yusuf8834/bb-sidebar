@@ -6,6 +6,7 @@ import {
   projectThread,
   projectsWith,
   pullRequestStatus,
+  settleQuietThreads,
   type LifecycleListResult,
 } from "./test-server";
 
@@ -33,7 +34,7 @@ describe("automatic settle with GitHub PR Status", () => {
               projectThread({ id: "thr_plain", ...quiet }),
             ]),
         },
-        plugins: { callRpc: pullRequestStatus(row) },
+        plugins: { callRpc: pullRequestStatus(row), getSettings: settleQuietThreads },
       },
     });
     await plugin(bb);
@@ -57,7 +58,10 @@ describe("automatic settle with GitHub PR Status", () => {
       pluginId: "bb-sidebar",
       sdk: {
         projects: { list: async () => projectsWith(threads) },
-        plugins: { callRpc: pullRequestStatus(() => ({ outcome: "absent" }), batches) },
+        plugins: {
+          callRpc: pullRequestStatus(() => ({ outcome: "absent" }), batches),
+          getSettings: settleQuietThreads,
+        },
       },
     });
     await plugin(bb);

@@ -8,6 +8,7 @@ import {
   projectThread,
   projectsWith,
   pullRequestStatus,
+  settleQuietThreads,
   type LifecycleListResult,
   type ProjectThread,
 } from "./test-server";
@@ -45,6 +46,8 @@ async function load(threads: ProjectThread[], row: (environmentId: string) => Ro
           }
           return callRpc(input);
         },
+        // Quiet-thread settling is off for new installs; these passes use it.
+        getSettings: settleQuietThreads,
       },
     },
   });

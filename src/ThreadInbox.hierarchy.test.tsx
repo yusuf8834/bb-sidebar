@@ -113,8 +113,9 @@ it("guards cyclic child DTOs while expanding and retains deep sibling sort", asy
   expect(names).toEqual([
     "Open child thread: Child",
     "Open grandchild thread: Grandchild",
-    "Open great-grandchild thread: Earlier",
+    // Newest first, the default child order.
     "Open great-grandchild thread: Later",
+    "Open great-grandchild thread: Earlier",
   ]);
   expect(screen.queryByRole("link", { name: /^Open descendant/ })).toBeNull();
 });

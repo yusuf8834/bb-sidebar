@@ -95,7 +95,6 @@ export function SidebarLayoutSettings({
 
       <SwitchRow
         title="Dock shelves to the bottom"
-        experimental
         description="Keep shelves below Active at the bottom of the sidebar. Expanded shelves scroll with the thread list."
         checked={draft.dockShelves}
         onChange={(checked) => update("dockShelves", checked)}
