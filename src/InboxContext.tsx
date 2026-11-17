@@ -152,7 +152,7 @@ export function InboxProvider({
   return (
     <ListAnimationContext.Provider value={listAnimationController}>
       <ProjectColorsProvider
-        enabled={sidebarSettings?.projectColorsEnabled === true}
+        enabled={sidebarSettings?.projectColorsEnabled ?? DEFAULT_SIDEBAR_SETTINGS.projectColorsEnabled}
         display={sidebarSettings?.projectColorDisplay ?? DEFAULT_SIDEBAR_SETTINGS.projectColorDisplay}
         projectIds={projectIds}
       >

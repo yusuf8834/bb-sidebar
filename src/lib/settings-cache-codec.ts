@@ -18,6 +18,19 @@ export function currentSettingsOnly(value: SidebarSettingsValues): SidebarSettin
   ) as unknown as SidebarSettingsValues;
 }
 
+// A cache missing one of these was written before the setting existed. The
+// server then still holds what that version showed (the old columns'
+// defaults, kept by the JSON backfill), not today's default, so decode to it.
+// Later versions always cache every field.
+const BEFORE_SETTING_EXISTED = {
+  childSortField: "created",
+  childSortDirection: "ascending",
+  childIconStyle: "disc",
+  dockShelves: false,
+  projectColorsEnabled: false,
+  projectColorDisplay: "all",
+} as const satisfies Partial<SidebarSettingsValues>;
+
 export function decodeSettingsCache(input: unknown): SidebarSettingsValues | null {
   if (typeof input !== "object" || input === null) return null;
   const value = input as Partial<SidebarSettingsValues>;
@@ -33,11 +46,12 @@ export function decodeSettingsCache(input: unknown): SidebarSettingsValues | nul
     return null;
   }
   // A cache written before the child-thread settings existed lacks them.
-  // It is still good for everything else, so fill the gaps with defaults
-  // instead of dropping it and flashing the old settings until the load.
+  // It is still good for everything else, so fill the gaps instead of
+  // dropping it and flashing the old settings until the load.
+  const filled = { ...BEFORE_SETTING_EXISTED, ...value };
   return currentSettingsOnly({
     ...value,
-    ...childThreadSettingsOf(value),
+    ...childThreadSettingsOf(filled),
     threadDisplay: threadDisplayOf(value),
     compactProjectIconOnly: value.compactProjectIconOnly === true,
     keepPinnedThreadsFull: value.keepPinnedThreadsFull === true,
@@ -46,9 +60,9 @@ export function decodeSettingsCache(input: unknown): SidebarSettingsValues | nul
     showSideChatsAsChildren: value.showSideChatsAsChildren !== false,
     compactWorkingThreads: threadDisplayOf(value) !== "full",
     workingShelf: value.workingShelf === true,
-    dockShelves: value.dockShelves === true,
-    projectColorsEnabled: value.projectColorsEnabled === true,
-    projectColorDisplay: projectColorDisplayOf(value.projectColorDisplay),
+    dockShelves: filled.dockShelves === true,
+    projectColorsEnabled: filled.projectColorsEnabled === true,
+    projectColorDisplay: projectColorDisplayOf(filled.projectColorDisplay),
   } as SidebarSettingsValues);
 }
 

@@ -1,7 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import { makeThreadResponse } from "@get-bb/plugin-sdk/testing";
 import plugin from "./server";
-import { disposers, projectThread, projectsWith, loadPlugin, deferred, type LifecycleListResult } from "./test-server";
+import {
+  disposers,
+  projectThread,
+  projectsWith,
+  loadPlugin,
+  deferred,
+  settleQuietThreads,
+  type LifecycleListResult,
+} from "./test-server";
 
 describe("settling thread trees", () => {
   const tree = () => [
@@ -156,7 +164,7 @@ describe("settling thread trees", () => {
   });
 
   it("finishes policy wakeups and runtime cleanup without ancestor lookups after writing rows", async () => {
-    const harness = await loadPlugin();
+    const harness = await loadPlugin({ getSettings: settleQuietThreads });
     const old = Date.now() - 8 * 86400000;
     const quiet = { createdAt: old, updatedAt: old, latestAttentionAt: old };
     const threads = [
@@ -250,7 +258,7 @@ describe("settling thread trees", () => {
   });
 
   it("a quiet tree can automatically settle again after Undo", async () => {
-    const harness = await loadPlugin();
+    const harness = await loadPlugin({ getSettings: settleQuietThreads });
     const old = Date.now() - 4 * 86400000;
     const quiet = { createdAt: old, updatedAt: old, latestAttentionAt: old };
     harness.inspection.sdk.stub("projects.list", async () =>

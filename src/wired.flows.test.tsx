@@ -159,7 +159,7 @@ it("saves settings in the real settings slot and publishes the Working shelf to 
 
 it("publishes a custom project color to both stripe and name", async () => {
   const wired = await createWired([item()]);
-  await wired.call("updateSidebarSettings", { projectColorsEnabled: true });
+  await wired.call("updateSidebarSettings", { projectColorsEnabled: true, projectColorDisplay: "all" });
   const slot = wired.mount();
   // The default stripe can render before the first read finishes; wait for that reply too.
   await waitFor(() => expect(slot.rpcReplies).toContainEqual({ method: "getProjectColors", result: { colors: {} } }));

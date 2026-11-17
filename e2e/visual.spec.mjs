@@ -11,6 +11,16 @@ async function capture(page, testInfo, name) {
   console.log(`SNAPSHOT ${name}: exact PNG match=${actual.equals(baseline)}`);
 }
 
+// Project colors are on by default, and the automatic color follows the
+// scratch project's id, which changes every run. Pin one for the captures.
+async function pinProjectColor(request) {
+  await rpc(request, "setProjectColor", { projectId: fixture.projectId, color: "#3b7a57" });
+}
+
+async function clearProjectColor(request) {
+  await rpc(request, "setProjectColor", { projectId: fixture.projectId, color: null });
+}
+
 for (const [name, theme, width] of [
   ["light", "light", 320],
   ["dark", "dark", 320],
@@ -20,20 +30,25 @@ for (const [name, theme, width] of [
     test.skip(process.platform !== "darwin", "Reviewed baselines are macOS only; Linux runs all behavior flows");
     await reset(request);
     const [atlas, birch, cedar, delta] = fixture.threads;
-    await cli(["thread", "pin", atlas.id]);
-    await rpc(request, "snooze", { threadId: cedar.id, snoozedUntil: Date.now() + 7 * 86_400_000 });
-    await rpc(request, "settle", { threadId: delta.id });
-    await open(page, { theme, width });
-    for (const name of ["Pinned", "Snoozed", "Settled"]) await expand(page, name);
-    await expect(link(page, atlas.title, "Pinned")).toBeVisible();
-    await expect(link(page, birch.title)).toBeVisible();
-    await expect(link(page, cedar.title, "Snoozed")).toBeVisible();
-    await expect(link(page, delta.title, "Settled")).toBeVisible();
-    await page.mouse.move(1000, 750);
-    const sidebar = page.locator("[data-bb-sidebar-root]");
-    expect(Math.round((await sidebar.boundingBox()).width)).toBe(width);
-    await capture(page, testInfo, `${name}.png`);
-    await expect(shelf(page, "Active").getByRole("link")).toHaveCount(1);
+    try {
+      await pinProjectColor(request);
+      await cli(["thread", "pin", atlas.id]);
+      await rpc(request, "snooze", { threadId: cedar.id, snoozedUntil: Date.now() + 7 * 86_400_000 });
+      await rpc(request, "settle", { threadId: delta.id });
+      await open(page, { theme, width });
+      for (const name of ["Pinned", "Snoozed", "Settled"]) await expand(page, name);
+      await expect(link(page, atlas.title, "Pinned")).toBeVisible();
+      await expect(link(page, birch.title)).toBeVisible();
+      await expect(link(page, cedar.title, "Snoozed")).toBeVisible();
+      await expect(link(page, delta.title, "Settled")).toBeVisible();
+      await page.mouse.move(1000, 750);
+      const sidebar = page.locator("[data-bb-sidebar-root]");
+      expect(Math.round((await sidebar.boundingBox()).width)).toBe(width);
+      await capture(page, testInfo, `${name}.png`);
+      await expect(shelf(page, "Active").getByRole("link")).toHaveCount(1);
+    } finally {
+      await clearProjectColor(request);
+    }
   });
 }
 
@@ -42,6 +57,7 @@ test("sidebar snapshot Compact all threads", async ({ page, request }, testInfo)
   await reset(request);
   const [atlas, birch, cedar, delta] = fixture.threads;
   try {
+    await pinProjectColor(request);
     await cli(["thread", "pin", atlas.id]);
     await rpc(request, "snooze", { threadId: cedar.id, snoozedUntil: Date.now() + 7 * 86_400_000 });
     await rpc(request, "settle", { threadId: delta.id });
@@ -56,6 +72,7 @@ test("sidebar snapshot Compact all threads", async ({ page, request }, testInfo)
     await page.mouse.move(1000, 750);
     await capture(page, testInfo, "compact-all.png");
   } finally {
+    await clearProjectColor(request);
     await rpc(request, "updateSidebarSettings", fixture.defaultSettings);
   }
 });

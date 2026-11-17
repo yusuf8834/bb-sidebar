@@ -50,20 +50,20 @@ it.each([false, true])("drains an edit made during a pending save, unmounted=%s"
   await act(async () => {
     await vi.advanceTimersByTimeAsync(500);
   });
-  expect(writes).toEqual([{ dockShelves: true }]);
+  expect(writes).toEqual([{ dockShelves: false }]);
   fireEvent.click(screen.getByRole("switch", { name: "Working shelf" }));
   if (unmount) slot.lifecycle.unmount();
   await act(async () => {
     pending.resolve();
   });
   if (!unmount) {
-    expect(writes).toEqual([{ dockShelves: true }]);
+    expect(writes).toEqual([{ dockShelves: false }]);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(500);
     });
   }
-  expect(writes).toEqual([{ dockShelves: true }, { workingShelf: true }]);
-  expect(stored).toMatchObject({ dockShelves: true, workingShelf: true });
+  expect(writes).toEqual([{ dockShelves: false }, { workingShelf: true }]);
+  expect(stored).toMatchObject({ dockShelves: false, workingShelf: true });
 });
 
 it("saves a reversal of the same field made while its first write is pending", async () => {
@@ -184,7 +184,8 @@ it("removes obsolete archive-preview cache keys before an early save", async () 
 });
 
 it("keeps the typing debounce when an earlier settings save finishes", async () => {
-  let stored = { ...DEFAULT_SIDEBAR_SETTINGS };
+  // The days field shows only while quiet threads settle automatically.
+  let stored = { ...DEFAULT_SIDEBAR_SETTINGS, autoSettleInactive: true };
   const pending = deferred<void>();
   const writes: unknown[] = [];
   renderSlot(

@@ -65,12 +65,12 @@ describe("ParentChip", () => {
       compact,
       {
         providers: { status: "ready", providers: [codex] },
-        rpc: { getSidebarSettings: () => DEFAULT_SIDEBAR_SETTINGS },
+        rpc: { getSidebarSettings: () => ({ ...DEFAULT_SIDEBAR_SETTINGS, childIconStyle: "disc" }) },
       },
     );
     await waitFor(() => expect(rendered.rpcCalls).toContainEqual({ method: "getSidebarSettings", input: {} }));
     const button = screen.getByRole("button", { name: "Back to parent: Parent" });
-    expect(within(button).queryByRole("img")).toBeNull();
+    await waitFor(() => expect(within(button).queryByRole("img")).toBeNull());
     const disc = button.querySelector<HTMLElement>("span.rounded-full");
     expect(disc?.className).toBe("inline-block size-3.5 shrink-0 rounded-full border border-background");
     expect(disc?.style.backgroundColor).toBe("oklch(0.72 0.13 290)");
@@ -123,7 +123,7 @@ describe("ParentChip", () => {
   });
 
   it("updates the icon when settings change while mounted", async () => {
-    let settings = DEFAULT_SIDEBAR_SETTINGS;
+    let settings: typeof DEFAULT_SIDEBAR_SETTINGS = { ...DEFAULT_SIDEBAR_SETTINGS, childIconStyle: "disc" };
     const rendered = render(
       [thread({ id: "parent", title: "Parent" }), thread({ id: "child", parentThreadId: "parent" })],
       "child",
@@ -134,7 +134,7 @@ describe("ParentChip", () => {
       },
     );
     const button = screen.getByRole("button", { name: "Back to parent: Parent" });
-    expect(button.querySelector("span.rounded-full")).not.toBeNull();
+    await waitFor(() => expect(button.querySelector("span.rounded-full")).not.toBeNull());
     settings = { ...settings, childIconStyle: "provider" };
     await rendered.experimental_invalidateRpc([SIDEBAR_SETTINGS_TAG]);
     expect(await within(button).findByRole("img", { name: "Codex" })).toBeDefined();

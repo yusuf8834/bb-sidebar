@@ -14,9 +14,11 @@ const storedSettingsSchema = z.object(
   ),
 );
 
-// Settling finished pull requests became opt-in. Installs that already had
-// sidebar data keep it on until they save their own settings; a new install
-// has empty tables when this runs, so it gets the new default.
+// Settling finished pull requests, and later settling quiet threads, became
+// opt-in. Installs that already had sidebar data when each change shipped
+// keep that setting on until they save their own settings; a new install has
+// empty tables when these run, so it gets the new defaults. Append new names;
+// the runner refuses a changed statement at an existing index.
 export const INSTALL_DEFAULTS_MIGRATIONS = [
   `CREATE TABLE IF NOT EXISTS install_defaults (name TEXT PRIMARY KEY)`,
   `INSERT OR IGNORE INTO install_defaults (name)
@@ -27,14 +29,24 @@ export const INSTALL_DEFAULTS_MIGRATIONS = [
        OR EXISTS (SELECT 1 FROM project_colors)
        OR EXISTS (SELECT 1 FROM title_recovery_attempts)
        OR EXISTS (SELECT 1 FROM sidebar_settings WHERE settings_json IS NOT NULL)`,
+  `INSERT OR IGNORE INTO install_defaults (name)
+   SELECT 'settle-quiet-threads'
+    WHERE EXISTS (SELECT 1 FROM thread_lifecycle)
+       OR EXISTS (SELECT 1 FROM inbox_order)
+       OR EXISTS (SELECT 1 FROM project_icons)
+       OR EXISTS (SELECT 1 FROM project_colors)
+       OR EXISTS (SELECT 1 FROM title_recovery_attempts)
+       OR EXISTS (SELECT 1 FROM sidebar_settings WHERE settings_json IS NOT NULL)`,
 ];
 
+function installKeeps(ctx: ServerContext, name: string): boolean {
+  return ctx.db.prepare(`SELECT 1 FROM install_defaults WHERE name = ?`).get(name) !== undefined;
+}
+
 export async function createServerSettings(ctx: ServerContext) {
-  const keepsFinishedPullRequestSettling =
-    ctx.db.prepare(`SELECT 1 FROM install_defaults WHERE name = 'settle-finished-pull-requests'`).get() !== undefined;
-  const defaults: SidebarSettingsValues = keepsFinishedPullRequestSettling
-    ? { ...DEFAULT_SIDEBAR_SETTINGS, autoSettleOnMerge: true }
-    : DEFAULT_SIDEBAR_SETTINGS;
+  const defaults: SidebarSettingsValues = { ...DEFAULT_SIDEBAR_SETTINGS };
+  if (installKeeps(ctx, "settle-finished-pull-requests")) defaults.autoSettleOnMerge = true;
+  if (installKeeps(ctx, "settle-quiet-threads")) defaults.autoSettleInactive = true;
 
   const readSidebarSettings = (): SidebarSettingsValues => {
     const row = ctx.db.prepare("SELECT settings_json FROM sidebar_settings WHERE id = 1").get() as
@@ -103,9 +115,7 @@ export async function createServerSettings(ctx: ServerContext) {
             ? values.showRunningChildrenWhenCollapsed
             : DEFAULT_SIDEBAR_SETTINGS.showRunningChildrenWhenCollapsed,
         autoSettleInactive:
-          typeof values.autoSettleInactive === "boolean"
-            ? values.autoSettleInactive
-            : DEFAULT_SIDEBAR_SETTINGS.autoSettleInactive,
+          typeof values.autoSettleInactive === "boolean" ? values.autoSettleInactive : defaults.autoSettleInactive,
         autoSettleAfterDays:
           typeof values.autoSettleAfterDays === "string"
             ? Number(values.autoSettleAfterDays)
