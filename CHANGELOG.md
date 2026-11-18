@@ -12,7 +12,7 @@
 
 ### Removed
 
-- **The parent chip in the thread header is gone.** An open child thread no longer shows the "‹ parent title" chip that the sidebar added to bb's thread header, as the child-threads chip went before it. To get back to a parent, use its row in the sidebar, where the child is listed behind the row's child badge, or, for a thread given a parent through the Parent menu, the parent link in the "assigned to" line bb adds to the child's timeline. A parent that is archived, or in a project the sidebar's filter hides, has no sidebar row; open it from bb's archive or by clearing the project filter.
+- **The parent chip in the thread header is gone.** An open child thread no longer shows the "‹ parent title" chip that the sidebar added to bb's thread header, as the child-threads chip went before it. To get back to a parent, use its row in the sidebar, where the child is listed behind the row's child badge, or, for a thread given a parent through the Parent menu, the parent link in the "assigned to" line bb adds to the child's timeline. A parent that is archived, or in a project the sidebar's project filter hides, has no row in the sidebar; clear the filter to bring back the latter.
 
 ### Fixed
 
