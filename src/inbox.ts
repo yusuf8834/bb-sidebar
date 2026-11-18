@@ -172,16 +172,3 @@ export function hideChildrenOfVisibleParents<T extends TreeThread>(threads: read
   const rows = shelfRowIds(threads);
   return threads.filter((thread) => rows.get(thread.id) === thread.id);
 }
-
-/**
- * The parent of one thread, or null when the thread is a root, when the id is
- * unknown, or when the parent row is gone (deleted). The parent may be
- * archived or in another project: the flat list hides those, but the child
- * still needs a way back to them.
- */
-export function parentOf(threads: readonly PluginSidebarThread[], threadId: string): PluginSidebarThread | null {
-  const thread = threads.find((candidate) => candidate.id === threadId);
-  const parentThreadId = thread?.parentThreadId;
-  if (!parentThreadId) return null;
-  return threads.find((candidate) => candidate.id === parentThreadId) ?? null;
-}

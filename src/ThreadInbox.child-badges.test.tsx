@@ -409,7 +409,12 @@ describe("ThreadInbox", () => {
     // Provider icons are the default until the saved colour circles load.
     await waitFor(() => expect(within(row).queryByRole("img", { name: "Codex" })).toBeNull());
     const disc = badge.querySelector<HTMLElement>("[data-child-thread-dot] span");
-    expect(disc?.style.backgroundColor).toContain("oklch");
+    // Moved from the removed parent chip's tests: a child's colour comes from
+    // its id, so the badge and the child row draw the same disc.
+    expect(disc?.style.backgroundColor).toBe("oklch(0.72 0.13 156)");
+    expect(row.querySelector<HTMLElement>("span.rounded-full")?.style.backgroundColor).toBe(
+      disc?.style.backgroundColor,
+    );
 
     childIconStyle = "provider";
     await rendered.experimental_invalidateRpc(["sidebar-settings"]);
