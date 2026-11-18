@@ -10,6 +10,10 @@
 
 - **New default settings.** A new install, and any install that has never saved its sidebar settings, now starts with shelves docked to the bottom, child threads listed newest first with their provider icons instead of colour circles, and project colors on with no stripes: project names are coloured and rows have no stripe. "Dock shelves to the bottom" is no longer marked experimental. "Settle quiet threads" is now off for new installs. An install that already had sidebar data keeps settling quiet threads, as with "Settle finished pull requests" when that became opt-in: the switch stays on until you turn it off, and saving any other setting keeps it on. Saved settings keep their values.
 
+### Fixed
+
+- **The agent's own port is no longer listed as a workspace port.** Claude Code listens on a local port for the network proxy of its command sandbox, and bb starts it in the thread's workspace, so the sidebar listed that port under "Workspace ports" and put the port icon on the row, as if the thread had started a server. The stop button in the hover card, Clean in the Settled shelf and "Close ports" after a settle then stopped the agent itself, and the sidebar never settled the thread for you while its agent was loaded, whichever automatic-settle rule applied. The port scan now leaves out the process bb started as the thread's agent, for every provider. Servers the agent starts are still listed and can still be stopped. Google Antigravity's agent opens a second port from a helper process, which is still listed.
+
 ## [0.3.12] - 2026-11-16
 
 ### Changed
