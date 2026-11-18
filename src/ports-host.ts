@@ -7,7 +7,13 @@ import { closeOwnedPortProcesses } from "./close-owned-ports";
 import { portScanContract, type PortRoot } from "./port-scan-contract";
 import { attribute, parseCwds, parseDockerRows, parseListeners } from "./port-scan";
 import type { OpenPort, ThreadPullRequest } from "./contract";
-import { isBbInternalListener, parseProcessCommands } from "./port-processes";
+import {
+  isAgentRuntime,
+  isBbInternalListener,
+  parseParentPids,
+  parseProcessCommands,
+  parseStatParent,
+} from "./port-processes";
 import { macProcessEnvironment, threadIdFromEnvironment } from "./port-ownership";
 import { parseGhPullRequest } from "./pull-requests";
 
@@ -108,6 +114,84 @@ async function scanPorts(roots: PortRoot[], signal: AbortSignal) {
     ownerByPid.set(pid, owner);
     return owner;
   }
+  async function psRows(args: string[]): Promise<string> {
+    try {
+      return await run("ps", args, signal);
+    } catch (error) {
+      if (signal.aborted) throw error;
+      const failure = error as { code?: unknown; stderr?: string };
+      // ps exits 1 in silence when none of the pids exist anymore. With a
+      // message on stderr it refused the call, which is no answer.
+      if (failure.code === 1 && !failure.stderr?.trim()) return "";
+      throw error;
+    }
+  }
+  /** Parent pid of each process that still exists. */
+  async function parentPids(pids: number[]): Promise<Map<number, number>> {
+    const parents = new Map<number, number>();
+    if (platform() === "linux") {
+      await Promise.all(
+        pids.map(async (pid) => {
+          try {
+            const parent = parseStatParent(await readFile(`/proc/${pid}/stat`, "utf8"));
+            if (parent !== undefined) parents.set(pid, parent);
+          } catch {
+            /* Exited or inaccessible. */
+          }
+        }),
+      );
+      return parents;
+    }
+    for (let start = 0; start < pids.length; start += 100) {
+      const rows = await psRows(["-o", "pid=,ppid=", "-p", pids.slice(start, start + 100).join(",")]);
+      for (const [pid, parent] of parseParentPids(rows)) parents.set(pid, parent);
+    }
+    return parents;
+  }
+  /** Command line of each process that still exists. */
+  async function processCommands(pids: number[]): Promise<Map<number, string>> {
+    const found = new Map<number, string>();
+    if (platform() === "linux") {
+      await Promise.all(
+        pids.map(async (pid) => {
+          try {
+            const cmdline = await readFile(`/proc/${pid}/cmdline`, "utf8");
+            found.set(pid, cmdline.replaceAll("\0", " ").trim());
+          } catch {
+            /* Exited or inaccessible. */
+          }
+        }),
+      );
+      return found;
+    }
+    for (let start = 0; start < pids.length; start += 100) {
+      const rows = await psRows(["ww", "-p", pids.slice(start, start + 100).join(","), "-o", "pid=,args="]);
+      for (const [pid, command] of parseProcessCommands(rows)) found.set(pid, command);
+    }
+    return found;
+  }
+  /** The agent itself, and any process whose parent could not be read. */
+  async function pidsToLeaveOut(pids: number[]): Promise<Set<number>> {
+    const leaveOut = new Set<number>();
+    if (!pids.length) return leaveOut;
+    const parents = await parentPids(pids);
+    // A parent that listens itself (the ACP worker does) is already known.
+    const unknown = [...new Set(parents.values())].filter((parent) => parent > 1 && !commands.has(parent));
+    const parentCommands = new Map([...commands, ...(unknown.length ? await processCommands(unknown) : [])]);
+    for (const pid of pids) {
+      const parent = parents.get(pid);
+      // No parent row: the process exited after lsof listed it.
+      if (parent === undefined) leaveOut.add(pid);
+      else if (parent > 1) {
+        const command = parentCommands.get(parent);
+        // No command: the parent exited between the two lookups. Listing the
+        // process now could put a stop button on an agent; the next scan
+        // sees it under its new parent.
+        if (command === undefined || isAgentRuntime(command)) leaveOut.add(pid);
+      }
+    }
+    return leaveOut;
+  }
   function add(cwd: string, detail: OpenPort) {
     const owner = attribute(cwd, canonicalRoots);
     if (!owner) return;
@@ -120,19 +204,22 @@ async function scanPorts(roots: PortRoot[], signal: AbortSignal) {
       ports.set(key, { environmentId: root.environmentId, ...detail, ...ports.get(key) });
     }
   }
-  for (const listener of listeners) {
-    if (isBbInternalListener(listener.processName, commands.get(listener.pid))) continue;
+  const candidates = listeners.flatMap((listener) => {
+    if (isBbInternalListener(listener.processName, commands.get(listener.pid))) return [];
     const cwd = cwds.get(listener.pid);
-    if (cwd && attribute(cwd, canonicalRoots)) {
-      const ownerThreadId = await ownerThread(listener.pid);
-      const processStartedAt = ownerThreadId ? await processStart(listener.pid) : undefined;
-      add(cwd, {
-        ...listener,
-        source: "process",
-        ...(ownerThreadId ? { ownerThreadId } : {}),
-        ...(processStartedAt ? { processStartedAt } : {}),
-      });
-    }
+    return cwd && attribute(cwd, canonicalRoots) ? [{ listener, cwd }] : [];
+  });
+  const leaveOut = await pidsToLeaveOut([...new Set(candidates.map(({ listener }) => listener.pid))]);
+  for (const { listener, cwd } of candidates) {
+    if (leaveOut.has(listener.pid)) continue;
+    const ownerThreadId = await ownerThread(listener.pid);
+    const processStartedAt = ownerThreadId ? await processStart(listener.pid) : undefined;
+    add(cwd, {
+      ...listener,
+      source: "process",
+      ...(ownerThreadId ? { ownerThreadId } : {}),
+      ...(processStartedAt ? { processStartedAt } : {}),
+    });
   }
   try {
     const output = await run(
