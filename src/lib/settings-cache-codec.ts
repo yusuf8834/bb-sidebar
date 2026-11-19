@@ -62,6 +62,7 @@ export function decodeSettingsCache(input: unknown): SidebarSettingsValues | nul
     workingShelf: value.workingShelf === true,
     // Off by default, so a cache from before the setting keeps it off.
     autoArchiveSettled: value.autoArchiveSettled === true,
+    autoArchiveIncludeSettled: value.autoArchiveIncludeSettled === true,
     autoArchiveAfterDays:
       typeof value.autoArchiveAfterDays === "number"
         ? value.autoArchiveAfterDays

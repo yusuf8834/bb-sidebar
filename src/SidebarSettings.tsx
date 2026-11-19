@@ -36,6 +36,7 @@ const SECTION_BY_SETTING: Record<keyof SidebarSettingsValues, string> = {
   autoSettleOnMerge: "Thread behavior",
   autoArchiveSettled: "Thread behavior",
   autoArchiveAfterDays: "Thread behavior",
+  autoArchiveIncludeSettled: "Thread behavior",
   showRunningChildrenWhenCollapsed: "Child threads",
   showSideChatsAsChildren: "Child threads",
   childSortField: "Child threads",

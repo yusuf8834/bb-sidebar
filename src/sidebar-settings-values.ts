@@ -34,6 +34,8 @@ export interface SidebarSettingsValues {
   /** Archive threads in bb after they have been on the Settled shelf this many days. Off by default. */
   autoArchiveSettled: boolean;
   autoArchiveAfterDays: number;
+  /** Count time settled before the rule was turned on. Off: every wait starts at turn-on at the earliest. */
+  autoArchiveIncludeSettled: boolean;
   childSortField: ChildThreadSortField;
   childSortDirection: ChildThreadSortDirection;
   childIconStyle: ChildThreadIconStyle;
@@ -70,6 +72,7 @@ export const DEFAULT_SIDEBAR_SETTINGS: SidebarSettingsValues = {
   autoSettleOnMerge: false,
   autoArchiveSettled: false,
   autoArchiveAfterDays: DEFAULT_AUTO_ARCHIVE_AFTER_DAYS,
+  autoArchiveIncludeSettled: false,
   childSortField: "created",
   childSortDirection: "descending",
   childIconStyle: "provider",

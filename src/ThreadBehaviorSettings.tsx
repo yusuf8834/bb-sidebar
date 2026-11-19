@@ -23,6 +23,9 @@ export function ThreadBehaviorSettings({
   snoozePresetsError: string | null;
   snoozePreview: string[];
 }) {
+  const archiveDays = autoArchiveDaysValid
+    ? `${draft.autoArchiveAfterDays} ${draft.autoArchiveAfterDays === 1 ? "day" : "days"}`
+    : "the set number of days";
   return (
     <SettingsSection title="Thread behavior" status={status}>
       <SettingsGroup title="Snooze">
@@ -112,6 +115,14 @@ export function ThreadBehaviorSettings({
             />
           ) : null}
         </SwitchRow>
+        {draft.autoArchiveSettled ? (
+          <SwitchRow
+            title="Include threads already settled"
+            description={`Archive threads already settled longer than ${archiveDays} on the next check. Off, they wait ${archiveDays} from when you turned on archiving.`}
+            checked={draft.autoArchiveIncludeSettled}
+            onChange={(checked) => update("autoArchiveIncludeSettled", checked)}
+          />
+        ) : null}
       </SettingsGroup>
     </SettingsSection>
   );

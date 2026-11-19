@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { ServerContext } from "./server-context";
 import type { createServerLifecycle } from "./server-lifecycle";
 import type { createServerSettings } from "./server-settings";
+import type { SidebarSettingsValues } from "./sidebar-settings-values";
 import {
   DAY_MS,
   isValidAutoArchiveAfterDays,
@@ -42,6 +43,51 @@ export const AUTO_ARCHIVE_MIGRATION = `CREATE TABLE IF NOT EXISTS auto_archive_s
   retry_at    INTEGER,
   archived_at INTEGER
 )`;
+
+/**
+ * When the rule was last turned on. Without "Include threads already
+ * settled", no thread's wait starts before it: turning the rule on gives
+ * every thread already on the Settled shelf the full number of days.
+ */
+export const AUTO_ARCHIVE_RULE_MIGRATION = `CREATE TABLE IF NOT EXISTS auto_archive_rule (
+  id         INTEGER PRIMARY KEY CHECK (id = 1),
+  enabled_at INTEGER NOT NULL
+)`;
+
+type AutoArchiveSettings = Pick<
+  SidebarSettingsValues,
+  "autoArchiveSettled" | "autoArchiveAfterDays" | "autoArchiveIncludeSettled"
+>;
+
+const recordEnabledAt = (ctx: ServerContext, now: number) =>
+  ctx.db
+    .prepare(
+      `INSERT INTO auto_archive_rule (id, enabled_at) VALUES (1, ?)
+       ON CONFLICT(id) DO UPDATE SET enabled_at = excluded.enabled_at`,
+    )
+    .run(now);
+
+/**
+ * Called by the settings handler with the settings before and after a save.
+ * Turning the rule on records the moment; any change to the rule clears the
+ * waits it computed from the old rule, so the next pass uses the new one.
+ * Failed archives keep their backoff.
+ */
+export function autoArchiveSettingsChanged(
+  ctx: ServerContext,
+  before: AutoArchiveSettings,
+  after: AutoArchiveSettings,
+  now = Date.now(),
+): void {
+  if (after.autoArchiveSettled && !before.autoArchiveSettled) recordEnabledAt(ctx, now);
+  if (
+    after.autoArchiveSettled !== before.autoArchiveSettled ||
+    after.autoArchiveAfterDays !== before.autoArchiveAfterDays ||
+    after.autoArchiveIncludeSettled !== before.autoArchiveIncludeSettled
+  ) {
+    ctx.db.prepare(`UPDATE auto_archive_state SET retry_at = NULL WHERE attempts = 0 AND archived_at IS NULL`).run();
+  }
+}
 
 interface StateRow {
   thread_id: string;
@@ -150,6 +196,19 @@ export function createServerAutoArchive(
     const configured = settings.readSidebarSettings();
     if (!configured.autoArchiveSettled || !isValidAutoArchiveAfterDays(configured.autoArchiveAfterDays)) return [];
     const afterMs = configured.autoArchiveAfterDays * DAY_MS;
+    // No wait starts before the rule was turned on, unless the user asked to
+    // count time settled before that. A rule on with no record (it was on
+    // before this was recorded) starts now.
+    let enabledAt = (
+      ctx.db.prepare(`SELECT enabled_at FROM auto_archive_rule WHERE id = 1`).get() as
+        | { enabled_at: number }
+        | undefined
+    )?.enabled_at;
+    if (enabledAt === undefined) {
+      recordEnabledAt(ctx, now);
+      enabledAt = now;
+    }
+    const earliestStart = configured.autoArchiveIncludeSettled ? 0 : enabledAt;
     ctx.db
       .prepare(
         `DELETE FROM auto_archive_state
@@ -161,7 +220,7 @@ export function createServerAutoArchive(
       if (row.settledAt === null) return [];
       const state = stateFor(row.threadId, row.settledAt, now);
       if (state.attempts >= MAX_ARCHIVE_ATTEMPTS || (state.retry_at !== null && state.retry_at > now)) return [];
-      return state.clock_start + afterMs <= now ? [state] : [];
+      return Math.max(state.clock_start, earliestStart) + afterMs <= now ? [state] : [];
     });
     if (due.length === 0) return [];
 
@@ -197,6 +256,7 @@ export function createServerAutoArchive(
         Math.max(
           tree.settledAt === state.settled_at ? state.clock_start : Math.max(state.clock_start, tree.settledAt),
           ...tree.threadIds.map(memberClock),
+          earliestStart,
         ) + afterMs;
       if (dueAt > now) {
         later(state, dueAt - now);
@@ -237,7 +297,12 @@ export function createServerAutoArchive(
     const archived: string[] = [];
     for (const { state, threadIds } of clean) {
       const current = settings.readSidebarSettings();
-      if (!current.autoArchiveSettled || current.autoArchiveAfterDays !== configured.autoArchiveAfterDays) break;
+      if (
+        !current.autoArchiveSettled ||
+        current.autoArchiveAfterDays !== configured.autoArchiveAfterDays ||
+        current.autoArchiveIncludeSettled !== configured.autoArchiveIncludeSettled
+      )
+        break;
       const freshRows = new Map(readAll().map((row) => [row.threadId, row]));
       const tree = byId.has(state.thread_id)
         ? settledArchiveTree(threads, freshRows, state.thread_id, threadSignals, Date.now())

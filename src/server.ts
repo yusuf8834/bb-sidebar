@@ -20,7 +20,7 @@ import { createServerHandlers } from "./server-handlers";
 import { createServerRateLimits } from "./server-rate-limits";
 import { createServerSideChats } from "./server-side-chats";
 import { createServerCli } from "./server-cli";
-import { AUTO_ARCHIVE_MIGRATION, createServerAutoArchive } from "./server-auto-archive";
+import { AUTO_ARCHIVE_MIGRATION, AUTO_ARCHIVE_RULE_MIGRATION, createServerAutoArchive } from "./server-auto-archive";
 
 export type { StoredLifecycleRow } from "./server-lifecycle";
 
@@ -117,6 +117,7 @@ const migrations = [
   LIFECYCLE_BACKFILLS_MIGRATION,
   ...INSTALL_DEFAULTS_MIGRATIONS,
   AUTO_ARCHIVE_MIGRATION,
+  AUTO_ARCHIVE_RULE_MIGRATION,
 ];
 
 export default async function plugin(bb: BbPluginApi) {

@@ -184,6 +184,7 @@ export const sidebarSettingsSchema = z
     autoSettleOnMerge: z.boolean(),
     autoArchiveSettled: z.boolean(),
     autoArchiveAfterDays: z.number().int().min(MIN_AUTO_ARCHIVE_AFTER_DAYS).max(MAX_AUTO_ARCHIVE_AFTER_DAYS),
+    autoArchiveIncludeSettled: z.boolean(),
     childSortField: z.enum(CHILD_THREAD_SORT_FIELDS),
     childSortDirection: z.enum(CHILD_THREAD_SORT_DIRECTIONS),
     childIconStyle: z.enum(CHILD_THREAD_ICON_STYLES),

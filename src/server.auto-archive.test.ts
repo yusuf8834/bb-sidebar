@@ -34,6 +34,8 @@ async function setup({
   rows = [],
   enable = true,
   days = 30,
+  // Most tests check the rule against real settle times; fresh start has its own tests.
+  includeSettled = true,
   git = () => clean,
   archive,
 }: {
@@ -41,6 +43,7 @@ async function setup({
   rows?: Row[];
   enable?: boolean;
   days?: number;
+  includeSettled?: boolean;
   git?: (environmentId: string) => GitRow;
   archive?: (threadId: string) => Promise<string[]>;
 }) {
@@ -90,7 +93,11 @@ async function setup({
     );
   }
   if (enable) {
-    await harness.behavior.callRpc("updateSidebarSettings", { autoArchiveSettled: true, autoArchiveAfterDays: days });
+    await harness.behavior.callRpc("updateSidebarSettings", {
+      autoArchiveSettled: true,
+      autoArchiveAfterDays: days,
+      autoArchiveIncludeSettled: includeSettled,
+    });
   }
   const listings = () => harness.inspection.sdk.callsTo("projects.list").length;
   return {
@@ -455,5 +462,95 @@ describe("auto-archive failures", () => {
     t.db.prepare(`UPDATE thread_lifecycle SET settled_at = ? WHERE thread_id = 't'`).run(Date.now() - 31 * DAY);
     await t.run();
     expect(t.archived).toEqual(["t"]);
+  });
+});
+
+describe("auto-archive fresh start", () => {
+  const turnOn = (t: Awaited<ReturnType<typeof setup>>, values: Record<string, unknown> = {}) =>
+    t.harness.behavior.callRpc("updateSidebarSettings", { autoArchiveSettled: true, ...values });
+
+  it("defaults to a fresh start, also for settings saved by an older version", async () => {
+    const t = await setup({ threads: [], enable: false });
+    const { autoArchiveIncludeSettled: _include, ...older } = DEFAULT_SIDEBAR_SETTINGS;
+    t.db.prepare(`UPDATE sidebar_settings SET settings_json = ? WHERE id = 1`).run(JSON.stringify(older));
+    await expect(t.harness.behavior.callRpc("getSidebarSettings", {})).resolves.toMatchObject({
+      autoArchiveSettled: false,
+      autoArchiveIncludeSettled: false,
+    });
+  });
+
+  it("gives a thread settled before the rule was turned on the full wait from turn-on", async () => {
+    const t = await setup({ threads: [quiet("old")], rows: [settledFor("old", 400)], enable: false });
+    await turnOn(t);
+    await t.run();
+    expect(t.archived).toEqual([]);
+    expect(t.listings()).toBe(0);
+    t.advance(30 * DAY - HOUR);
+    await t.run();
+    expect(t.archived).toEqual([]);
+    t.advance(HOUR);
+    await t.run();
+    expect(t.archived).toEqual(["old"]);
+  });
+
+  it("lets a thread settled after turn-on wait from its own settle", async () => {
+    const t = await setup({ threads: [quiet("later")], enable: false });
+    await turnOn(t);
+    t.advance(5 * DAY);
+    t.db.prepare(`INSERT INTO thread_lifecycle (thread_id, settled_at) VALUES ('later', ?)`).run(Date.now());
+    t.advance(30 * DAY - HOUR);
+    await t.run();
+    expect(t.archived).toEqual([]);
+    t.advance(HOUR);
+    await t.run();
+    expect(t.archived).toEqual(["later"]);
+  });
+
+  it("archives on the next pass with Include threads already settled", async () => {
+    const t = await setup({ threads: [quiet("old")], rows: [settledFor("old", 40)], enable: false });
+    await turnOn(t, { autoArchiveIncludeSettled: true });
+    await t.run();
+    expect(t.archived).toEqual(["old"]);
+  });
+
+  it("applies Include threads already settled on the next pass when turned on later, and back off again", async () => {
+    const t = await setup({ threads: [quiet("a"), quiet("b")], rows: [settledFor("a", 40)], enable: false });
+    await turnOn(t);
+    await t.run();
+    expect(t.archived).toEqual([]);
+    await t.harness.behavior.callRpc("updateSidebarSettings", { autoArchiveIncludeSettled: true });
+    await t.run();
+    expect(t.archived).toEqual(["a"]);
+    await t.harness.behavior.callRpc("updateSidebarSettings", { autoArchiveIncludeSettled: false });
+    t.db.prepare(`INSERT INTO thread_lifecycle (thread_id, settled_at) VALUES ('b', ?)`).run(NOW - 40 * DAY);
+    t.advance(HOUR);
+    await t.run();
+    expect(t.archived).toEqual(["a"]);
+    t.advance(30 * DAY - HOUR);
+    await t.run();
+    expect(t.archived).toEqual(["a", "b"]);
+  });
+
+  it("restarts the wait when the rule is turned off and on again", async () => {
+    const t = await setup({ threads: [quiet("old")], rows: [settledFor("old", 400)], enable: false });
+    await turnOn(t);
+    t.advance(20 * DAY);
+    await t.harness.behavior.callRpc("updateSidebarSettings", { autoArchiveSettled: false });
+    await turnOn(t);
+    t.advance(15 * DAY);
+    await t.run();
+    expect(t.archived).toEqual([]);
+    t.advance(15 * DAY);
+    await t.run();
+    expect(t.archived).toEqual(["old"]);
+  });
+
+  it("records the turn-on time when the setting is saved, not at the first pass", async () => {
+    const t = await setup({ threads: [quiet("old")], rows: [settledFor("old", 400)], enable: false });
+    await turnOn(t);
+    expect(t.db.prepare(`SELECT enabled_at FROM auto_archive_rule`).get()).toEqual({ enabled_at: NOW });
+    t.advance(30 * DAY);
+    await t.run();
+    expect(t.archived).toEqual(["old"]);
   });
 });
