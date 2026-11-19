@@ -72,7 +72,10 @@ const threadLimitStateSchema = z.object({
   message: z.string(),
   resetsAt: z.number().nullable(),
   timeZone: z.string().nullable(),
+  /** The sidebar's own scheduled Continue. */
   scheduled: z.object({ id: z.string(), sendAt: z.number(), failed: z.boolean() }).nullable(),
+  /** bb's own queued retry of the failed turn (`payload.kind === "retry"`), such as provider-retry's. */
+  retry: z.object({ id: z.string(), sendAt: z.number().nullable(), failed: z.boolean() }).nullable(),
 });
 export type ThreadLimitState = z.infer<typeof threadLimitStateSchema>;
 

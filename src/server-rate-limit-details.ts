@@ -90,5 +90,5 @@ export function rateLimitDetails(
   if (blocked.length > 0 && blocked.every((window) => window.resetsAtMs !== null)) {
     reset.resetsAt = Math.max(...blocked.map((window) => window.resetsAtMs!));
   }
-  return { message, ...reset, scheduled: null };
+  return { message, ...reset, scheduled: null, retry: null };
 }

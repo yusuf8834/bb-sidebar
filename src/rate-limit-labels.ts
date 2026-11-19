@@ -13,13 +13,23 @@ export function limitTime(at: number, timeZone: string | null) {
 }
 
 export function limitStatus(limit: ThreadLimitState) {
+  // bb's queued retry sends first, so it leads even when the sidebar's own Continue is also queued.
+  if (limit.retry) {
+    if (limit.retry.failed) return "Retry failed";
+    return limit.retry.sendAt === null ? "Retrying" : `Retrying at ${limitTime(limit.retry.sendAt, limit.timeZone)}`;
+  }
   if (!limit.scheduled) return "Limit reached";
   if (limit.scheduled.failed) return "Schedule failed";
   return `Scheduled · ${limitTime(limit.scheduled.sendAt, limit.timeZone)}`;
 }
 
 export function limitDescription(limit: ThreadLimitState) {
-  const at = limit.scheduled?.sendAt ?? limit.resetsAt;
+  const [label, at] =
+    limit.retry?.sendAt != null
+      ? ["bb retries at", limit.retry.sendAt]
+      : limit.scheduled
+        ? ["Continue scheduled for", limit.scheduled.sendAt]
+        : ["Resets", limit.resetsAt];
   const date =
     at === null
       ? null
@@ -28,11 +38,5 @@ export function limitDescription(limit: ThreadLimitState) {
           timeStyle: "short",
           ...(limit.timeZone ? { timeZone: limit.timeZone } : {}),
         }).format(at);
-  return [
-    limit.message,
-    date ? `${limit.scheduled ? "Continue scheduled for" : "Resets"} ${date}` : null,
-    limit.timeZone,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  return [limit.message, date ? `${label} ${date}` : null, limit.timeZone].filter(Boolean).join(" · ");
 }

@@ -154,7 +154,9 @@ export function RateLimitsProvider({
         request.current += 1;
         setRows((previous) => {
           const limit = previous[threadId];
-          return { ...previous, [threadId]: limit ? { ...limit, scheduled: null } : null };
+          const next =
+            limit?.retry?.id === queuedMessageId ? { ...limit, retry: null } : limit && { ...limit, scheduled: null };
+          return { ...previous, [threadId]: next ?? null };
         });
         await refresh();
       }),

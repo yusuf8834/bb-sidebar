@@ -77,6 +77,7 @@ async function setup() {
     setQueue: (next: typeof queue) => {
       queue = next;
     },
+    queue: () => queue,
   };
 }
 
@@ -109,6 +110,7 @@ describe("provider limit detection", () => {
       resetsAt,
       timeZone: "America/Chicago",
       scheduled: null,
+      retry: null,
     });
   });
 
@@ -244,7 +246,7 @@ describe("scheduled Continue RPC", () => {
   it("discovers existing read failures and clears the warning once work resumes", async () => {
     const { call, setStatus } = await setup();
     expect(await call("getThreadLimits", { keys: ["thr_1"] })).toEqual({
-      thr_1: { message, resetsAt, timeZone: "America/Chicago", scheduled: null },
+      thr_1: { message, resetsAt, timeZone: "America/Chicago", scheduled: null, retry: null },
     });
     setStatus("active");
     expect(await call("getThreadLimits", { keys: ["thr_1"] })).toEqual({ thr_1: null });
@@ -405,5 +407,121 @@ describe("scheduled Continue RPC", () => {
       /no longer queued/,
     );
     expect(harness.inspection.sdk.callsTo("threads.queuedMessages.delete")).toHaveLength(0);
+  });
+});
+
+describe("bb's queued provider retry", () => {
+  const retryAt = resetsAt + 20_000;
+  const retryRow = (overrides: Partial<ReturnType<typeof makeQueueEntry>> = {}) =>
+    makeQueueEntry({
+      id: "retry_1",
+      threadId: "thr_1",
+      initiator: "system",
+      content: [{ type: "text", text: "Fix the build", mentions: [] }],
+      sendAt: retryAt,
+      state: "scheduled",
+      waitingOn: { kind: "time" },
+      payload: { kind: "retry", attempt: 1, reason: "Rate limited", retryOfTurnRequestId: "turn_1" },
+      ...overrides,
+    });
+  const limits = async (call: (method: string, input: unknown) => Promise<unknown>) =>
+    ((await call("getThreadLimits", { keys: ["thr_1"] })) as Record<string, ThreadLimitState | null>).thr_1;
+
+  it("reports bb's retry with the limit and refuses to queue a Continue on top of it", async () => {
+    const { call, setQueue, harness } = await setup();
+    setQueue([retryRow()]);
+    expect(await limits(call)).toEqual({
+      message,
+      resetsAt,
+      timeZone: "America/Chicago",
+      scheduled: null,
+      retry: { id: "retry_1", sendAt: retryAt, failed: false },
+    });
+    const result = (await call("scheduleLimitContinue", { threadId: "thr_1" })) as ThreadLimitState;
+    expect(result.retry).toEqual({ id: "retry_1", sendAt: retryAt, failed: false });
+    expect(result.scheduled).toBeNull();
+    expect(harness.inspection.sdk.callsTo("threads.send")).toHaveLength(0);
+    // Display only: bb's retry does not snooze the thread.
+    expect(await call("listLifecycle", {})).toEqual({ rows: [] });
+  });
+
+  it("reports no retry when none is queued", async () => {
+    const { call } = await setup();
+    expect((await limits(call))?.retry).toBeNull();
+  });
+
+  it("leaves a retry of a failure that is not a provider limit alone", async () => {
+    const { call, setQueue, setEvents } = await setup();
+    setEvents([{ ...systemFailure, data: { message: "Provider unavailable" } }, started]);
+    setQueue([
+      retryRow({
+        payload: { kind: "retry", attempt: 1, reason: "Provider unavailable", retryOfTurnRequestId: "turn_1" },
+      }),
+    ]);
+    expect(await limits(call)).toBeNull();
+  });
+
+  it("cancels bb's retry, after which Continue is offered and can be scheduled", async () => {
+    const { call, setQueue, harness } = await setup();
+    setQueue([retryRow()]);
+    const pings = () => harness.inspection.realtimeSignals.filter((signal) => signal.channel === RATE_LIMITS_CHANNEL);
+    const before = pings().length;
+    expect(await call("cancelLimitContinue", { threadId: "thr_1", queuedMessageId: "retry_1" })).toEqual({ ok: true });
+    expect(harness.inspection.sdk.callsTo("threads.queuedMessages.delete")[0]?.[0]).toEqual({
+      threadId: "thr_1",
+      queuedMessageId: "retry_1",
+    });
+    expect(pings().length).toBeGreaterThan(before);
+    expect(await limits(call)).toEqual({
+      message,
+      resetsAt,
+      timeZone: "America/Chicago",
+      scheduled: null,
+      retry: null,
+    });
+    const scheduled = (await call("scheduleLimitContinue", { threadId: "thr_1" })) as ThreadLimitState;
+    expect(scheduled.scheduled?.sendAt).toBe(resetsAt + 30_000);
+    expect(harness.inspection.sdk.callsTo("threads.send")).toHaveLength(1);
+  });
+
+  it("refuses to cancel a retry bb is already sending", async () => {
+    const { call, setQueue, harness } = await setup();
+    setQueue([retryRow({ state: "claimed" })]);
+    await expect(call("cancelLimitContinue", { threadId: "thr_1", queuedMessageId: "retry_1" })).rejects.toThrow(
+      /already being sent/,
+    );
+    setQueue([]);
+    await expect(call("cancelLimitContinue", { threadId: "thr_1", queuedMessageId: "retry_1" })).rejects.toThrow(
+      /no longer queued/,
+    );
+    expect(harness.inspection.sdk.callsTo("threads.queuedMessages.delete")).toHaveLength(0);
+  });
+
+  it("keeps the sidebar's own Continue and its snooze when bb's retry is cancelled", async () => {
+    const { call, setQueue, queue } = await setup();
+    await call("scheduleLimitContinue", { threadId: "thr_1" });
+    const snoozed = await call("listLifecycle", {});
+    setQueue([...queue(), retryRow()]);
+    const both = await limits(call);
+    expect(both?.scheduled?.id).toBe("continue_1");
+    expect(both?.retry?.id).toBe("retry_1");
+    await call("cancelLimitContinue", { threadId: "thr_1", queuedMessageId: "retry_1" });
+    expect(await call("listLifecycle", {})).toEqual(snoozed);
+    expect((await limits(call))?.scheduled?.id).toBe("continue_1");
+  });
+
+  it("pings open sidebars when bb queues, sends or cancels a retry", async () => {
+    const { harness } = await setup();
+    const pings = () => harness.inspection.realtimeSignals.filter((signal) => signal.channel === RATE_LIMITS_CHANNEL);
+    await harness.behavior.emitThreadEvent("message.queued", { entry: makeQueueEntry({ id: "plain" }) });
+    expect(pings()).toHaveLength(0);
+    await harness.behavior.emitThreadEvent("message.queued", { entry: retryRow() });
+    expect(pings()).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1000);
+    await harness.behavior.emitThreadEvent("message.dispatched", { entry: retryRow() });
+    expect(pings()).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1000);
+    await harness.behavior.emitThreadEvent("message.cancelled", { entry: retryRow() });
+    expect(pings()).toHaveLength(3);
   });
 });
