@@ -11,6 +11,7 @@ import {
 import { configuredSnoozePresetError } from "./lifecycle";
 import { MAX_INACTIVE_AFTER_HOURS, MIN_INACTIVE_AFTER_HOURS } from "./inactive";
 import { MAX_AUTO_SETTLE_AFTER_DAYS, MIN_AUTO_SETTLE_AFTER_DAYS } from "./auto-settle";
+import { MAX_AUTO_ARCHIVE_AFTER_DAYS, MIN_AUTO_ARCHIVE_AFTER_DAYS } from "./auto-archive";
 export {
   SIDEBAR_SETTINGS_CHANNEL,
   PROJECT_ICONS_CHANNEL,
@@ -181,6 +182,9 @@ export const sidebarSettingsSchema = z
     autoSettleInactive: z.boolean(),
     autoSettleAfterDays: z.number().int().min(MIN_AUTO_SETTLE_AFTER_DAYS).max(MAX_AUTO_SETTLE_AFTER_DAYS),
     autoSettleOnMerge: z.boolean(),
+    autoArchiveSettled: z.boolean(),
+    autoArchiveAfterDays: z.number().int().min(MIN_AUTO_ARCHIVE_AFTER_DAYS).max(MAX_AUTO_ARCHIVE_AFTER_DAYS),
+    autoArchiveIncludeSettled: z.boolean(),
     childSortField: z.enum(CHILD_THREAD_SORT_FIELDS),
     childSortDirection: z.enum(CHILD_THREAD_SORT_DIRECTIONS),
     childIconStyle: z.enum(CHILD_THREAD_ICON_STYLES),

@@ -1,4 +1,5 @@
 import { MAX_AUTO_SETTLE_AFTER_DAYS, MIN_AUTO_SETTLE_AFTER_DAYS } from "./auto-settle";
+import { MAX_AUTO_ARCHIVE_AFTER_DAYS, MIN_AUTO_ARCHIVE_AFTER_DAYS } from "./auto-archive";
 import {
   InlineNumber,
   SettingRow,
@@ -13,13 +14,18 @@ export function ThreadBehaviorSettings({
   update,
   status,
   autoSettleDaysValid,
+  autoArchiveDaysValid,
   snoozePresetsError,
   snoozePreview,
 }: SettingsDraftSectionProps & {
   autoSettleDaysValid: boolean;
+  autoArchiveDaysValid: boolean;
   snoozePresetsError: string | null;
   snoozePreview: string[];
 }) {
+  const archiveDays = autoArchiveDaysValid
+    ? `${draft.autoArchiveAfterDays} ${draft.autoArchiveAfterDays === 1 ? "day" : "days"}`
+    : "the set number of days";
   return (
     <SettingsSection title="Thread behavior" status={status}>
       <SettingsGroup title="Snooze">
@@ -87,6 +93,36 @@ export function ThreadBehaviorSettings({
           checked={draft.autoSettleOnMerge}
           onChange={(checked) => update("autoSettleOnMerge", checked)}
         />
+      </SettingsGroup>
+      <SettingsGroup title="Automatic archive">
+        <SwitchRow
+          title="Archive settled threads"
+          description="Archives a thread and its child threads in bb after they have been on the Settled shelf for a set number of days. bb may then remove their workspaces, so threads with uncommitted changes are kept, as are pinned or working threads and trees with a thread that is not settled."
+          checked={draft.autoArchiveSettled}
+          onChange={(checked) => update("autoArchiveSettled", checked)}
+        >
+          {draft.autoArchiveSettled ? (
+            <InlineNumber
+              label="Days before auto-archive"
+              prefix="After"
+              suffix="days on the Settled shelf"
+              value={draft.autoArchiveAfterDays}
+              min={MIN_AUTO_ARCHIVE_AFTER_DAYS}
+              max={MAX_AUTO_ARCHIVE_AFTER_DAYS}
+              valid={autoArchiveDaysValid}
+              errorId="auto-archive-days-error"
+              onChange={(value) => update("autoArchiveAfterDays", value)}
+            />
+          ) : null}
+        </SwitchRow>
+        {draft.autoArchiveSettled ? (
+          <SwitchRow
+            title="Include threads already settled"
+            description={`Archive threads already settled longer than ${archiveDays} on the next check. Off, they wait ${archiveDays} from when you turned on archiving.`}
+            checked={draft.autoArchiveIncludeSettled}
+            onChange={(checked) => update("autoArchiveIncludeSettled", checked)}
+          />
+        ) : null}
       </SettingsGroup>
     </SettingsSection>
   );

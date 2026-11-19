@@ -60,6 +60,13 @@ export function decodeSettingsCache(input: unknown): SidebarSettingsValues | nul
     showSideChatsAsChildren: value.showSideChatsAsChildren !== false,
     compactWorkingThreads: threadDisplayOf(value) !== "full",
     workingShelf: value.workingShelf === true,
+    // Off by default, so a cache from before the setting keeps it off.
+    autoArchiveSettled: value.autoArchiveSettled === true,
+    autoArchiveIncludeSettled: value.autoArchiveIncludeSettled === true,
+    autoArchiveAfterDays:
+      typeof value.autoArchiveAfterDays === "number"
+        ? value.autoArchiveAfterDays
+        : DEFAULT_SIDEBAR_SETTINGS.autoArchiveAfterDays,
     dockShelves: filled.dockShelves === true,
     projectColorsEnabled: filled.projectColorsEnabled === true,
     projectColorDisplay: projectColorDisplayOf(filled.projectColorDisplay),

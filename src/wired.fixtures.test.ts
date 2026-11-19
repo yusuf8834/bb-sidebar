@@ -203,6 +203,7 @@ function assertSettingsControls(container: HTMLElement, settings: (typeof snapsh
     ["Project colors", "projectColorsEnabled"],
     ["Settle quiet threads", "autoSettleInactive"],
     ["Settle finished pull requests", "autoSettleOnMerge"],
+    ["Archive settled threads", "autoArchiveSettled"],
     ["Show children that need attention", "showRunningChildrenWhenCollapsed"],
   ] as const) {
     expect(ui.getByRole("switch", { name: label }).getAttribute("aria-checked")).toBe(String(settings[field]));
@@ -221,6 +222,7 @@ function assertSettingsControls(container: HTMLElement, settings: (typeof snapsh
   for (const [toggle, label, field] of [
     ["Inactive shelf", "Hours before inactive", "inactiveAfterHours"],
     ["Settle quiet threads", "Days before auto-settle", "autoSettleAfterDays"],
+    ["Archive settled threads", "Days before auto-archive", "autoArchiveAfterDays"],
   ] as const) {
     const control = ui.getByRole("switch", { name: toggle });
     fireEvent.click(control);

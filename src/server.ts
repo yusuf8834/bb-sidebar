@@ -20,6 +20,7 @@ import { createServerHandlers } from "./server-handlers";
 import { createServerRateLimits } from "./server-rate-limits";
 import { createServerSideChats } from "./server-side-chats";
 import { createServerCli } from "./server-cli";
+import { AUTO_ARCHIVE_MIGRATION, AUTO_ARCHIVE_RULE_MIGRATION, createServerAutoArchive } from "./server-auto-archive";
 
 export type { StoredLifecycleRow } from "./server-lifecycle";
 
@@ -115,6 +116,8 @@ const migrations = [
    VALUES (1, '', 1, 6, 1, 3, 1)`,
   LIFECYCLE_BACKFILLS_MIGRATION,
   ...INSTALL_DEFAULTS_MIGRATIONS,
+  AUTO_ARCHIVE_MIGRATION,
+  AUTO_ARCHIVE_RULE_MIGRATION,
 ];
 
 export default async function plugin(bb: BbPluginApi) {
@@ -177,6 +180,11 @@ export default async function plugin(bb: BbPluginApi) {
   ctx.bb.background.schedule("auto-settle", "*/5 * * * *", async () => {
     await policy.evaluatePolicies();
   });
+  // Off by default; while off, a pass reads one settings row and stops.
+  const autoArchive = createServerAutoArchive(ctx, lifecycle, settings);
+  ctx.bb.background.schedule("auto-archive", "23 * * * *", async () => {
+    await autoArchive.archiveSettledThreads();
+  });
   const rateLimits = createServerRateLimits(ctx, lifecycle);
   const sideChats = createServerSideChats(ctx, lifecycle);
   ctx.bb.rpc.register(bbSidebarRpcContract, { ...handlers, ...rateLimits, ...sideChats });
@@ -195,7 +203,11 @@ export default async function plugin(bb: BbPluginApi) {
   // Archived threads miss a tree Settle. One that comes back inside a settled
   // tree is filed with it rather than waking the tree.
   ctx.bb.events.on("thread.unarchived", async ({ thread }) => {
-    await settleUnarchivedTree(thread.id);
+    try {
+      await settleUnarchivedTree(thread.id);
+    } finally {
+      autoArchive.restartClock(thread.id);
+    }
   });
 
   // A deleted thread must not leave a row behind that would park a future

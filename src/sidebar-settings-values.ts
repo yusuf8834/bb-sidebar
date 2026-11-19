@@ -1,5 +1,6 @@
 import { DEFAULT_INACTIVE_AFTER_HOURS } from "./inactive";
 import { DEFAULT_SNOOZE_PRESET_CONFIG } from "./lifecycle";
+import { DEFAULT_AUTO_ARCHIVE_AFTER_DAYS } from "./auto-archive";
 
 export const CHILD_THREAD_SORT_FIELDS = ["created", "activity"] as const;
 export type ChildThreadSortField = (typeof CHILD_THREAD_SORT_FIELDS)[number];
@@ -30,6 +31,11 @@ export interface SidebarSettingsValues {
   autoSettleInactive: boolean;
   autoSettleAfterDays: number;
   autoSettleOnMerge: boolean;
+  /** Archive threads in bb after they have been on the Settled shelf this many days. Off by default. */
+  autoArchiveSettled: boolean;
+  autoArchiveAfterDays: number;
+  /** Count time settled before the rule was turned on. Off: every wait starts at turn-on at the earliest. */
+  autoArchiveIncludeSettled: boolean;
   childSortField: ChildThreadSortField;
   childSortDirection: ChildThreadSortDirection;
   childIconStyle: ChildThreadIconStyle;
@@ -64,6 +70,9 @@ export const DEFAULT_SIDEBAR_SETTINGS: SidebarSettingsValues = {
   autoSettleInactive: false,
   autoSettleAfterDays: 3,
   autoSettleOnMerge: false,
+  autoArchiveSettled: false,
+  autoArchiveAfterDays: DEFAULT_AUTO_ARCHIVE_AFTER_DAYS,
+  autoArchiveIncludeSettled: false,
   childSortField: "created",
   childSortDirection: "descending",
   childIconStyle: "provider",

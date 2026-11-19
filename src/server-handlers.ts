@@ -9,6 +9,7 @@ import type { createServerSettings } from "./server-settings";
 import type { createServerPolicy } from "./server-policy";
 import type { createServerSettleCleanup } from "./server-settle-cleanup";
 import type { createPortDiscovery } from "./port-discovery";
+import { autoArchiveSettingsChanged } from "./server-auto-archive";
 import type { createThreadPullRequests } from "./thread-pull-requests";
 import type { createTitleRegenerator } from "./regenerate-title";
 import { SIDEBAR_SETTINGS_CHANNEL } from "./contract";
@@ -153,6 +154,7 @@ export function createServerHandlers(
       else if (values.compactWorkingThreads !== undefined)
         next.threadDisplay = values.compactWorkingThreads ? "compact-working" : "full";
       writeSidebarSettings(next);
+      autoArchiveSettingsChanged(ctx, stored, next);
       ctx.bb.rpc.experimental_invalidate([SIDEBAR_SETTINGS_TAG]);
       // The settings page still reloads its drafts on this channel.
       ctx.bb.realtime.publish(SIDEBAR_SETTINGS_CHANNEL, {});

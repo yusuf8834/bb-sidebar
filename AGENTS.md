@@ -42,6 +42,15 @@ live again). Snoozed, Parked and Inactive-shelf threads stay live.
   returns before listing threads.
   New server jobs decide "settled" with `resolveRowShelf` or `resolveShelf`
   from shared `src/lifecycle.ts`.
+- Exception: `server-auto-archive` (hourly `auto-archive` schedule) is the one
+  recurring job that targets settled threads, because archiving them is its
+  purpose. Off by default; while off a pass reads settings and returns. On, it
+  decides from lifecycle rows, its `auto_archive_state` table and the
+  turn-on time in `auto_archive_rule` (written by the settings handler), lists bb's
+  threads only when a row is due, and reads bb Git status only for workspaces
+  of due trees that no live thread shares. A due thread it must keep gets a
+  `retry_at`, so it costs no lookup on the next passes. Do not add other
+  per-settled-thread work to it.
 
 ## Runtimes and imports
 
@@ -139,6 +148,7 @@ Wired tests deliver invalidations through `flush()`; app tests use
 - `server-settle-cleanup`: cleanup previews, cleanup, and runtime reclaim.
 - `server-settle-actions`: tree settle, return to Active, and Undo snapshots.
 - `server-policy`: automatic settle passes and settings revisions.
+- `server-auto-archive`: archiving trees that stayed on Settled (off by default).
 - `server-rate-limits`: provider-limit reads, bb's queued retries of failed turns,
   and scheduled Continue queue actions.
 - `server-rate-limit-details`: failed-turn classification and provider reset times.
