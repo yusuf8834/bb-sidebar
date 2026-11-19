@@ -16,6 +16,7 @@ import {
   useWorkingForDisplay,
 } from "./StatusSlot";
 import { RateLimitRecovery } from "./RateLimitRecovery";
+import { useThreadRetry } from "./RateLimits";
 import { limitStatus } from "./rate-limit-labels";
 import { useWorkingSinceContext } from "./useWorkingSince";
 import { threadDisplayTitle } from "./inbox";
@@ -356,9 +357,10 @@ function ChildThreadRow({
   const workingSince = useWorkingSinceContext();
   const statusThread = useThreadWithDraft(thread);
   const limit = useStatusLimit(thread);
+  const retry = useThreadRetry(thread);
   const visibleStatus = limit
     ? limitStatus(limit)
-    : threadStatusLabel(statusThread, workingSince.get(thread.id), effectiveNow);
+    : threadStatusLabel(statusThread, workingSince.get(thread.id), effectiveNow, retry);
   const [isRenaming, setIsRenaming] = useState(false);
   const { splitProps } = useSidebarThreadSplit(thread.id);
   const RowAction = isRenaming ? "div" : "a";

@@ -15,8 +15,10 @@ import { cn } from "./lib/utils";
 import { relativeTimeLabel } from "./relative-time";
 import { useWorkingSinceContext } from "./useWorkingSince";
 import { statusWithDuration } from "./working-since";
-import { useThreadLimit } from "./RateLimits";
+import { useThreadLimit, useThreadRetry } from "./RateLimits";
 import { RateLimitRecovery } from "./RateLimitRecovery";
+import { limitTime } from "./rate-limit-labels";
+import type { QueuedRetry } from "./contract";
 
 /**
  * The default trailing slot for cards and flat rows: fixed and right-aligned.
@@ -78,6 +80,7 @@ export function StatusOrTime({
   const thread = useThreadWithDraft(listedThread);
   const workingSince = useWorkingSinceContext();
   const rowStatus = useThreadRowStatus(listedThread);
+  const retry = useThreadRetry(listedThread);
   if (useStatusLimit(listedThread)) return <RateLimitRecovery thread={listedThread} />;
   if (rowStatus) {
     // bb's glyph for another plugin's status, in place of the label; the age stays.
@@ -88,7 +91,7 @@ export function StatusOrTime({
       </span>
     );
   }
-  const status = threadShortStatus(thread);
+  const status = threadShortStatus(thread, retry);
   if (status === null && !isKnownIndicator(thread.indicator)) {
     // A kind bb added after this build: bb's glyph and label, then the age.
     return (
@@ -250,10 +253,12 @@ function shortStatus(indicator: PluginSidebarThreadIndicator, indicatorLabel: st
  * a row would otherwise look idle or merely busy. A waiting message only
  * shows on an otherwise quiet row; a running turn already says more.
  */
-export function threadShortStatus(thread: PluginSidebarThread): ShortStatus | null {
+export function threadShortStatus(thread: PluginSidebarThread, retry: QueuedRetry | null = null): ShortStatus | null {
   if (thread.hasPendingInteraction) {
     return shortStatus("waiting-for-input", null);
   }
+  const retrying = retryingStatus(thread, retry);
+  if (retrying) return retrying;
   if (thread.queuedWork === "failed") {
     return {
       label: "Send failed",
@@ -282,9 +287,44 @@ export function threadStatusLabel(
   thread: PluginSidebarThread,
   startedAt: number | undefined,
   now: number,
+  retry: QueuedRetry | null = null,
 ): string | null {
-  const status = threadShortStatus(thread);
+  const status = threadShortStatus(thread, retry);
   return status === null ? null : shortStatusLabel(status, startedAt, now);
+}
+
+/**
+ * bb holds a failed turn to send again (provider-retry does it for an
+ * overloaded or unavailable provider, and for a limit after its reset): the
+ * row says "Retrying" in place of "Failed", in the tone the provider-limit
+ * warning gives the same retry. Only while the thread still shows that wait:
+ * errored, its retry waiting in the queue, nothing running and nothing asked,
+ * so a lookup answered a moment before the retry was sent cannot relabel the
+ * running turn. When bb gives up it leaves no retry, and the row reads
+ * "Failed" again; a retry that failed to send keeps today's wording. Read
+ * state and placement are unchanged: the thread still counts as failed for
+ * its shelf and its parent's rollup.
+ *
+ * The time stays off the row: the 80px slot cuts "Retrying at 11:30am".
+ */
+export function retryingStatus(thread: PluginSidebarThread, retry: QueuedRetry | null): ShortStatus | null {
+  if (
+    !retry ||
+    retry.failed ||
+    thread.status !== "error" ||
+    thread.queuedWork !== "waiting" ||
+    thread.hasPendingInteraction ||
+    thread.indicator === "runtime"
+  ) {
+    return null;
+  }
+  return {
+    label: "Retrying",
+    className: "text-[color:var(--bb-sidebar-tone-pending)]",
+    showsDuration: false,
+    ariaLabel:
+      retry.sendAt === null ? "bb retries this turn soon" : `bb retries this turn at ${limitTime(retry.sendAt, null)}`,
+  };
 }
 
 /**

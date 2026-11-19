@@ -68,16 +68,25 @@ export type PortCloseScope = z.infer<typeof portCloseScopeSchema>;
 export type ClosePortsResult = z.infer<typeof closePortsResultSchema>;
 
 const threadIdSchema = z.object({ threadId: z.string().trim().min(1) });
+/** bb's own queued retry of the failed turn (`payload.kind === "retry"`), such as provider-retry's. */
+const queuedRetrySchema = z.object({ id: z.string(), sendAt: z.number().nullable(), failed: z.boolean() });
+export type QueuedRetry = z.infer<typeof queuedRetrySchema>;
 const threadLimitStateSchema = z.object({
   message: z.string(),
   resetsAt: z.number().nullable(),
   timeZone: z.string().nullable(),
   /** The sidebar's own scheduled Continue. */
   scheduled: z.object({ id: z.string(), sendAt: z.number(), failed: z.boolean() }).nullable(),
-  /** bb's own queued retry of the failed turn (`payload.kind === "retry"`), such as provider-retry's. */
-  retry: z.object({ id: z.string(), sendAt: z.number().nullable(), failed: z.boolean() }).nullable(),
+  retry: queuedRetrySchema.nullable(),
 });
 export type ThreadLimitState = z.infer<typeof threadLimitStateSchema>;
+/**
+ * A thread's provider limit, or only bb's queued retry when the failure was
+ * something else (an overloaded or unavailable provider). A retry alone is
+ * not a limit: it offers no Continue and no Cancel, only the row's wording.
+ */
+const threadRecoveryStateSchema = z.union([threadLimitStateSchema, z.object({ retry: queuedRetrySchema }).strict()]);
+export type ThreadRecoveryState = z.infer<typeof threadRecoveryStateSchema>;
 
 /**
  * What parking a thread released. These counts are what the toast reminds the
@@ -203,7 +212,7 @@ const iconBase64Schema = z
 export const bbSidebarRpcContract = defineRpcContract({
   getThreadLimits: {
     input: z.object({ keys: z.array(z.string().trim().min(1)).max(1000) }).strict(),
-    output: z.record(z.string(), threadLimitStateSchema.nullable()),
+    output: z.record(z.string(), threadRecoveryStateSchema.nullable()),
   },
   scheduleLimitContinue: {
     input: threadIdSchema.extend({ sendAt: z.number().int().positive().optional() }).strict(),

@@ -1,6 +1,7 @@
 import type { ServerContext } from "./server-context";
-import { RATE_LIMITS_CHANNEL, type ThreadLimitState } from "./contract";
+import { RATE_LIMITS_CHANNEL, type ThreadLimitState, type ThreadRecoveryState } from "./contract";
 import { rateLimitDetails } from "./server-rate-limit-details";
+import { limitOf } from "./rate-limit-labels";
 import { runThreadTasks } from "./thread-tasks";
 import { portScanContract } from "./port-scan-contract";
 import type { createServerLifecycle } from "./server-lifecycle";
@@ -70,7 +71,7 @@ export function createServerRateLimits({ bb }: ServerContext, lifecycle: ReturnT
     return (await queued(threadId)).scheduled;
   }
 
-  async function read(threadId: string): Promise<ThreadLimitState | null> {
+  async function read(threadId: string): Promise<ThreadRecoveryState | null> {
     const thread = await bb.sdk.threads.get({ threadId });
     if (thread.archivedAt !== null || thread.deletedAt !== null) return null;
     const { scheduled, retry } = await queued(threadId);
@@ -100,9 +101,9 @@ export function createServerRateLimits({ bb }: ServerContext, lifecycle: ReturnT
         }
       }
     }
-    // bb's retry shows only with a provider limit; retries of other failures are not this warning's business.
-    const retryState = retry && limit ? { id: retry.id, sendAt: retry.sendAt, failed: failedState(retry.state) } : null;
-    if (!scheduled) return limit && { ...limit, retry: retryState };
+    const retryState = retry ? { id: retry.id, sendAt: retry.sendAt, failed: failedState(retry.state) } : null;
+    // A retry of any other failure is reported on its own, for the row's wording; it is not a limit.
+    if (!scheduled) return limit ? { ...limit, retry: retryState } : retryState && { retry: retryState };
     return {
       message: limit?.message ?? "Continue scheduled after the provider limit resets",
       resetsAt: limit?.resetsAt ?? null,
@@ -175,7 +176,7 @@ export function createServerRateLimits({ bb }: ServerContext, lifecycle: ReturnT
 
   return {
     async getThreadLimits({ keys }: { keys: string[] }) {
-      const result: Record<string, ThreadLimitState | null> = {};
+      const result: Record<string, ThreadRecoveryState | null> = {};
       await runThreadTasks([...new Set(keys)], async (threadId) => {
         result[threadId] = await read(threadId);
       });
@@ -183,7 +184,7 @@ export function createServerRateLimits({ bb }: ServerContext, lifecycle: ReturnT
     },
     scheduleLimitContinue({ threadId, sendAt }: { threadId: string; sendAt?: number }) {
       return withLock(threadId, async () => {
-        const limit = await read(threadId);
+        const limit = limitOf(await read(threadId));
         if (!limit) throw new Error("This thread is no longer stopped by a provider limit");
         const existing = await scheduledContinue(threadId);
         if (existing) {

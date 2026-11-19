@@ -5,7 +5,8 @@ import { createFakePluginHost, disposers, loadPlugin, type Environment } from ".
 import plugin from "./server";
 import { rateLimitDetails } from "./server-rate-limit-details";
 import { RATE_LIMITS_CHANNEL } from "./realtime-channels";
-import type { ThreadLimitState } from "./contract";
+import type { ThreadLimitState, ThreadRecoveryState } from "./contract";
+import { limitOf } from "./rate-limit-labels";
 
 type Event = Awaited<ReturnType<BbPluginApi["sdk"]["threads"]["events"]["list"]>>[number];
 const failedAt = Date.parse("2026-10-26T19:49:00Z");
@@ -424,8 +425,9 @@ describe("bb's queued provider retry", () => {
       payload: { kind: "retry", attempt: 1, reason: "Rate limited", retryOfTurnRequestId: "turn_1" },
       ...overrides,
     });
-  const limits = async (call: (method: string, input: unknown) => Promise<unknown>) =>
-    ((await call("getThreadLimits", { keys: ["thr_1"] })) as Record<string, ThreadLimitState | null>).thr_1;
+  const recovery = async (call: (method: string, input: unknown) => Promise<unknown>) =>
+    ((await call("getThreadLimits", { keys: ["thr_1"] })) as Record<string, ThreadRecoveryState | null>).thr_1;
+  const limits = async (call: (method: string, input: unknown) => Promise<unknown>) => limitOf(await recovery(call));
 
   it("reports bb's retry with the limit and refuses to queue a Continue on top of it", async () => {
     const { call, setQueue, harness } = await setup();
@@ -450,15 +452,29 @@ describe("bb's queued provider retry", () => {
     expect((await limits(call))?.retry).toBeNull();
   });
 
-  it("leaves a retry of a failure that is not a provider limit alone", async () => {
-    const { call, setQueue, setEvents } = await setup();
+  it("reports a retry of a failure that is not a provider limit on its own, not as a limit", async () => {
+    const { call, setQueue, setEvents, harness } = await setup();
     setEvents([{ ...systemFailure, data: { message: "Provider unavailable" } }, started]);
     setQueue([
       retryRow({
         payload: { kind: "retry", attempt: 1, reason: "Provider unavailable", retryOfTurnRequestId: "turn_1" },
       }),
     ]);
-    expect(await limits(call)).toBeNull();
+    expect(await recovery(call)).toEqual({ retry: { id: "retry_1", sendAt: retryAt, failed: false } });
+    await expect(call("scheduleLimitContinue", { threadId: "thr_1" })).rejects.toThrow(/no longer stopped/);
+    expect(harness.inspection.sdk.callsTo("threads.send")).toHaveLength(0);
+  });
+
+  it("reports nothing once bb gives up: no retry queued and no limit", async () => {
+    const { call, setEvents } = await setup();
+    setEvents([{ ...systemFailure, data: { message: "Provider unavailable" } }, started]);
+    expect(await recovery(call)).toBeNull();
+  });
+
+  it("reports no retry while the only queued item is the sidebar's own Continue", async () => {
+    const { call } = await setup();
+    await call("scheduleLimitContinue", { threadId: "thr_1" });
+    expect(await limits(call)).toMatchObject({ scheduled: { id: "continue_1" }, retry: null });
   });
 
   it("cancels bb's retry, after which Continue is offered and can be scheduled", async () => {
