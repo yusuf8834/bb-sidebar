@@ -94,7 +94,7 @@ export function ThreadBehaviorSettings({
       <SettingsGroup title="Automatic archive">
         <SwitchRow
           title="Archive settled threads"
-          description="Archives a thread in bb once it has been on the Settled shelf this long, with its child threads. Skips pinned threads, threads with a child that is not settled, and workspaces with uncommitted changes. Archived threads can be restored from bb's archive."
+          description="Archives a thread and its child threads in bb after they have been on the Settled shelf for a set number of days. Skips pinned or working threads, trees with a thread that is not settled, and workspaces with uncommitted changes. Restore them from bb's archive."
           checked={draft.autoArchiveSettled}
           onChange={(checked) => update("autoArchiveSettled", checked)}
         >
