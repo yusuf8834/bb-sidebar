@@ -222,7 +222,7 @@ describe("projectGroupView alerts", () => {
     thread({ id: "idle", projectId: "p" }),
   ];
   const view = (collapsed: string[], activeThreadId: string | null = null) =>
-    projectGroupView(layoutActiveGroups(threads, false), new Set(collapsed), new Set(), activeThreadId, new Set());
+    projectGroupView(layoutActiveGroups(threads, false), new Set(collapsed), new Set(), activeThreadId);
 
   it("counts the news a collapsed group hides, most urgent first, leaving out work", () => {
     expect(view(["p"])[0]).toMatchObject({

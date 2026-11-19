@@ -152,23 +152,38 @@ it("keeps an open child's ancestor visible through environment, project, and she
   expect(screen.getByRole("link", { name: "Open child thread: Open child" })).toBeDefined();
 });
 
-it("keeps a running child's parent visible in a collapsed environment", () => {
-  setup({
-    rows: [
-      thread({ id: "a", title: "Parent", environment: worktree("search") }),
-      thread({ id: "b", title: "Other root", environment: worktree("search") }),
-      thread({
-        id: "child",
-        title: "Working child",
-        parentThreadId: "a",
-        indicator: "runtime",
-      }),
-    ],
-  });
-  fireEvent.click(screen.getByRole("button", { name: "search (2)" }));
-  expect(screen.getByRole("link", { name: "Parent" })).toBeDefined();
-  expect(screen.queryByRole("link", { name: "Other root" })).toBeNull();
-});
+it.each([null, "a"])(
+  "collapses an environment with a child that needs attention when the open thread is %s",
+  (activeThreadId) => {
+    setup({
+      activeThreadId,
+      rows: [
+        thread({ id: "a", title: "Parent", environment: worktree("search") }),
+        thread({ id: "b", title: "Other root", environment: worktree("search") }),
+        thread({
+          id: "child",
+          title: "Working child",
+          parentThreadId: "a",
+          indicator: "runtime",
+        }),
+      ],
+    });
+    const header = () => screen.getByRole("button", { name: "search (2)" });
+    expect(screen.getByText("Working child")).toBeDefined();
+
+    fireEvent.click(header());
+    expect(header().getAttribute("aria-expanded")).toBe("false");
+    expect(Boolean(screen.queryByRole("link", { name: "Parent" }))).toBe(activeThreadId === "a");
+    expect(screen.queryByRole("link", { name: "Other root" })).toBeNull();
+    expect(screen.queryByText("Working child")).toBeNull();
+
+    fireEvent.click(header());
+    expect(header().getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("link", { name: "Parent" })).toBeDefined();
+    expect(screen.getByRole("link", { name: "Other root" })).toBeDefined();
+    expect(screen.getByText("Working child")).toBeDefined();
+  },
+);
 
 it("reorders threads only within their environment and moves whole environments within the project", async () => {
   const rendered = setup();

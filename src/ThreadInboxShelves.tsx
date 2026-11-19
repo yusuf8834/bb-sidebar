@@ -375,7 +375,11 @@ export function ProjectGroups({
                       reorder={reorderControls(child, environmentLabel(child.environment!))}
                     >
                       {child.threads.map((thread) =>
-                        renderThread(thread, { showProject: false, showEnvironment: false }),
+                        renderThread(thread, {
+                          showProject: false,
+                          showEnvironment: false,
+                          showChildAttention: child.expanded,
+                        }),
                       )}
                     </EnvironmentGroup>
                   ),

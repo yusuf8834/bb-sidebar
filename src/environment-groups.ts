@@ -119,18 +119,13 @@ export function projectGroupView(
   collapsedProjects: ReadonlySet<string>,
   collapsedEnvironments: ReadonlySet<string>,
   activeThreadId: string | null,
-  attentionIds: ReadonlySet<string>,
 ): ProjectViewUnit[] {
   return units.map((unit) => {
     if (unit.kind === "thread") return unit;
     const expanded = !(unit.environment ? collapsedEnvironments.has(unit.key) : collapsedProjects.has(unit.projectId));
-    const threads = visibleShelfThreads(
-      unit.threads,
-      expanded,
-      activeThreadId,
-      undefined,
-      unit.environment ? attentionIds : undefined,
-    );
+    // A collapsed group closes fully: only the open thread's path stays, not
+    // threads kept for children that need attention.
+    const threads = visibleShelfThreads(unit.threads, expanded, activeThreadId);
     return {
       ...unit,
       expanded,
@@ -139,7 +134,7 @@ export function projectGroupView(
       threads,
       children:
         expanded && unit.children
-          ? projectGroupView(unit.children, collapsedProjects, collapsedEnvironments, activeThreadId, attentionIds)
+          ? projectGroupView(unit.children, collapsedProjects, collapsedEnvironments, activeThreadId)
           : undefined,
     };
   });

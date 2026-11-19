@@ -152,7 +152,7 @@ export function useInboxProjectGroups({
   );
   const view = useMemo((): ProjectViewUnit[] => {
     if (expanded) {
-      return projectGroupView(units, collapsedProjects, collapsedEnvironments, activeThreadId, attentionIds);
+      return projectGroupView(units, collapsedProjects, collapsedEnvironments, activeThreadId);
     }
     // A folded shelf keeps its few rows in their projects' slots.
     const visibleIds = new Set(visibleInbox.map((thread) => thread.id));
@@ -160,7 +160,7 @@ export function useInboxProjectGroups({
       .flatMap((unit) => (unit.kind === "thread" ? [unit.thread] : unit.threads))
       .filter((thread) => visibleIds.has(thread.id))
       .map((thread) => ({ kind: "thread", key: thread.id, thread }));
-  }, [expanded, units, collapsedProjects, collapsedEnvironments, activeThreadId, attentionIds, visibleInbox]);
+  }, [expanded, units, collapsedProjects, collapsedEnvironments, activeThreadId, visibleInbox]);
   const reorderScope = (key: string): ReorderScope => {
     const visibleKeys = new Set(allOrderUnits(view).map((unit) => unit.key));
     const { units: scopeUnits, parentKey } = siblingScope(reorderUnits, key);
