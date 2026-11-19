@@ -24,14 +24,13 @@ describe("ThreadInbox", () => {
     // These cover lone-thread slots, which only exist with the grouping off.
     beforeEach(() => window.localStorage.setItem("bb-sidebar:single-thread-project-grouping:v1", "false"));
 
-    it.each([true, false])(
-      "retains scoped active and deep queued attention in a collapsed project: setting=%s",
-      async (showAttention) => {
+    it.each([null, "b"])(
+      "collapses a project with children that need attention when the open thread is %s",
+      async (activeThreadId) => {
         window.localStorage.setItem("bb-sidebar:active-sort:v1", "project");
-        window.localStorage.setItem("bb-sidebar:project-collapse:v1", JSON.stringify(["web"]));
-        const rendered = renderSlot(
+        renderSlot(
           inbox,
-          { ...listProps, activeThreadId: "b" },
+          { ...listProps, activeThreadId },
           {
             sidebarThreads: {
               status: "ready",
@@ -47,34 +46,48 @@ describe("ThreadInbox", () => {
                   title: "Queued failed leaf",
                   queuedWork: "failed",
                 }),
+                thread({
+                  id: "working",
+                  projectId: "web",
+                  parentThreadId: "b",
+                  title: "Working child",
+                  indicator: "runtime",
+                }),
               ],
               projects: [{ id: "web", name: "Web", isPersonal: false, href: "", settingsHref: "" }],
             },
             rpc: {
               getSidebarSettings: () => ({
                 ...defaultSidebarSettings,
-                showRunningChildrenWhenCollapsed: showAttention,
+                showRunningChildrenWhenCollapsed: true,
               }),
               listLifecycle: () => ({ rows: [] }),
-              listInboxOrder: () => ({ inboxThreadIds: ["a", "b", "child", "grandchild", "deep"] }),
+              listInboxOrder: () => ({ inboxThreadIds: ["a", "b", "child", "grandchild", "deep", "working"] }),
             },
           },
         );
-        await waitFor(() => expect(rendered.rpcCalls.some((call) => call.method === "getSidebarSettings")).toBe(true));
-        const active = screen.getByRole("region", { name: "Active" });
-        await waitFor(() =>
-          expect(rowLinks(active).map((row) => row.getAttribute("aria-label"))).toEqual(
-            showAttention ? ["Attention root", "Active root"] : ["Active root"],
-          ),
-        );
-        expect(within(active).getByRole("button", { name: "Web (2)", expanded: false })).toBeDefined();
-        expect(Boolean(within(active).queryByText("Queued failed leaf"))).toBe(showAttention);
-        expect(rendered.rpcCalls.filter((call) => call.method.startsWith("reorder"))).toEqual([]);
+        const project = await screen.findByRole("region", { name: "Web project" });
+        const header = () => within(project).getByRole("button", { name: "Web (2)" });
+        expect(within(project).getByText("Queued failed leaf")).toBeDefined();
+        expect(within(project).getByText("Working child")).toBeDefined();
+
+        fireEvent.click(header());
+        expect(header().getAttribute("aria-expanded")).toBe("false");
+        expect(
+          within(project)
+            .queryAllByRole("link")
+            .map((row) => row.getAttribute("aria-label")),
+        ).toEqual(activeThreadId ? ["Active root"] : []);
+
+        fireEvent.click(header());
+        expect(header().getAttribute("aria-expanded")).toBe("true");
+        expect(within(project).getByText("Queued failed leaf")).toBeDefined();
+        expect(within(project).getByText("Working child")).toBeDefined();
       },
     );
 
     it.each(["keyboard", "pointer"].flatMap((gesture) => [false, true].map((singleton) => ({ gesture, singleton }))))(
-      "persists collapsed project attention rows: $gesture/singleton=$singleton",
+      "reorders attention rows in the collapsed Active shelf: $gesture/singleton=$singleton",
       async ({ gesture, singleton }) => {
         window.localStorage.setItem("bb-sidebar:active-sort:v1", "project");
         window.localStorage.setItem("bb-sidebar:shelf-expansion:v1", JSON.stringify({ active: false }));
@@ -173,13 +186,11 @@ describe("ThreadInbox", () => {
       },
     );
 
-    it.each(["shelf", "project"].flatMap((fold) => ["keyboard", "pointer"].map((gesture) => ({ fold, gesture }))))(
-      "F1 keeps hidden sibling slot: $fold/$gesture",
-      async ({ fold, gesture }) => {
+    it.each(["keyboard", "pointer"])(
+      "keeps hidden sibling slots in the collapsed Active shelf: %s",
+      async (gesture) => {
         window.localStorage.setItem("bb-sidebar:active-sort:v1", "project");
-        if (fold === "shelf")
-          window.localStorage.setItem("bb-sidebar:shelf-expansion:v1", JSON.stringify({ active: false }));
-        else window.localStorage.setItem("bb-sidebar:project-collapse:v1", JSON.stringify(["web"]));
+        window.localStorage.setItem("bb-sidebar:shelf-expansion:v1", JSON.stringify({ active: false }));
         const order = ["a", "hidden", "b", "ca", "cb"];
         const rendered = renderSlot(inbox, listProps, {
           sidebarThreads: {

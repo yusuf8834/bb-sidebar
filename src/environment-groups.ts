@@ -124,7 +124,13 @@ export function projectGroupView(
   return units.map((unit) => {
     if (unit.kind === "thread") return unit;
     const expanded = !(unit.environment ? collapsedEnvironments.has(unit.key) : collapsedProjects.has(unit.projectId));
-    const threads = visibleShelfThreads(unit.threads, expanded, activeThreadId, undefined, attentionIds);
+    const threads = visibleShelfThreads(
+      unit.threads,
+      expanded,
+      activeThreadId,
+      undefined,
+      unit.environment ? attentionIds : undefined,
+    );
     return {
       ...unit,
       expanded,

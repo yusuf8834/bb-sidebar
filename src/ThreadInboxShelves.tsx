@@ -1,6 +1,7 @@
 import { useListMotion } from "./useListMotion";
 import { useMemo } from "react";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
+import type { InboxThreadOptions } from "./InboxThreadRenderer";
 import { Icon, type IconName } from "./components/Icon";
 import { cn } from "./lib/utils";
 import { ProjectFavicon, ProjectStripe } from "./ProjectFavicon";
@@ -337,7 +338,7 @@ export function ProjectGroups({
 }: {
   units: readonly ProjectViewUnit[];
   reorderControls: (unit: Extract<ProjectViewUnit, { kind: "group" }>, projectName: string) => ThreadReorderControls;
-  renderThread: (thread: PluginSidebarThread, grouped: boolean, environmentGrouped?: boolean) => React.ReactNode;
+  renderThread: (thread: PluginSidebarThread, options?: InboxThreadOptions) => React.ReactNode;
   onToggleEnvironment: (key: string) => void;
 }) {
   const { projectNameById, projectIconRevision } = useInboxEnvironment();
@@ -347,7 +348,7 @@ export function ProjectGroups({
   return (
     <ul ref={attachListMotionRef} className="flex flex-col gap-px">
       {units.map((unit) => {
-        if (unit.kind === "thread") return renderThread(unit.thread, false);
+        if (unit.kind === "thread") return renderThread(unit.thread);
         const projectName = projectNameById.get(unit.projectId) ?? "Project";
         return (
           <ActiveProjectGroup
@@ -365,7 +366,7 @@ export function ProjectGroups({
             {unit.children
               ? unit.children.map((child) =>
                   child.kind === "thread" ? (
-                    renderThread(child.thread, true)
+                    renderThread(child.thread, { showProject: false })
                   ) : (
                     <EnvironmentGroup
                       key={child.key}
@@ -373,11 +374,15 @@ export function ProjectGroups({
                       onToggle={() => onToggleEnvironment(child.key)}
                       reorder={reorderControls(child, environmentLabel(child.environment!))}
                     >
-                      {child.threads.map((thread) => renderThread(thread, true, true))}
+                      {child.threads.map((thread) =>
+                        renderThread(thread, { showProject: false, showEnvironment: false }),
+                      )}
                     </EnvironmentGroup>
                   ),
                 )
-              : unit.threads.map((thread) => renderThread(thread, true))}
+              : unit.threads.map((thread) =>
+                  renderThread(thread, { showProject: false, showChildAttention: unit.expanded }),
+                )}
           </ActiveProjectGroup>
         );
       })}

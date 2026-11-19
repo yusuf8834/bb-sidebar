@@ -31,7 +31,6 @@ import { ProjectFavicon, ProjectStripe } from "./ProjectFavicon";
 import { useProjectColor } from "./ProjectColors";
 import { OpenPortsIndicator } from "./OpenPorts";
 import { useInboxEnvironment, useInboxActions, useInboxActivity } from "./InboxContext";
-import { DEFAULT_SIDEBAR_SETTINGS } from "./sidebar-settings";
 import { useRowStatusRuns } from "./useLifecycle";
 import { projectIconUrl as iconUrl } from "./project-icons";
 import "./settle-button.css";
@@ -67,6 +66,7 @@ export function ThreadCard({
   canPark,
   childThreads,
   childrenExpanded,
+  showRunningChildrenWhenCollapsed,
   reorder,
   compactWhenWorking = false,
   compactAlways = false,
@@ -84,6 +84,7 @@ export function ThreadCard({
   canPark: boolean;
   childThreads: readonly PluginSidebarThread[];
   childrenExpanded: boolean;
+  showRunningChildrenWhenCollapsed: boolean;
   reorder?: ThreadReorderControls;
   /** Experimental: show threads with live work as a single line. */
   compactWhenWorking?: boolean;
@@ -99,7 +100,6 @@ export function ThreadCard({
     projectIconRevision,
     snoozePresets,
     childrenByParentId: childrenByParent,
-    sidebarSettings,
   } = useInboxEnvironment();
   const { onNavigate, parkThread, settleThread, snoozeThread, acknowledgeWake, toggleChildExpansion } =
     useInboxActions();
@@ -107,8 +107,6 @@ export function ThreadCard({
   const provider = providerById.get(thread.providerId) ?? null;
   const projectName = projectNameById.get(thread.projectId) ?? null;
   const projectIconUrl = iconUrl(thread.projectId, projectIconRevision);
-  const showRunningChildrenWhenCollapsed =
-    sidebarSettings?.showRunningChildrenWhenCollapsed ?? DEFAULT_SIDEBAR_SETTINGS.showRunningChildrenWhenCollapsed;
   const onPark = () => parkThread(thread);
   const onSettle = () => settleThread(thread);
   const onSnooze = (until: number) => snoozeThread(thread, until);

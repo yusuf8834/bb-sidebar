@@ -7,6 +7,15 @@ import { DEFAULT_SIDEBAR_SETTINGS } from "./sidebar-settings";
 
 type ActiveShelfKind = "pinned" | "inbox";
 
+export type InboxThreadOptions = {
+  reorderable?: boolean;
+  showProject?: boolean;
+  compact?: boolean;
+  renameShelf?: "active" | "working" | "inactive";
+  showEnvironment?: boolean;
+  showChildAttention?: boolean;
+};
+
 const NO_CHILDREN: readonly PluginSidebarThread[] = [];
 
 type ReorderControls = (thread: PluginSidebarThread, shelf: ActiveShelfKind) => ThreadReorderControls;
@@ -21,6 +30,7 @@ const InboxThread = memo(function InboxThread({
   compact,
   renameShelf,
   showEnvironment,
+  showChildAttention,
   isWoke,
   childrenExpanded,
   threadReorderControls,
@@ -33,6 +43,7 @@ const InboxThread = memo(function InboxThread({
   compact: boolean;
   renameShelf: "active" | "working" | "inactive";
   showEnvironment: boolean;
+  showChildAttention: boolean;
   isWoke: boolean;
   childrenExpanded: boolean;
   threadReorderControls: ReorderControls;
@@ -65,6 +76,7 @@ const InboxThread = memo(function InboxThread({
       onRenamingChange={onRenamingChange}
       childThreads={childrenByParentId.get(thread.id) ?? NO_CHILDREN}
       childrenExpanded={childrenExpanded}
+      showRunningChildrenWhenCollapsed={showChildAttention && settings.showRunningChildrenWhenCollapsed}
       reorder={
         !reorderable ||
         (shelf === "pinned" && thread.pinSortKey == null) ||
@@ -96,11 +108,14 @@ export function createInboxThreadRenderer({
   return (
     thread: PluginSidebarThread,
     shelf: ActiveShelfKind,
-    reorderable = true,
-    showProject = true,
-    compact = false,
-    renameShelf: "active" | "working" | "inactive" = "active",
-    showEnvironment = true,
+    {
+      reorderable = true,
+      showProject = true,
+      compact = false,
+      renameShelf = "active",
+      showEnvironment = true,
+      showChildAttention = true,
+    }: InboxThreadOptions = {},
   ) => (
     <InboxThread
       key={thread.id}
@@ -111,6 +126,7 @@ export function createInboxThreadRenderer({
       compact={compact}
       renameShelf={renameShelf}
       showEnvironment={showEnvironment}
+      showChildAttention={showChildAttention}
       isWoke={wokeThreadIds.has(thread.id)}
       childrenExpanded={expandedChildParentIds.has(thread.id)}
       threadReorderControls={threadReorderControls}

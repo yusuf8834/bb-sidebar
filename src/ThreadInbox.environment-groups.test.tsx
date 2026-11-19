@@ -182,40 +182,37 @@ it("reorders threads only within their environment and moves whole environments 
   ).toEqual(["Search review", "Search implementation"]);
 });
 
-it.each(["project", "shelf"].flatMap((fold) => ["keyboard", "pointer"].map((gesture) => ({ fold, gesture }))))(
-  "reorders flat rows in a collapsed grouped $fold with $gesture",
-  async ({ fold, gesture }) => {
-    const rendered = setup({
-      activeThreadId: "a",
-      rows: [
-        thread({ id: "a", title: "Search implementation", environment: worktree("search") }),
-        thread({ id: "b", title: "Search review", environment: worktree("search") }),
-        thread({ id: "c", title: "Menu implementation", environment: worktree("menus") }),
-        thread({ id: "d", title: "Menu review", environment: worktree("menus") }),
-        thread({ id: "child", title: "Working child", parentThreadId: "c", indicator: "runtime" }),
-      ],
-    });
-    await waitFor(() => expect(rendered.rpcCalls.some((call) => call.method === "listInboxOrder")).toBe(true));
-    fireEvent.click(screen.getByRole("button", { name: fold === "project" ? "Sidebar (4)" : "Active" }));
-    const active = screen.getByRole("region", { name: "Active" });
-    const visible = () => rowLinks(active).map((link) => link.getAttribute("aria-label"));
-    expect(visible()).toEqual(["Search implementation", "Menu implementation"]);
-    expect(within(active).queryByRole("region", { name: "search worktree" })).toBeNull();
-    const row = screen.getByRole("link", { name: "Search implementation" });
-    if (gesture === "keyboard") {
-      fireEvent.keyDown(row, { key: "ArrowDown", altKey: true });
-      expect(screen.getByText("Search implementation moved to 2 of 2 in Active")).toBeDefined();
-    } else {
-      const drag = startDrag(row, screen.getByRole("link", { name: "Menu implementation" }).closest("li")!, 60);
-      expect(visible()).toEqual(["Menu implementation", "Search implementation"]);
-      drag.drop();
-    }
-    await waitFor(() =>
-      expect(rendered.save).toHaveBeenCalledExactlyOnceWith({ inboxThreadIds: ["child", "c", "b", "a", "d"] }),
-    );
+it.each(["keyboard", "pointer"])("reorders flat rows in the collapsed Active shelf with %s", async (gesture) => {
+  const rendered = setup({
+    activeThreadId: "a",
+    rows: [
+      thread({ id: "a", title: "Search implementation", environment: worktree("search") }),
+      thread({ id: "b", title: "Search review", environment: worktree("search") }),
+      thread({ id: "c", title: "Menu implementation", environment: worktree("menus") }),
+      thread({ id: "d", title: "Menu review", environment: worktree("menus") }),
+      thread({ id: "child", title: "Working child", parentThreadId: "c", indicator: "runtime" }),
+    ],
+  });
+  await waitFor(() => expect(rendered.rpcCalls.some((call) => call.method === "listInboxOrder")).toBe(true));
+  fireEvent.click(screen.getByRole("button", { name: "Active" }));
+  const active = screen.getByRole("region", { name: "Active" });
+  const visible = () => rowLinks(active).map((link) => link.getAttribute("aria-label"));
+  expect(visible()).toEqual(["Search implementation", "Menu implementation"]);
+  expect(within(active).queryByRole("region", { name: "search worktree" })).toBeNull();
+  const row = screen.getByRole("link", { name: "Search implementation" });
+  if (gesture === "keyboard") {
+    fireEvent.keyDown(row, { key: "ArrowDown", altKey: true });
+    expect(screen.getByText("Search implementation moved to 2 of 2 in Active")).toBeDefined();
+  } else {
+    const drag = startDrag(row, screen.getByRole("link", { name: "Menu implementation" }).closest("li")!, 60);
     expect(visible()).toEqual(["Menu implementation", "Search implementation"]);
-  },
-);
+    drag.drop();
+  }
+  await waitFor(() =>
+    expect(rendered.save).toHaveBeenCalledExactlyOnceWith({ inboxThreadIds: ["child", "c", "b", "a", "d"] }),
+  );
+  expect(visible()).toEqual(["Menu implementation", "Search implementation"]);
+});
 
 it.each([false, true].flatMap((enabled) => ["keyboard", "pointer"].map((gesture) => ({ enabled, gesture }))))(
   "keeps folded Active reordering within projects: grouping=$enabled/$gesture",

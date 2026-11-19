@@ -1,5 +1,4 @@
 import type { useSidebarThreads } from "./bb-sdk";
-import type { ReactNode } from "react";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import { ThreadListLoading, ActiveEmptyState, WorkingEmptyState } from "./ThreadInboxEmptyStates";
 import {
@@ -15,6 +14,7 @@ import { cn } from "./lib/utils";
 import { ActiveSortPicker } from "./ActiveSortPicker";
 import { ProjectScopeControls } from "./ProjectScopeControls";
 import type { ThreadReorderControls } from "./ThreadCard";
+import type { createInboxThreadRenderer } from "./InboxThreadRenderer";
 import { useInboxActions } from "./InboxContext";
 import { SCROLL_FADE_CLASS } from "./useScrollFade";
 import type { useInboxProjectGroups } from "./useInboxProjectGroups";
@@ -45,15 +45,7 @@ interface ThreadInboxViewProps {
   attachShelvesMotionRef: (node: HTMLDivElement | null) => void;
   attachDockMotionRef: (node: HTMLDivElement | null) => void;
   expandedShelves: ShelfExpansionState;
-  renderActiveThread: (
-    thread: PluginSidebarThread,
-    shelf: "pinned" | "inbox",
-    reorderable?: boolean,
-    showProject?: boolean,
-    compact?: boolean,
-    renameShelf?: "active" | "working" | "inactive",
-    showEnvironment?: boolean,
-  ) => ReactNode;
+  renderActiveThread: ReturnType<typeof createInboxThreadRenderer>;
   activeSortMode: ActiveSortMode;
   inboxProjectView: readonly ProjectViewUnit[];
   environmentGrouping: Pick<
@@ -165,9 +157,7 @@ export function ThreadInboxView({
                         reorderControls={(unit, name) =>
                           reorderControls(unit.key, "inbox", `${name} ${unit.environment ? "environment" : "project"}`)
                         }
-                        renderThread={(thread, grouped, environmentGrouped) =>
-                          renderActiveThread(thread, "inbox", true, !grouped, false, "active", !environmentGrouped)
-                        }
+                        renderThread={(thread, options) => renderActiveThread(thread, "inbox", options)}
                       />
                     ) : inbox.visibleThreads.length > 0 ? (
                       <Shelf label={null}>
@@ -208,7 +198,11 @@ export function ThreadInboxView({
                     <Shelf label={null}>
                       {/* One line, like every shelf after Active. */}
                       {working.visibleThreads.map((thread) =>
-                        renderActiveThread(thread, "inbox", false, true, true, "working"),
+                        renderActiveThread(thread, "inbox", {
+                          reorderable: false,
+                          compact: true,
+                          renameShelf: "working",
+                        }),
                       )}
                     </Shelf>
                   </CollapsibleShelf>
@@ -228,7 +222,7 @@ export function ThreadInboxView({
                   >
                     <Shelf label={null}>
                       {inactive.visibleThreads.map((thread) =>
-                        renderActiveThread(thread, "inbox", false, true, false, "inactive"),
+                        renderActiveThread(thread, "inbox", { reorderable: false, renameShelf: "inactive" }),
                       )}
                     </Shelf>
                   </CollapsibleShelf>
