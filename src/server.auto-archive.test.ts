@@ -224,6 +224,35 @@ describe("auto-archive clock", () => {
     expect(t.archived).toEqual(["back", "back"]);
   });
 
+  it("gives a new wait to a thread the user archived by hand", async () => {
+    const t = await setup({ threads: [quiet("manual", { archivedAt: NOW - DAY })], rows: [settledFor("manual", 40)] });
+    t.setThreads([quiet("manual")]);
+    await t.harness.behavior.emitThreadEvent("thread.unarchived", {
+      thread: makeThreadResponse({ id: "manual" }),
+    } as never);
+    await t.run();
+    expect(t.archived).toEqual([]);
+    t.advance(31 * DAY);
+    await t.run();
+    expect(t.archived).toEqual(["manual"]);
+  });
+
+  it("gives a new wait to a child unarchived on its own after its tree was archived", async () => {
+    const t = await setup({
+      threads: [quiet("p"), quiet("c", { parentThreadId: "p" })],
+      rows: [settledFor("p", 40), settledFor("c", 40)],
+    });
+    await t.run();
+    expect(t.archived).toEqual(["p"]);
+    t.setThreads([quiet("p", { archivedAt: NOW }), quiet("c", { parentThreadId: "p" })]);
+    await t.harness.behavior.emitThreadEvent("thread.unarchived", {
+      thread: makeThreadResponse({ id: "c", parentThreadId: "p" }),
+    } as never);
+    t.advance(7 * HOUR);
+    await t.run();
+    expect(t.archived).toEqual(["p"]);
+  });
+
   it("restarts the wait when it finds an unarchived thread without the event", async () => {
     const t = await setup({ threads: [quiet("back")], rows: [settledFor("back", 40)] });
     await t.run();
@@ -362,6 +391,17 @@ describe("auto-archive workspaces", () => {
     t.advance(6 * HOUR);
     await t.run();
     expect(t.archived).toEqual(["t"]);
+  });
+
+  it("checks a workspace shared by two due trees instead of letting each vouch for the other", async () => {
+    const t = await setup({
+      threads: [quiet("a", { environmentId: "env_shared" }), quiet("b", { environmentId: "env_shared" })],
+      rows: [settledFor("a", 40), settledFor("b", 40)],
+      git: () => dirty,
+    });
+    await t.run();
+    expect(t.gitKeys).toEqual([["env_shared"]]);
+    expect(t.archived).toEqual([]);
   });
 
   it("skips the check for a workspace that a live thread keeps", async () => {

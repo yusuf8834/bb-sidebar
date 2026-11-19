@@ -202,8 +202,11 @@ export default async function plugin(bb: BbPluginApi) {
   // Archived threads miss a tree Settle. One that comes back inside a settled
   // tree is filed with it rather than waking the tree.
   ctx.bb.events.on("thread.unarchived", async ({ thread }) => {
-    autoArchive.restartClock(thread.id);
-    await settleUnarchivedTree(thread.id);
+    try {
+      await settleUnarchivedTree(thread.id);
+    } finally {
+      autoArchive.restartClock(thread.id);
+    }
   });
 
   // A deleted thread must not leave a row behind that would park a future

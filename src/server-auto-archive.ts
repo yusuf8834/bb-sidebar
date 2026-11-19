@@ -67,7 +67,7 @@ export function createServerAutoArchive(
   lifecycle: ReturnType<typeof createServerLifecycle>,
   settings: Awaited<ReturnType<typeof createServerSettings>>,
 ) {
-  const { readAll, loadPolicyThreads, threadSignals, withThreadChanges } = lifecycle;
+  const { readAll, readOne, loadPolicyThreads, threadSignals, withThreadChanges } = lifecycle;
   const readState = (threadId: string) =>
     ctx.db.prepare(`SELECT * FROM auto_archive_state WHERE thread_id = ?`).get(threadId) as StateRow | undefined;
   const writeState = (row: StateRow) =>
@@ -100,6 +100,7 @@ export function createServerAutoArchive(
     return row;
   };
 
+  let workspaceStatusFailing = false;
   const loadWorkspaceStatus = async (environmentIds: readonly string[]) => {
     const results = new Map<string, WorkspaceStatusRow>();
     for (let start = 0; start < environmentIds.length; start += MAX_GIT_STATUS_KEYS) {
@@ -112,16 +113,20 @@ export function createServerAutoArchive(
           outputSchema: z.record(z.string(), z.unknown()),
           signal: AbortSignal.timeout(GIT_STATUS_TIMEOUT_MS),
         });
+        workspaceStatusFailing = false;
         for (const key of keys) {
           const row = gitStatusRowSchema.safeParse(rows[key]);
           if (row.success) results.set(key, row.data);
         }
       } catch (error) {
-        ctx.bb.log.warn(
-          `Auto-archive could not read workspace status; those threads wait for a later pass: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
+        if (!workspaceStatusFailing) {
+          ctx.bb.log.warn(
+            `Auto-archive could not read workspace status; those threads wait for a later pass: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+        workspaceStatusFailing = true;
       }
     }
     return results;
@@ -182,10 +187,17 @@ export function createServerAutoArchive(
         later(state, INELIGIBLE_RETRY_MS);
         continue;
       }
-      // A thread settled later inside the tree restarts the tree's clock.
+      // A thread settled later inside the tree, or one back from the
+      // archive, restarts the tree's clock.
+      const memberClock = (id: string) => {
+        const member = readState(id);
+        return member && member.settled_at === rows.get(id)?.settledAt ? member.clock_start : 0;
+      };
       const dueAt =
-        (tree.settledAt === state.settled_at ? state.clock_start : Math.max(state.clock_start, tree.settledAt)) +
-        afterMs;
+        Math.max(
+          tree.settledAt === state.settled_at ? state.clock_start : Math.max(state.clock_start, tree.settledAt),
+          ...tree.threadIds.map(memberClock),
+        ) + afterMs;
       if (dueAt > now) {
         later(state, dueAt - now);
         continue;
@@ -194,13 +206,15 @@ export function createServerAutoArchive(
     }
     if (candidates.length === 0) return [];
 
-    // bb retires an archived thread's workspace only when no other unarchived
-    // thread uses it; a shared one stays as it is and needs no check.
+    // bb retires an archived thread's workspace only when no unarchived
+    // thread uses it any more. One that a thread outside every tree this pass
+    // may archive still uses stays as it is and needs no check; two due trees
+    // sharing a workspace do not vouch for each other.
+    const archiving = new Set(candidates.flatMap((candidate) => candidate.threadIds));
     const environmentsOf = (threadIds: readonly string[]) => {
-      const tree = new Set(threadIds);
       const ids = new Set(threadIds.map((id) => byId.get(id)?.environmentId ?? null).filter((id) => id !== null));
       for (const thread of threads) {
-        if (!tree.has(thread.id) && thread.environmentId) ids.delete(thread.environmentId);
+        if (!archiving.has(thread.id) && thread.environmentId) ids.delete(thread.environmentId);
       }
       return [...ids];
     };
@@ -215,6 +229,7 @@ export function createServerAutoArchive(
       return false;
     });
     if (clean.length === 0) return [];
+    const safeEnvironments = new Set([...statuses].flatMap(([id, row]) => (isWorkspaceSafeToRetire(row) ? [id] : [])));
 
     // The lookups took time. Archive only what still qualifies now.
     threads = await loadPolicyThreads(true);
@@ -232,7 +247,7 @@ export function createServerAutoArchive(
         freshRows.get(state.thread_id)?.settledAt === state.settled_at &&
         tree.threadIds.length === threadIds.length &&
         tree.threadIds.every((id) => threadIds.includes(id)) &&
-        environmentsOf(tree.threadIds).every((id) => environmentsOf(threadIds).includes(id));
+        environmentsOf(tree.threadIds).every((id) => safeEnvironments.has(id));
       if (!sameTree) continue;
       try {
         await withThreadChanges(threadIds, async () => {
@@ -260,15 +275,21 @@ export function createServerAutoArchive(
     return archived;
   };
 
-  /** A thread back from bb's archive starts a new wait from now. */
+  /**
+   * A thread back from bb's archive, however it got there, starts a new wait
+   * from now; so does the tree it returns into.
+   */
   const restartClock = (threadId: string, now = Date.now()) => {
-    ctx.db
-      .prepare(
-        `UPDATE auto_archive_state
-            SET clock_start = ?, attempts = 0, retry_at = NULL, archived_at = NULL
-          WHERE thread_id = ? AND archived_at IS NOT NULL`,
-      )
-      .run(now, threadId);
+    const row = readOne(threadId);
+    if (row?.settledAt == null) return;
+    writeState({
+      thread_id: threadId,
+      settled_at: row.settledAt,
+      clock_start: now,
+      attempts: 0,
+      retry_at: null,
+      archived_at: null,
+    });
   };
 
   return { archiveSettledThreads, restartClock };
