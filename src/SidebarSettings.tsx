@@ -18,6 +18,7 @@ import { ProjectManagement } from "./ProjectManagement";
 import { configuredSnoozePresetError, parseConfiguredSnoozePresets } from "./lifecycle";
 import { isValidInactiveAfterHours } from "./inactive";
 import { isValidAutoSettleAfterDays } from "./auto-settle";
+import { isValidAutoArchiveAfterDays } from "./auto-archive";
 import type { SaveStatus } from "./settings-ui";
 
 /** Long enough to finish typing a shortcut, short enough to feel instant. */
@@ -33,6 +34,8 @@ const SECTION_BY_SETTING: Record<keyof SidebarSettingsValues, string> = {
   autoSettleInactive: "Thread behavior",
   autoSettleAfterDays: "Thread behavior",
   autoSettleOnMerge: "Thread behavior",
+  autoArchiveSettled: "Thread behavior",
+  autoArchiveAfterDays: "Thread behavior",
   showRunningChildrenWhenCollapsed: "Child threads",
   showSideChatsAsChildren: "Child threads",
   childSortField: "Child threads",
@@ -52,7 +55,8 @@ const SECTION_BY_SETTING: Record<keyof SidebarSettingsValues, string> = {
 const validDraft = (value: SidebarSettingsValues) =>
   configuredSnoozePresetError(value.snoozePresets) === null &&
   (!value.inactiveThreadsEnabled || isValidInactiveAfterHours(value.inactiveAfterHours)) &&
-  (!value.autoSettleInactive || isValidAutoSettleAfterDays(value.autoSettleAfterDays));
+  (!value.autoSettleInactive || isValidAutoSettleAfterDays(value.autoSettleAfterDays)) &&
+  (!value.autoArchiveSettled || isValidAutoArchiveAfterDays(value.autoArchiveAfterDays));
 
 /**
  * The plugin's settings page. Every change saves on its own, as bb's own
@@ -126,6 +130,7 @@ export function SidebarSettings() {
   const dirty = dirtyFields.current.size > 0;
   const inactiveHoursValid = isValidInactiveAfterHours(draft.inactiveAfterHours);
   const autoSettleDaysValid = isValidAutoSettleAfterDays(draft.autoSettleAfterDays);
+  const autoArchiveDaysValid = isValidAutoArchiveAfterDays(draft.autoArchiveAfterDays);
   const snoozePresetsError = configuredSnoozePresetError(draft.snoozePresets);
   const hasValidationError = !validDraft(draft);
   const snoozePreview = snoozePresetsError
@@ -155,6 +160,8 @@ export function SidebarSettings() {
           sent.inactiveAfterHours = DEFAULT_SIDEBAR_SETTINGS.inactiveAfterHours;
         if (!isValidAutoSettleAfterDays(sent.autoSettleAfterDays))
           sent.autoSettleAfterDays = DEFAULT_SIDEBAR_SETTINGS.autoSettleAfterDays;
+        if (!isValidAutoArchiveAfterDays(sent.autoArchiveAfterDays))
+          sent.autoArchiveAfterDays = DEFAULT_SIDEBAR_SETTINGS.autoArchiveAfterDays;
         const patch = Object.fromEntries([...sentVersions.keys()].map((key) => [key, sent[key]]));
         loadRequestSeq.current += 1;
         const section = changedSectionRef.current;
@@ -231,6 +238,7 @@ export function SidebarSettings() {
         update={update}
         status={statusFor("Thread behavior")}
         autoSettleDaysValid={autoSettleDaysValid}
+        autoArchiveDaysValid={autoArchiveDaysValid}
         snoozePresetsError={snoozePresetsError}
         snoozePreview={snoozePreview}
       />

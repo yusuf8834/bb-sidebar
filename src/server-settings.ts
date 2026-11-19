@@ -17,8 +17,10 @@ const storedSettingsSchema = z.object(
 // Settling finished pull requests, and later settling quiet threads, became
 // opt-in. Installs that already had sidebar data when each change shipped
 // keep that setting on until they save their own settings; a new install has
-// empty tables when these run, so it gets the new defaults. Append new names;
-// the runner refuses a changed statement at an existing index.
+// empty tables when these run, so it gets the new defaults. Later migrations
+// follow this list in server.ts, so a new install default goes at the end of
+// that array, not here: the runner refuses a changed statement at an existing
+// index.
 export const INSTALL_DEFAULTS_MIGRATIONS = [
   `CREATE TABLE IF NOT EXISTS install_defaults (name TEXT PRIMARY KEY)`,
   `INSERT OR IGNORE INTO install_defaults (name)

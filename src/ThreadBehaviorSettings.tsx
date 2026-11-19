@@ -1,4 +1,5 @@
 import { MAX_AUTO_SETTLE_AFTER_DAYS, MIN_AUTO_SETTLE_AFTER_DAYS } from "./auto-settle";
+import { MAX_AUTO_ARCHIVE_AFTER_DAYS, MIN_AUTO_ARCHIVE_AFTER_DAYS } from "./auto-archive";
 import {
   InlineNumber,
   SettingRow,
@@ -13,10 +14,12 @@ export function ThreadBehaviorSettings({
   update,
   status,
   autoSettleDaysValid,
+  autoArchiveDaysValid,
   snoozePresetsError,
   snoozePreview,
 }: SettingsDraftSectionProps & {
   autoSettleDaysValid: boolean;
+  autoArchiveDaysValid: boolean;
   snoozePresetsError: string | null;
   snoozePreview: string[];
 }) {
@@ -87,6 +90,28 @@ export function ThreadBehaviorSettings({
           checked={draft.autoSettleOnMerge}
           onChange={(checked) => update("autoSettleOnMerge", checked)}
         />
+      </SettingsGroup>
+      <SettingsGroup title="Automatic archive">
+        <SwitchRow
+          title="Archive settled threads"
+          description="Archives a thread in bb once it has been on the Settled shelf this long, with its child threads. Skips pinned threads, threads with a child that is not settled, and workspaces with uncommitted changes. Archived threads can be restored from bb's archive."
+          checked={draft.autoArchiveSettled}
+          onChange={(checked) => update("autoArchiveSettled", checked)}
+        >
+          {draft.autoArchiveSettled ? (
+            <InlineNumber
+              label="Days before auto-archive"
+              prefix="After"
+              suffix="days on the Settled shelf"
+              value={draft.autoArchiveAfterDays}
+              min={MIN_AUTO_ARCHIVE_AFTER_DAYS}
+              max={MAX_AUTO_ARCHIVE_AFTER_DAYS}
+              valid={autoArchiveDaysValid}
+              errorId="auto-archive-days-error"
+              onChange={(value) => update("autoArchiveAfterDays", value)}
+            />
+          ) : null}
+        </SwitchRow>
       </SettingsGroup>
     </SettingsSection>
   );

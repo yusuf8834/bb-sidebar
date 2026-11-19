@@ -112,7 +112,9 @@ it("marks only quiet-thread settling for an install made after finished pull req
   // Installed with every earlier migration, used, then upgraded to this one.
   const host = await start(createFakePluginHost({ pluginId: "bb-sidebar" }));
   const db = host.bb.storage.database();
-  db.prepare("DELETE FROM _bb_migrations WHERE id = (SELECT MAX(id) FROM _bb_migrations)").run();
+  // Un-apply the quiet-thread marker and the one migration added after it
+  // (the auto-archive table, which is idempotent).
+  db.prepare("DELETE FROM _bb_migrations WHERE id >= (SELECT MAX(id) - 1 FROM _bb_migrations)").run();
   db.prepare("INSERT INTO inbox_order (thread_id, sort_index) VALUES (?, ?)").run("thr", 0);
   const upgraded = await host.harness.lifecycle.reload(plugin);
   disposers.push(() => upgraded.harness.lifecycle.dispose());

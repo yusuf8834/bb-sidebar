@@ -273,3 +273,34 @@ it("replaces the compact switch with a thread display choice", async () => {
     }),
   );
 });
+
+it("offers archiving settled threads, off by default, with a validated day count", async () => {
+  let stored = { ...DEFAULT_SIDEBAR_SETTINGS };
+  const writes: Partial<SidebarSettingsValues>[] = [];
+  renderSlot(
+    { component: SidebarSettings },
+    {},
+    {
+      rpc: {
+        ...extraRpc,
+        getSidebarSettings: () => stored,
+        updateSidebarSettings: (input) => {
+          writes.push(input as Partial<SidebarSettingsValues>);
+          stored = { ...stored, ...(input as Partial<SidebarSettingsValues>) };
+          return stored;
+        },
+      },
+    },
+  );
+  const toggle = await screen.findByRole("switch", { name: "Archive settled threads" });
+  expect(toggle.getAttribute("aria-checked")).toBe("false");
+  expect(screen.queryByLabelText("Days before auto-archive")).toBeNull();
+  fireEvent.click(toggle);
+  const days = screen.getByLabelText("Days before auto-archive");
+  expect(days).toHaveProperty("value", "30");
+  await waitFor(() => expect(writes).toEqual([{ autoArchiveSettled: true }]));
+  fireEvent.change(days, { target: { value: "400" } });
+  expect(await screen.findByText("Enter a whole number from 1 to 365.")).toBeTruthy();
+  fireEvent.change(days, { target: { value: "14" } });
+  await waitFor(() => expect(writes).toEqual([{ autoArchiveSettled: true }, { autoArchiveAfterDays: 14 }]));
+});
