@@ -1,7 +1,8 @@
 import { PluginCliError, cliCommand, defineCli } from "@get-bb/plugin-sdk";
 import type { PluginCliContext } from "@get-bb/plugin-sdk";
 import type { ServerHandlers } from "./server-context";
-import type { ThreadLimitState } from "./contract";
+import type { ThreadRecoveryState } from "./contract";
+import { limitOf } from "./rate-limit-labels";
 import type { createServerLifecycle } from "./server-lifecycle";
 import {
   configuredSnoozePresetError,
@@ -73,7 +74,7 @@ function parseWake(value: string, now = new Date()): number {
 }
 
 /** The sidebar's provider-limit state for these threads, as its rows read it. */
-type ThreadLimits = (input: { keys: string[] }) => Promise<Record<string, ThreadLimitState | null>>;
+type ThreadLimits = (input: { keys: string[] }) => Promise<Record<string, ThreadRecoveryState | null>>;
 
 export function createServerCli(
   lifecycle: ReturnType<typeof createServerLifecycle>,
@@ -102,7 +103,7 @@ export function createServerCli(
       const row = readOne(thread.id) ?? undefined;
       const signals = threadSignals(thread);
       if (asking.has(thread.id)) signals.hasPendingInteraction = true;
-      if (waitsForScheduledContinue(row, limits[thread.id]?.scheduled, thread.queuedWork, now)) {
+      if (waitsForScheduledContinue(row, limitOf(limits[thread.id])?.scheduled, thread.queuedWork, now)) {
         signals.hasQueuedWork = false;
       }
       return resolveRowShelf(row, signals, now, thread.pinnedAt !== null);

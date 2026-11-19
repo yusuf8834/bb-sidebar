@@ -9,7 +9,7 @@ import { threadDisplayTitle } from "./inbox";
 import { Icon, type IconName } from "./components/Icon";
 import { ProviderGlyph } from "./ProviderGlyph";
 import { StatusGlyph } from "./StatusGlyph";
-import { useStatusLimit, useThreadRowStatus, useThreadWithDraft } from "./StatusSlot";
+import { retryingStatus, useStatusLimit, useThreadRowStatus, useThreadWithDraft } from "./StatusSlot";
 import { StillThreadStatusGlyph } from "./StillThreadStatusGlyph";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { projectIconUrl } from "./project-icons";
@@ -17,8 +17,8 @@ import { OpenPortDetails, useLookUpOpenPorts } from "./OpenPorts";
 import { ThreadPullRequestDetails } from "./ThreadPullRequests";
 import { compareChildThreads, useChildThreadDisplay } from "./ChildThreadDisplay";
 import { cn } from "./lib/utils";
-import { useLimitActions, useThreadLimit } from "./RateLimits";
-import { limitDescription, limitStatus } from "./rate-limit-labels";
+import { useLimitActions, useThreadLimit, useThreadRetry } from "./RateLimits";
+import { limitDescription, limitStatus, limitTime, retryLabel } from "./rate-limit-labels";
 
 export function ThreadDetailsTooltip({
   thread,
@@ -169,6 +169,18 @@ export function ThreadDetailsTooltip({
         </div>
         <span className="sr-only">Status: {status.label}</span>
         {limit ? <DetailRow icon="Clock" label="Provider limit" value={limitDescription(limit)} /> : null}
+        {!limit && status.retryAt !== undefined ? (
+          // The row only has room for "Retrying"; the card says when.
+          <DetailRow
+            icon="Clock"
+            label="Retry"
+            value={
+              status.retryAt === null
+                ? "bb retries this turn soon"
+                : `bb retries this turn at ${limitTime(status.retryAt, null)}`
+            }
+          />
+        ) : null}
         {rowStatus ? (
           // Another plugin's row status, spelled out: the row only has room for its glyph.
           <div className="flex items-center gap-2">
@@ -230,8 +242,14 @@ export function ThreadDetailsTooltip({
 function useCardStatus(thread: PluginSidebarThread) {
   const shown = useThreadWithDraft(thread);
   const limit = useStatusLimit(thread);
+  const retry = useThreadRetry(thread);
   if (thread.hasPendingInteraction) return { label: "Needs you", indicator: "waiting-for-input" } as const;
-  return { label: limit ? limitStatus(limit) : (shown.indicatorLabel ?? "Idle"), indicator: shown.indicator };
+  // While bb waits to resend a failed turn, its queued glyph stands in for the failure's, limit or not.
+  const indicator = retryingStatus(shown, retry) ? "queued-waiting" : shown.indicator;
+  if (limit) return { label: limitStatus(limit), indicator };
+  if (indicator === "queued-waiting" && retry)
+    return { label: retryLabel(retry, null), indicator, retryAt: retry.sendAt };
+  return { label: shown.indicatorLabel ?? "Idle", indicator };
 }
 
 /** bb's link routing opens the subthread; `onOpen` only closes the card. */

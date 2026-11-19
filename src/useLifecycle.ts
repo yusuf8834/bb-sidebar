@@ -27,6 +27,7 @@ import { threadsWithAskingDescendants } from "./child-status";
 import { resolveThreadTitlesIn, threadDisplayTitle } from "./inbox";
 import { threadTreeIds } from "./thread-tree";
 import { useLimitActions } from "./RateLimits";
+import { limitOf } from "./rate-limit-labels";
 import type { LifecycleRows } from "./useLifecycleRows";
 
 export interface LifecycleApi {
@@ -161,7 +162,7 @@ export function useLifecycle(threads: readonly PluginSidebarThread[], lifecycleR
     // back from any shelf, ends a snooze, and blocks parking it again.
     const signalsFor = (thread: PluginSidebarThread) => {
       const signals = sidebarThreadSignals(thread);
-      const scheduled = recovery?.rows[thread.id]?.scheduled;
+      const scheduled = limitOf(recovery?.rows[thread.id])?.scheduled;
       if (waitsForScheduledContinue(rows.get(thread.id), scheduled, thread.queuedWork, now)) {
         signals.hasQueuedWork = false;
       }

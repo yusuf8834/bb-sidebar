@@ -1,11 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRealtime, useRealtimeConnectionState, useRpc, type PluginSidebarThread } from "@get-bb/plugin-sdk/app";
-import type { bbSidebarRpcContract, ThreadLimitState } from "./contract";
+import type { bbSidebarRpcContract, ThreadRecoveryState } from "./contract";
 import { RATE_LIMITS_CHANNEL } from "./realtime-channels";
 import { errorDetail, toast } from "./lib/toast";
 import { useOnDemandLookups } from "./useOnDemandLookups";
+import { limitOf } from "./rate-limit-labels";
 
-type LimitRows = Record<string, ThreadLimitState | null>;
+type LimitRows = Record<string, ThreadRecoveryState | null>;
 const RateLimitsContext = createContext<{
   rows: LimitRows;
   pending: ReadonlySet<string>;
@@ -21,7 +22,8 @@ function mayHaveLimit(thread: PluginSidebarThread) {
 }
 
 /**
- * Provider limits for threads that are errored or have queued work. The 30s
+ * Provider limits, and bb's queued retries of failed turns, for threads that
+ * are errored or have queued work. The 30s
  * poll, realtime pings and reconnects cover live threads only; a settled one
  * is looked up when the user looks at it. `settledThreadIds` is null until
  * the lifecycle rows are known, and nothing recurs before then, because every
@@ -159,7 +161,7 @@ export function RateLimitsProvider({
           await rpc.call("cancelLimitContinue", { threadId, queuedMessageId });
           request.current += 1;
           setRows((previous) => {
-            const limit = previous[threadId];
+            const limit = limitOf(previous[threadId]);
             const next =
               limit?.retry?.id === queuedMessageId ? { ...limit, retry: null } : limit && { ...limit, scheduled: null };
             return { ...previous, [threadId]: next ?? null };
@@ -184,9 +186,19 @@ export function RateLimitsProvider({
 
 export function useThreadLimit(thread: PluginSidebarThread) {
   const context = useContext(RateLimitsContext);
-  const limit = context?.rows[thread.id] ?? null;
+  const limit = limitOf(context?.rows[thread.id]);
   if (!mayHaveLimit(thread)) return null;
   return limit;
+}
+
+/**
+ * bb's queued retry of the thread's failed turn, limit or not. The row reads
+ * it only through `retryingStatus`, which checks it against the thread itself.
+ */
+export function useThreadRetry(thread: PluginSidebarThread) {
+  const context = useContext(RateLimitsContext);
+  if (!mayHaveLimit(thread)) return null;
+  return context?.rows[thread.id]?.retry ?? null;
 }
 
 export function useLimitActions() {

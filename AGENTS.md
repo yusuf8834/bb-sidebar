@@ -139,7 +139,8 @@ Wired tests deliver invalidations through `flush()`; app tests use
 - `server-settle-cleanup`: cleanup previews, cleanup, and runtime reclaim.
 - `server-settle-actions`: tree settle, return to Active, and Undo snapshots.
 - `server-policy`: automatic settle passes and settings revisions.
-- `server-rate-limits`: provider-limit reads and scheduled Continue queue actions.
+- `server-rate-limits`: provider-limit reads, bb's queued retries of failed turns,
+  and scheduled Continue queue actions.
 - `server-rate-limit-details`: failed-turn classification and provider reset times.
 - `server-handlers`: RPC handlers assembled from the modules.
 - `server-cli`: the `bb sidebar` agent command over those handlers. Keep it to
