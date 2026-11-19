@@ -10,7 +10,8 @@ const RateLimitsContext = createContext<{
   rows: LimitRows;
   pending: ReadonlySet<string>;
   schedule: (threadId: string, sendAt?: number) => Promise<boolean>;
-  cancel: (threadId: string, queuedMessageId: string) => Promise<boolean>;
+  /** `retry` names bb's queued retry, which the server cancels the same way. */
+  cancel: (threadId: string, queuedMessageId: string, retry?: boolean) => Promise<boolean>;
   /** Looks up a settled thread, which the recurring refresh skips. */
   lookUp: (threadId: string) => void;
 } | null>(null);
@@ -119,22 +120,25 @@ export function RateLimitsProvider({
     previousConnection.current = connection;
   }, [connection, refresh]);
 
-  const mutate = useCallback(async (threadId: string, action: () => Promise<void>) => {
-    if (mutations.current.has(threadId)) return false;
-    mutations.current.add(threadId);
-    setPending(new Set(mutations.current));
-    request.current += 1;
-    try {
-      await action();
-      return true;
-    } catch (error) {
-      toast.error("Could not update scheduled Continue", { description: errorDetail(error) });
-      return false;
-    } finally {
-      mutations.current.delete(threadId);
+  const mutate = useCallback(
+    async (threadId: string, action: () => Promise<void>, failure = "Could not update scheduled Continue") => {
+      if (mutations.current.has(threadId)) return false;
+      mutations.current.add(threadId);
       setPending(new Set(mutations.current));
-    }
-  }, []);
+      request.current += 1;
+      try {
+        await action();
+        return true;
+      } catch (error) {
+        toast.error(failure, { description: errorDetail(error) });
+        return false;
+      } finally {
+        mutations.current.delete(threadId);
+        setPending(new Set(mutations.current));
+      }
+    },
+    [],
+  );
   const schedule = useCallback(
     (threadId: string, sendAt?: number) =>
       mutate(threadId, async () => {
@@ -148,18 +152,22 @@ export function RateLimitsProvider({
     [rpc, mutate],
   );
   const cancel = useCallback(
-    (threadId: string, queuedMessageId: string) =>
-      mutate(threadId, async () => {
-        await rpc.call("cancelLimitContinue", { threadId, queuedMessageId });
-        request.current += 1;
-        setRows((previous) => {
-          const limit = previous[threadId];
-          const next =
-            limit?.retry?.id === queuedMessageId ? { ...limit, retry: null } : limit && { ...limit, scheduled: null };
-          return { ...previous, [threadId]: next ?? null };
-        });
-        await refresh();
-      }),
+    (threadId: string, queuedMessageId: string, retry = false) =>
+      mutate(
+        threadId,
+        async () => {
+          await rpc.call("cancelLimitContinue", { threadId, queuedMessageId });
+          request.current += 1;
+          setRows((previous) => {
+            const limit = previous[threadId];
+            const next =
+              limit?.retry?.id === queuedMessageId ? { ...limit, retry: null } : limit && { ...limit, scheduled: null };
+            return { ...previous, [threadId]: next ?? null };
+          });
+          await refresh();
+        },
+        retry ? "Could not cancel bb's retry" : undefined,
+      ),
     [rpc, mutate, refresh],
   );
   const merged = useMemo(

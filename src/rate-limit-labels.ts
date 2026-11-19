@@ -13,7 +13,7 @@ export function limitTime(at: number, timeZone: string | null) {
 }
 
 export function limitStatus(limit: ThreadLimitState) {
-  // bb's queued retry sends first, so it leads even when the sidebar's own Continue is also queued.
+  // bb's queued retry resends the failed turn, so it leads even when the sidebar's own Continue is also queued.
   if (limit.retry) {
     if (limit.retry.failed) return "Retry failed";
     return limit.retry.sendAt === null ? "Retrying" : `Retrying at ${limitTime(limit.retry.sendAt, limit.timeZone)}`;

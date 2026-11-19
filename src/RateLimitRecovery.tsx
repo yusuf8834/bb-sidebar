@@ -17,7 +17,7 @@ export function RateLimitRecovery({ thread }: { thread: PluginSidebarThread }) {
   if (!limit || !actions) return null;
   const pending = actions.pending.has(thread.id);
   const held = pending || open;
-  // bb's queued retry of the failed turn replaces Continue; the button cancels it first.
+  // bb's queued retry resends the failed turn, so it replaces Continue and is the row the button cancels first.
   const { retry, scheduled } = limit;
   const queued = retry ?? scheduled;
   const actionLabel = queued
@@ -82,7 +82,7 @@ export function RateLimitRecovery({ thread }: { thread: PluginSidebarThread }) {
                 event.preventDefault();
                 event.stopPropagation();
                 if (pending) return;
-                if (queued) void actions.cancel(thread.id, queued.id);
+                if (queued) void actions.cancel(thread.id, queued.id, queued === retry);
                 else if (limit.resetsAt !== null) void schedule();
                 else setOpen(true);
               }}

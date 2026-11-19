@@ -252,6 +252,23 @@ describe("sidebar rate-limit recovery", () => {
     expect(scheduleCall).not.toHaveBeenCalled();
   });
 
+  it("keeps bb's retry and names it when cancelling it fails", async () => {
+    mount({
+      initial: retrying,
+      cancel: async () => {
+        throw new Error("bb's retry is already being sent");
+      },
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel bb's retry for Limited work" }));
+    await waitFor(() =>
+      expect(toastMocks.error).toHaveBeenCalledWith(
+        "Could not cancel bb's retry",
+        expect.objectContaining({ description: "bb's retry is already being sent" }),
+      ),
+    );
+    expect(screen.getByText("Retrying at 5:15pm")).toBeDefined();
+  });
+
   it("shows bb's retry first when the sidebar's own Continue is also queued", async () => {
     const { cancelCall } = mount({ initial: { ...scheduled, retry: retrying.retry } });
     expect(await screen.findByText("Retrying at 5:15pm")).toBeDefined();
