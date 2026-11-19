@@ -10,6 +10,10 @@
 
 - **New default settings.** A new install, and any install that has never saved its sidebar settings, now starts with shelves docked to the bottom, child threads listed newest first with their provider icons instead of colour circles, and project colors on with no stripes: project names are coloured and rows have no stripe. "Dock shelves to the bottom" is no longer marked experimental. "Settle quiet threads" is now off for new installs. An install that already had sidebar data keeps settling quiet threads, as with "Settle finished pull requests" when that became opt-in: the switch stays on until you turn it off, and saving any other setting keeps it on. Saved settings keep their values.
 
+### Removed
+
+- **The parent chip in the thread header is gone.** An open child thread no longer shows the "‹ parent title" chip that the sidebar added to bb's thread header, as the child-threads chip went before it. To get back to a parent, use its row in the sidebar, where the child is listed behind the row's child badge, or, for a thread given a parent through the Parent menu, the parent link in the "assigned to" line bb adds to the child's timeline. A parent that is archived, or in a project the sidebar's project filter hides, has no row in the sidebar; clear the filter to bring back the latter.
+
 ### Fixed
 
 - **The agent's own port is no longer listed as a workspace port.** Claude Code listens on a local port for the network proxy of its command sandbox, and bb starts it in the thread's workspace, so the sidebar listed that port under "Workspace ports" and put the port icon on the row, as if the thread had started a server. The stop button in the hover card, Clean in the Settled shelf and "Close ports" after a settle then stopped the agent itself, and the sidebar never settled the thread for you while its agent was loaded, whichever automatic-settle rule applied. The port scan now leaves out the process bb started as the thread's agent, for every provider. Servers the agent starts are still listed and can still be stopped. Google Antigravity's agent opens a second port from a helper process, which is still listed.

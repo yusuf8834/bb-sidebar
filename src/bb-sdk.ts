@@ -4,9 +4,8 @@ import {
   experimental_useThreadActions,
   type useSdk,
 } from "@get-bb/plugin-sdk/app";
-import { useCallback, useRef, type ComponentType } from "react";
+import { useCallback, useRef } from "react";
 import type {
-  PluginAppSlots,
   PluginRpcContract,
   PluginRpcResult,
   PluginSidebarThread,
@@ -41,33 +40,6 @@ export {
   // ships it, so it has no fallback.
   experimental_resolveThreadStatus as resolveThreadStatus,
 } from "@get-bb/plugin-sdk/app";
-
-/** Props bb passes to a thread header action. */
-export interface ThreadHeaderActionProps {
-  threadId: string;
-  projectId: string;
-  isCompactViewport: boolean;
-}
-
-interface RetiredHeaderSlot {
-  experimental_threadHeaderAction(registration: {
-    id: string;
-    title: string;
-    component: ComponentType<ThreadHeaderActionProps>;
-  }): void;
-}
-
-/**
- * SDK 0.6.94 dropped this slot from its types, but bb 0.47 and 0.48 still
- * render it (`bb plugin build` warns). Header thread actions are plain buttons,
- * so the parent chip keeps this slot until it is redesigned.
- */
-export function registerThreadHeaderAction(
-  slots: PluginAppSlots,
-  registration: Parameters<RetiredHeaderSlot["experimental_threadHeaderAction"]>[0],
-) {
-  (slots as PluginAppSlots & RetiredHeaderSlot).experimental_threadHeaderAction(registration);
-}
 
 export function useThreadActions(thread: PluginSidebarThread, options?: PluginThreadActionsOptions) {
   const environment = thread.environment?.id ? { id: thread.environment.id, path: thread.environment.path } : null;
