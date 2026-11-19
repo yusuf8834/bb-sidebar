@@ -17,24 +17,33 @@ export function RateLimitRecovery({ thread }: { thread: PluginSidebarThread }) {
   if (!limit || !actions) return null;
   const pending = actions.pending.has(thread.id);
   const held = pending || open;
-  const actionLabel = limit.scheduled
+  // bb's queued retry resends the failed turn, so it replaces Continue and is the row the button cancels first.
+  const { retry, scheduled } = limit;
+  const queued = retry ?? scheduled;
+  const actionLabel = queued
     ? "Cancel"
     : limit.resetsAt === null
       ? "Schedule…"
       : limit.resetsAt > Date.now()
         ? `Continue at ${limitTime(limit.resetsAt, limit.timeZone)}`
         : "Continue now";
-  const visibleLabel = pending ? (limit.scheduled ? "Cancelling…" : "Scheduling…") : actionLabel;
-  const accessibleLabel = limit.scheduled
-    ? `Cancel scheduled Continue for ${thread.displayTitle}`
-    : `${visibleLabel} for ${thread.displayTitle}`;
-  const hint = limit.scheduled
-    ? `Continue scheduled for ${limitTime(limit.scheduled.sendAt, limit.timeZone)}. Cancel the scheduled message.`
-    : limit.resetsAt === null
-      ? "Provider limit reached. Choose when to continue."
-      : limit.resetsAt > Date.now()
-        ? `Limit resets at ${limitTime(limit.resetsAt, limit.timeZone)}${limit.timeZone ? ` (${limit.timeZone})` : ""}. Schedule Continue just after the reset.`
-        : "The reported reset time has passed. Continue this thread.";
+  const visibleLabel = pending ? (queued ? "Cancelling…" : "Scheduling…") : actionLabel;
+  const accessibleLabel = retry
+    ? `Cancel bb's retry for ${thread.displayTitle}`
+    : scheduled
+      ? `Cancel scheduled Continue for ${thread.displayTitle}`
+      : `${visibleLabel} for ${thread.displayTitle}`;
+  const hint = retry
+    ? `bb retries this turn ${retry.sendAt === null ? "soon" : `at ${limitTime(retry.sendAt, limit.timeZone)}`}. Cancel the retry.${
+        scheduled ? ` A Continue is also scheduled for ${limitTime(scheduled.sendAt, limit.timeZone)}.` : ""
+      }`
+    : scheduled
+      ? `Continue scheduled for ${limitTime(scheduled.sendAt, limit.timeZone)}. Cancel the scheduled message.`
+      : limit.resetsAt === null
+        ? "Provider limit reached. Choose when to continue."
+        : limit.resetsAt > Date.now()
+          ? `Limit resets at ${limitTime(limit.resetsAt, limit.timeZone)}${limit.timeZone ? ` (${limit.timeZone})` : ""}. Schedule Continue just after the reset.`
+          : "The reported reset time has passed. Continue this thread.";
   const schedule = async (sendAt?: number) => {
     if (await actions.schedule(thread.id, sendAt)) setOpen(false);
   };
@@ -45,7 +54,7 @@ export function RateLimitRecovery({ thread }: { thread: PluginSidebarThread }) {
           data-limit-control=""
           className={cn(
             "group/limit pointer-events-auto relative inline-grid h-5 shrink-0 items-center whitespace-nowrap text-2xs font-medium",
-            limit.scheduled?.failed
+            queued?.failed
               ? "text-[color:var(--bb-sidebar-tone-error)]"
               : "text-[color:var(--bb-sidebar-tone-pending)]",
           )}
@@ -73,7 +82,7 @@ export function RateLimitRecovery({ thread }: { thread: PluginSidebarThread }) {
                 event.preventDefault();
                 event.stopPropagation();
                 if (pending) return;
-                if (limit.scheduled) void actions.cancel(thread.id, limit.scheduled.id);
+                if (queued) void actions.cancel(thread.id, queued.id, queued === retry);
                 else if (limit.resetsAt !== null) void schedule();
                 else setOpen(true);
               }}
@@ -84,7 +93,7 @@ export function RateLimitRecovery({ thread }: { thread: PluginSidebarThread }) {
               )}
             >
               <Icon
-                name={pending ? "Loading" : limit.scheduled ? "CircleX" : "Clock"}
+                name={pending ? "Loading" : queued ? "CircleX" : "Clock"}
                 className={cn("size-3 shrink-0", pending && "animate-spin motion-reduce:animate-none")}
               />
               <span aria-hidden="true">{visibleLabel}</span>

@@ -22,6 +22,7 @@ const warning: ThreadLimitState = {
   resetsAt: Date.parse("2026-10-27T22:00:00Z"),
   timeZone: "America/Chicago",
   scheduled: null,
+  retry: null,
 };
 const settledRow = { threadId: "limited", settledAt: 200, snoozedUntil: null, snoozedAt: null };
 const limited = (overrides: Partial<PluginSidebarThread> = {}) =>

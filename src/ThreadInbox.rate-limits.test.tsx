@@ -28,10 +28,15 @@ const warning: ThreadLimitState = {
   resetsAt,
   timeZone: "America/Chicago",
   scheduled: null,
+  retry: null,
 };
 const scheduled: ThreadLimitState = {
   ...warning,
   scheduled: { id: "continue_1", sendAt: resetsAt + 30_000, failed: false },
+};
+const retrying: ThreadLimitState = {
+  ...warning,
+  retry: { id: "retry_1", sendAt: resetsAt + 15 * 60_000, failed: false },
 };
 
 function mount({
@@ -58,9 +63,10 @@ function mount({
     state = schedule ? await schedule() : scheduled;
     return state;
   });
-  const cancelCall = vi.fn(async () => {
+  const cancelCall = vi.fn(async (input: unknown) => {
+    const { queuedMessageId } = input as { queuedMessageId: string };
     await cancel?.();
-    state = { ...state, scheduled: null };
+    state = state.retry?.id === queuedMessageId ? { ...state, retry: null } : { ...state, scheduled: null };
     return { ok: true };
   });
   const settleCall = vi.fn(() => ({ ok: true, reclaim: SETTLED_NOTHING }));
@@ -233,6 +239,44 @@ describe("sidebar rate-limit recovery", () => {
     expect(await screen.findByText("Scheduled · 5pm")).toBeDefined();
     expect(screen.getByRole("button", { name: "Cancel scheduled Continue for Limited work" })).toBeDefined();
     expect(screen.queryByRole("button", { name: "Continue at 5pm for Limited work" })).toBeNull();
+  });
+
+  it("shows bb's queued retry instead of Continue, and offers Continue again once it is cancelled", async () => {
+    const { cancelCall, scheduleCall } = mount({ initial: retrying });
+    expect(await screen.findByText("Retrying at 5:15pm")).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Continue at 5pm for Limited work" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel bb's retry for Limited work" }));
+    expect(await screen.findByRole("button", { name: "Continue at 5pm for Limited work" })).toBeDefined();
+    expect(screen.getByText("Limit reached")).toBeDefined();
+    expect(cancelCall).toHaveBeenCalledWith({ threadId: "limited", queuedMessageId: "retry_1" });
+    expect(scheduleCall).not.toHaveBeenCalled();
+  });
+
+  it("keeps bb's retry and names it when cancelling it fails", async () => {
+    mount({
+      initial: retrying,
+      cancel: async () => {
+        throw new Error("bb's retry is already being sent");
+      },
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel bb's retry for Limited work" }));
+    await waitFor(() =>
+      expect(toastMocks.error).toHaveBeenCalledWith(
+        "Could not cancel bb's retry",
+        expect.objectContaining({ description: "bb's retry is already being sent" }),
+      ),
+    );
+    expect(screen.getByText("Retrying at 5:15pm")).toBeDefined();
+  });
+
+  it("shows bb's retry first when the sidebar's own Continue is also queued", async () => {
+    const { cancelCall } = mount({ initial: { ...scheduled, retry: retrying.retry } });
+    expect(await screen.findByText("Retrying at 5:15pm")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel bb's retry for Limited work" }));
+    expect(await screen.findByText("Scheduled · 5pm")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Cancel scheduled Continue for Limited work" })).toBeDefined();
+    expect(cancelCall).toHaveBeenCalledTimes(1);
+    expect(cancelCall).toHaveBeenCalledWith({ threadId: "limited", queuedMessageId: "retry_1" });
   });
 
   it("offers the same action for a nested thread without nesting interactive controls", async () => {

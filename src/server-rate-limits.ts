@@ -5,6 +5,9 @@ import { runThreadTasks } from "./thread-tasks";
 import { portScanContract } from "./port-scan-contract";
 import type { createServerLifecycle } from "./server-lifecycle";
 
+type QueueState = Awaited<ReturnType<ServerContext["bb"]["sdk"]["threads"]["queuedMessages"]["list"]>>[number]["state"];
+const failedState = (state: QueueState) => state === "failed_exhausted" || state === "failed_retrying";
+
 export function createServerRateLimits({ bb }: ServerContext, lifecycle: ReturnType<typeof createServerLifecycle>) {
   const host = bb.hosts.experimental_client({ contract: portScanContract });
   const controller = new AbortController();
@@ -39,26 +42,40 @@ export function createServerRateLimits({ bb }: ServerContext, lifecycle: ReturnT
   for (const event of ["thread.failed", "thread.active", "thread.idle", "thread.deleted"] as const) {
     bb.events.on(event, threadChanged);
   }
+  // bb queues its retry of a failed turn (provider-retry does it for a provider limit) a moment after
+  // `thread.failed`, so its own queue events refresh the warning.
+  for (const event of ["message.queued", "message.dispatched", "message.cancelled"] as const) {
+    bb.events.on(event, ({ entry }) => {
+      if (entry.payload.kind === "retry") threadChanged();
+    });
+  }
   bb.events.on("thread.failed", ({ thread }) => keepWaitingOnContinue(thread.id));
 
-  async function scheduledContinue(threadId: string) {
+  async function queued(threadId: string) {
     const queue = await bb.sdk.threads.queuedMessages.list({ threadId });
-    return queue.find(
-      (entry) =>
-        entry.originPluginId === bb.pluginId &&
-        entry.sendAt !== null &&
-        entry.content.length === 1 &&
-        entry.content[0]?.type === "text" &&
-        entry.content[0].text === "Continue",
-    );
+    return {
+      scheduled: queue.find(
+        (entry) =>
+          entry.originPluginId === bb.pluginId &&
+          entry.sendAt !== null &&
+          entry.content.length === 1 &&
+          entry.content[0]?.type === "text" &&
+          entry.content[0].text === "Continue",
+      ),
+      retry: queue.find((entry) => entry.payload.kind === "retry"),
+    };
+  }
+
+  async function scheduledContinue(threadId: string) {
+    return (await queued(threadId)).scheduled;
   }
 
   async function read(threadId: string): Promise<ThreadLimitState | null> {
     const thread = await bb.sdk.threads.get({ threadId });
     if (thread.archivedAt !== null || thread.deletedAt !== null) return null;
-    const scheduled = await scheduledContinue(threadId);
+    const { scheduled, retry } = await queued(threadId);
     let limit: ThreadLimitState | null = null;
-    if (thread.status === "error" || scheduled) {
+    if (thread.status === "error" || scheduled || retry) {
       const events = await bb.sdk.threads.events.list({
         threadId,
         order: "desc",
@@ -83,16 +100,15 @@ export function createServerRateLimits({ bb }: ServerContext, lifecycle: ReturnT
         }
       }
     }
-    if (!scheduled) return limit;
+    // bb's retry shows only with a provider limit; retries of other failures are not this warning's business.
+    const retryState = retry && limit ? { id: retry.id, sendAt: retry.sendAt, failed: failedState(retry.state) } : null;
+    if (!scheduled) return limit && { ...limit, retry: retryState };
     return {
       message: limit?.message ?? "Continue scheduled after the provider limit resets",
       resetsAt: limit?.resetsAt ?? null,
       timeZone: limit?.timeZone ?? null,
-      scheduled: {
-        id: scheduled.id,
-        sendAt: scheduled.sendAt!,
-        failed: scheduled.state === "failed_exhausted" || scheduled.state === "failed_retrying",
-      },
+      scheduled: { id: scheduled.id, sendAt: scheduled.sendAt!, failed: failedState(scheduled.state) },
+      retry: retryState,
     };
   }
 
@@ -171,17 +187,14 @@ export function createServerRateLimits({ bb }: ServerContext, lifecycle: ReturnT
         if (!limit) throw new Error("This thread is no longer stopped by a provider limit");
         const existing = await scheduledContinue(threadId);
         if (existing) {
-          if (existing.state !== "failed_exhausted" && existing.state !== "failed_retrying")
-            await snoozeScheduled(threadId, existing.sendAt!);
+          if (!failedState(existing.state)) await snoozeScheduled(threadId, existing.sendAt!);
           return {
             ...limit,
-            scheduled: {
-              id: existing.id,
-              sendAt: existing.sendAt!,
-              failed: existing.state === "failed_exhausted" || existing.state === "failed_retrying",
-            },
+            scheduled: { id: existing.id, sendAt: existing.sendAt!, failed: failedState(existing.state) },
           };
         }
+        // bb already resends the failed turn; a Continue on top of it would start a second turn.
+        if (limit.retry) return limit;
         const now = Date.now();
         const at = sendAt ?? (limit.resetsAt === null ? null : Math.max(now + 1000, limit.resetsAt + 30_000));
         if (at === null) throw new Error("Choose a time because the provider did not report its reset time");
@@ -203,9 +216,16 @@ export function createServerRateLimits({ bb }: ServerContext, lifecycle: ReturnT
         return { ...limit, scheduled: { id: result.queuedMessage.id, sendAt: at, failed: false } };
       });
     },
+    /** Cancels the sidebar's own scheduled Continue, or bb's queued retry of the limited turn. */
     cancelLimitContinue({ threadId, queuedMessageId }: { threadId: string; queuedMessageId: string }) {
       return withLock(threadId, async () => {
-        const entry = await scheduledContinue(threadId);
+        const { scheduled: entry, retry } = await queued(threadId);
+        if (retry?.id === queuedMessageId) {
+          if (retry.state === "claimed") throw new Error("bb's retry is already being sent");
+          await bb.sdk.threads.queuedMessages.delete({ threadId, queuedMessageId });
+          changed();
+          return { ok: true as const };
+        }
         if (!entry || entry.id !== queuedMessageId) throw new Error("This scheduled Continue is no longer queued");
         if (entry.state === "claimed") throw new Error("The scheduled Continue is already being sent");
         await bb.sdk.threads.queuedMessages.delete({ threadId, queuedMessageId });
