@@ -45,7 +45,8 @@ live again). Snoozed, Parked and Inactive-shelf threads stay live.
 - Exception: `server-auto-archive` (hourly `auto-archive` schedule) is the one
   recurring job that targets settled threads, because archiving them is its
   purpose. Off by default; while off a pass reads settings and returns. On, it
-  decides from lifecycle rows and its `auto_archive_state` table, lists bb's
+  decides from lifecycle rows, its `auto_archive_state` table and the
+  turn-on time in `auto_archive_rule` (written by the settings handler), lists bb's
   threads only when a row is due, and reads bb Git status only for workspaces
   of due trees that no live thread shares. A due thread it must keep gets a
   `retry_at`, so it costs no lookup on the next passes. Do not add other

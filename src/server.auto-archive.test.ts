@@ -531,6 +531,18 @@ describe("auto-archive fresh start", () => {
     expect(t.archived).toEqual(["a", "b"]);
   });
 
+  it("drops waits worked out under the old rule when the rule changes", async () => {
+    const t = await setup({
+      threads: [quiet("parent"), quiet("child", { parentThreadId: "parent" })],
+      rows: [settledFor("parent", 40), settledFor("child", 5)],
+    });
+    await t.run();
+    expect(t.archived).toEqual([]);
+    await t.harness.behavior.callRpc("updateSidebarSettings", { autoArchiveAfterDays: 3 });
+    await t.run();
+    expect(t.archived).toEqual(["parent"]);
+  });
+
   it("restarts the wait when the rule is turned off and on again", async () => {
     const t = await setup({ threads: [quiet("old")], rows: [settledFor("old", 400)], enable: false });
     await turnOn(t);
