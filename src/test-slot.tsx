@@ -65,7 +65,7 @@ export function renderSlot<Props extends object>(
       pin: response,
       unpin: response,
       archive: async ({ threadId }: { threadId: string }) => ({ ok: true as const, archivedThreadIds: [threadId] }),
-      unarchive: async () => ({ ok: true as const }),
+      unarchive: async () => ({ ok: true as const, progress: "complete" as const }),
       markRead: response,
       markUnread: response,
       experimental_listCascade: async ({ threadIds }: { threadIds: readonly string[] }) => ({

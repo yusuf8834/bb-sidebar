@@ -52,7 +52,8 @@ export function parseTypesCheck(output) {
       result.host = match[2];
       continue;
     }
-    match = /^Set "([^"]+)" to (\S+) in devDependencies(?: and re-run npm install| —| -)/.exec(line);
+    // bb 0.50.2 nightlies print this line to stderr with an "Error: " prefix.
+    match = /^(?:Error: )?Set "([^"]+)" to (\S+) in devDependencies(?: and re-run npm install| —| -)/.exec(line);
     if (match) {
       result.pins[match[1]] = match[2];
       continue;

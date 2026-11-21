@@ -256,7 +256,7 @@ export function createServerLifecycle(ctx: ServerContext) {
 
   /** One thread under loadPolicyThreads' rules, without listing every thread. */
   const loadPolicyThread = async (threadId: string, includeHidden = false) => {
-    const [thread] = await ctx.bb.sdk.threads.list({ threadIds: [threadId], archived: false, includeHidden });
+    const [thread] = await ctx.bb.sdk.threads.list({ threadIds: [threadId], archived: false, includeHidden, limit: 1 });
     if (!thread || thread.id !== threadId || thread.archivedAt !== null || thread.deletedAt !== null) return undefined;
     return includeHidden || thread.visibility === "visible" ? thread : undefined;
   };

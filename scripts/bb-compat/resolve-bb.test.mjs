@@ -15,6 +15,12 @@ const OUTPUT_CURRENT = `This plugin uses the npm package @get-bb/plugin-sdk; pin
 The declarations are in node_modules/@get-bb/plugin-sdk/bundled-types/ — read them for exact signatures.
 `;
 
+// Real output of bb-app 0.50.2-nightly.44932326961.1: the pin line moved to stderr as an error.
+const OUTPUT_NIGHTLY_0_50_2 = `This plugin uses the npm package @get-bb/plugin-sdk; pin is 0.6.157, host is 0.6.169.
+
+Error: Set "@get-bb/plugin-sdk" to 0.6.169 in devDependencies and re-run npm install (\`bb plugin types\` does it for you).
+`;
+
 test("parses the SDK version and shim pins bb asks for", () => {
   const parsed = parseTypesCheck(OUTPUT_0_48);
   assert.equal(parsed.pin, "0.6.132");
@@ -25,6 +31,13 @@ test("parses the SDK version and shim pins bb asks for", () => {
     shimPins: { "@radix-ui/react-context-menu": "^2.3.3", "tailwind-merge": "^3.4.0" },
     crossChecked: true,
   });
+  const nightly = parseTypesCheck(OUTPUT_NIGHTLY_0_50_2);
+  assert.deepEqual(nightly.unknown, []);
+  assert.deepEqual(decideHost(nightly, ["0.6.169"]), { sdk: "0.6.169", shimPins: {}, crossChecked: true });
+  assert.throws(
+    () => decideHost(parseTypesCheck('Warning: Set "@get-bb/plugin-sdk" to 0.6.169 in devDependencies.\n'), []),
+    /Unrecognised/,
+  );
   assert.deepEqual(decideHost(parseTypesCheck(OUTPUT_CURRENT), ["0.6.132"]), {
     sdk: "0.6.132",
     shimPins: {},

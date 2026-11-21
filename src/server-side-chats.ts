@@ -58,7 +58,7 @@ export function createServerSideChats(ctx: ServerContext, lifecycle: ReturnType<
     const live = new Set<string>();
     for (let start = 0; start < sourceIds.length; start += PAGE_SIZE) {
       const threadIds = sourceIds.slice(start, start + PAGE_SIZE);
-      for (const source of await bb.sdk.threads.list({ threadIds, archived: false })) {
+      for (const source of await bb.sdk.threads.list({ threadIds, archived: false, limit: threadIds.length })) {
         if (source.archivedAt !== null || source.deletedAt !== null) continue;
         const signals = {
           ...rowParkSignals(source),
