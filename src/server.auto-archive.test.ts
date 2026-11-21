@@ -137,10 +137,10 @@ describe("auto-archive settings", () => {
     expect(t.db.prepare(`SELECT COUNT(*) AS n FROM auto_archive_state`).get()).toEqual({ n: 0 });
   });
 
-  it("runs hourly, on its own schedule", async () => {
+  it("runs once a day, on its own schedule", async () => {
     const t = await setup({ threads: [], enable: false });
     expect(t.harness.inspection.registrations.schedules).toContainEqual(
-      expect.objectContaining({ name: "auto-archive", cron: "23 * * * *" }),
+      expect.objectContaining({ name: "auto-archive", cron: "23 4 * * *" }),
     );
   });
 

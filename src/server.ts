@@ -180,9 +180,11 @@ export default async function plugin(bb: BbPluginApi) {
   ctx.bb.background.schedule("auto-settle", "*/5 * * * *", async () => {
     await policy.evaluatePolicies();
   });
-  // Off by default; while off, a pass reads one settings row and stops.
+  // Off by default; while off, a pass reads one settings row and stops. Once a
+  // day is enough for a rule counted in whole days; bb runs a missed pass when
+  // the machine wakes.
   const autoArchive = createServerAutoArchive(ctx, lifecycle, settings);
-  ctx.bb.background.schedule("auto-archive", "23 * * * *", async () => {
+  ctx.bb.background.schedule("auto-archive", "23 4 * * *", async () => {
     await autoArchive.archiveSettledThreads();
   });
   const rateLimits = createServerRateLimits(ctx, lifecycle);

@@ -42,7 +42,7 @@ live again). Snoozed, Parked and Inactive-shelf threads stay live.
   returns before listing threads.
   New server jobs decide "settled" with `resolveRowShelf` or `resolveShelf`
   from shared `src/lifecycle.ts`.
-- Exception: `server-auto-archive` (hourly `auto-archive` schedule) is the one
+- Exception: `server-auto-archive` (daily `auto-archive` schedule) is the one
   recurring job that targets settled threads, because archiving them is its
   purpose. Off by default; while off a pass reads settings and returns. On, it
   decides from lifecycle rows, its `auto_archive_state` table and the

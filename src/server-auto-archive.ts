@@ -17,7 +17,11 @@ const MAX_GIT_STATUS_KEYS = 200;
 const GIT_STATUS_TIMEOUT_MS = 60_000;
 const HOUR_MS = 60 * 60 * 1_000;
 
-/** A failed archive is retried after 1, 2, 4 and 8 hours, then left alone until the thread settles again. */
+/**
+ * A failed archive may be retried after 1, 2, 4 and 8 hours, then is left alone
+ * until the thread settles again. The pass runs once a day, so in practice each
+ * retry waits for the next day's pass, as do the delays below.
+ */
 const MAX_ARCHIVE_ATTEMPTS = 5;
 /** Due, but not archivable now: a live child, a pin, a wake. */
 const INELIGIBLE_RETRY_MS = 6 * HOUR_MS;
