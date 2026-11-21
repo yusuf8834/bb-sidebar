@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.3.14] - 2026-11-21
+
+### Fixed
+
+- **Ready for bb 0.50.2.** The next bb's plugin SDK (0.6.178, in bb's nightlies) requires a page size when listing threads. The sidebar's server looks threads up by ID when it walks a thread's parents and when it finds the threads side chats came from, and those lookups now pass one. bb 0.49 and 0.50.1 already accept it, so nothing changes there.
+
 ## [0.3.13] - 2026-11-20
 
 ### Added
