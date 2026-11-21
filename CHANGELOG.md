@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.3.13] - 2026-11-20
+
 ### Added
 
 - **Archive settled threads automatically (off by default).** Settings → Thread behavior → Automatic archive → "Archive settled threads" archives a thread in bb once it has been on the Settled shelf for a number of days you choose, 30 by default, from 1 to 365. Turning the rule on is a fresh start: a thread already on the Settled shelf waits the full number of days from that moment, and a thread settled later waits from its own settle, by you or by an automatic-settle rule. Turning the rule off and on again starts over. "Include threads already settled", off by default and shown while the rule is on, counts the time before instead, so threads already settled longer than the set days are archived on the next check. A thread that comes back from bb's archive starts a new wait, and a thread settled later inside a tree restarts the tree's. A thread is archived with its child threads, as bb's Archive does, so the sidebar only archives a tree when every thread in it is settled and none is pinned, working, waiting on an answer, snoozed, parked or woken. Archiving lets bb remove a thread's workspace a few minutes later, so a thread whose workspace has uncommitted changes, or one bb cannot read, is kept; a workspace another live thread still uses is not removed and needs no check. The sidebar checks once a day (at 4:23 in the morning, or when the machine wakes if it was asleep then) and looks again at a thread it had to keep on a later day. A failed archive is tried again on up to four later days, then left alone until the thread settles again. Archived threads can be restored from bb's archive as usual. Existing installs and saved settings keep the rule off.
