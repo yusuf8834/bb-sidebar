@@ -178,7 +178,7 @@ export default async function plugin(bb: BbPluginApi) {
     });
   });
   ctx.bb.background.schedule("auto-settle", "*/5 * * * *", async () => {
-    await policy.evaluatePolicies();
+    await policy.evaluatePolicies({ scheduled: true });
   });
   // Off by default; while off, a pass reads one settings row and stops. Once a
   // day is enough for a rule counted in whole days; bb runs a missed pass when

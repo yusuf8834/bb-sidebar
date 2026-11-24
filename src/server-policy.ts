@@ -6,10 +6,12 @@ import type { createServerSettings } from "./server-settings";
 import type { createServerSettleCleanup } from "./server-settle-cleanup";
 import {
   autoSettleNeedsPullRequest,
+  DAY_MS,
   decideAutoSettle,
   decideAutoSettledThread,
   isAutoSettled,
   parseAutoSettleAfterDays,
+  threadActivityAt,
   type AutoSettlePullRequest,
 } from "./auto-settle";
 import { threadTreeIds } from "./thread-tree";
@@ -20,6 +22,25 @@ import { GITHUB_PR_STATUS_PLUGIN_ID, MAX_PULL_REQUEST_KEYS } from "./github-pr-s
 // Reads wait for overdue PR data, so a batch can take a while; the next
 // five-minute pass retries.
 const PULL_REQUEST_LOOKUP_TIMEOUT_MS = 60_000;
+// bb--github-pr-status gives plugin callers a 10s TTL and runs a 20,200-node
+// (3 pt) branch query for absent/settled PRs. Pacing scheduled passes keeps
+// large multi-host workspaces well inside GitHub's 5,000 pts/hr GraphQL budget.
+const OPEN_PR_CACHE_TTL_MS = 15 * 60_000;
+const ABSENT_OR_TERMINAL_PR_CACHE_TTL_MS = 60 * 60_000;
+const UNKNOWN_PR_CACHE_TTL_MS = 15 * 60_000;
+const MAX_SCHEDULED_LOOKUPS_PER_PASS = 60;
+
+interface CachedPullRequest {
+  value: AutoSettlePullRequest;
+  checkedAt: number;
+  maxActivityAt: number;
+}
+
+function pullRequestCacheTtlMs(value: AutoSettlePullRequest): number {
+  if (value.outcome === "unknown") return UNKNOWN_PR_CACHE_TTL_MS;
+  if (value.outcome === "absent") return ABSENT_OR_TERMINAL_PR_CACHE_TTL_MS;
+  return value.state === "open" || value.state === "draft" ? OPEN_PR_CACHE_TTL_MS : ABSENT_OR_TERMINAL_PR_CACHE_TTL_MS;
+}
 
 // Rows are parsed one at a time so one malformed row leaves the others usable.
 const pullRequestRowSchema = z.discriminatedUnion("outcome", [
@@ -57,10 +78,36 @@ export function createServerPolicy(
   // failed, PR Status disabled) is not evidence that no open PR exists. Each
   // becomes `unknown`, which keeps the thread where it is.
   let pullRequestLookupFailing = false;
-  const loadPullRequests = async (environmentIds: readonly string[]) => {
+  const pullRequestCache = new Map<string, CachedPullRequest>();
+  const loadPullRequests = async (
+    environmentIds: readonly string[],
+    envActivityById: ReadonlyMap<string, number>,
+    scheduled: boolean,
+  ) => {
     const results = new Map<string, AutoSettlePullRequest>();
-    for (let start = 0; start < environmentIds.length; start += MAX_PULL_REQUEST_KEYS) {
-      const keys = environmentIds.slice(start, start + MAX_PULL_REQUEST_KEYS);
+    const fetchNow = Date.now();
+    const toFetch: string[] = [];
+    for (const environmentId of environmentIds) {
+      const cached = pullRequestCache.get(environmentId);
+      const envActivityAt = envActivityById.get(environmentId) ?? 0;
+      if (
+        scheduled &&
+        cached !== undefined &&
+        envActivityAt <= cached.maxActivityAt &&
+        fetchNow - cached.checkedAt < pullRequestCacheTtlMs(cached.value)
+      ) {
+        results.set(environmentId, cached.value);
+      } else {
+        toFetch.push(environmentId);
+      }
+    }
+    const batchTarget = scheduled
+      ? toFetch
+          .sort((a, b) => (pullRequestCache.get(a)?.checkedAt ?? 0) - (pullRequestCache.get(b)?.checkedAt ?? 0))
+          .slice(0, MAX_SCHEDULED_LOOKUPS_PER_PASS)
+      : toFetch;
+    for (let start = 0; start < batchTarget.length; start += MAX_PULL_REQUEST_KEYS) {
+      const keys = batchTarget.slice(start, start + MAX_PULL_REQUEST_KEYS);
       let rows: Record<string, unknown> = {};
       try {
         rows = await ctx.bb.sdk.plugins.callRpc({
@@ -81,19 +128,25 @@ export function createServerPolicy(
         }
         pullRequestLookupFailing = true;
       }
+      const checkedAt = Date.now();
       for (const environmentId of keys) {
         const row = pullRequestRowSchema.safeParse(rows[environmentId]);
-        if (!row.success || row.data.outcome === "unavailable") {
-          results.set(environmentId, { outcome: "unknown" });
-        } else if (row.data.outcome === "absent") {
-          results.set(environmentId, { outcome: "absent" });
-        } else {
-          results.set(environmentId, {
-            outcome: "available",
-            state: row.data.pullRequest.state,
-            updatedAt: row.data.pullRequest.updatedAt,
-          });
-        }
+        const value: AutoSettlePullRequest =
+          !row.success || row.data.outcome === "unavailable"
+            ? { outcome: "unknown" }
+            : row.data.outcome === "absent"
+              ? { outcome: "absent" }
+              : {
+                  outcome: "available",
+                  state: row.data.pullRequest.state,
+                  updatedAt: row.data.pullRequest.updatedAt,
+                };
+        results.set(environmentId, value);
+        pullRequestCache.set(environmentId, {
+          value,
+          checkedAt,
+          maxActivityAt: envActivityById.get(environmentId) ?? 0,
+        });
       }
     }
     return results;
@@ -139,6 +192,7 @@ export function createServerPolicy(
   let policyEvaluation: Promise<string[]> | null = null;
 
   let policyEvaluationQueued = false;
+  let queuedEvaluationScheduled = true;
 
   let policySettingsRevision = 0;
 
@@ -155,9 +209,11 @@ export function createServerPolicy(
   // reporting `unavailable`.
   let unansweredThreadIds = new Set<string>();
 
-  const evaluatePolicies = (): Promise<string[]> => {
+  const evaluatePolicies = (options?: { scheduled?: boolean }): Promise<string[]> => {
+    const scheduled = options?.scheduled === true;
     if (policyEvaluation !== null) {
       policyEvaluationQueued = true;
+      queuedEvaluationScheduled = queuedEvaluationScheduled && scheduled;
       return policyEvaluation;
     }
     const evaluation = (async () => {
@@ -188,24 +244,39 @@ export function createServerPolicy(
       // Repair older trees before any decision reads their children's rows.
       const backfilled = backfillSettledChildRows(threads);
       const lifecycleByThreadId = new Map(readAll().map((row) => [row.threadId, row]));
-      const environmentIds = readsPullRequests
-        ? [
-            ...new Set(
-              threads.flatMap((thread) => {
-                const row = lifecycleByThreadId.get(thread.id) ?? null;
-                if (
-                  thread.environmentId === null ||
-                  (!rechecks(thread.id) && isAutoSettled(row)) ||
-                  !autoSettleNeedsPullRequest(row, thread)
-                ) {
-                  return [];
-                }
-                return [thread.environmentId];
-              }),
-            ),
-          ]
-        : [];
-      const pullRequests = await loadPullRequests(environmentIds);
+      const lookupNow = Date.now();
+      const liveEnvironmentIds = new Set<string>();
+      const envActivityById = new Map<string, number>();
+      const candidateEnvironmentIds = new Set<string>();
+      for (const thread of threads) {
+        if (thread.environmentId === null) continue;
+        liveEnvironmentIds.add(thread.environmentId);
+        if (thread.visibility === "hidden" && thread.parentThreadId === null) continue;
+        if (!readsPullRequests) continue;
+        const row = lifecycleByThreadId.get(thread.id) ?? null;
+        if ((!rechecks(thread.id) && isAutoSettled(row)) || !autoSettleNeedsPullRequest(row, thread)) {
+          continue;
+        }
+        const activityAt = threadActivityAt(thread);
+        // Without onMerge, a live thread younger than afterDays can never settle
+        // regardless of PR state, so skip querying GitHub on scheduled passes.
+        if (
+          scheduled &&
+          !policySettings.onMerge &&
+          policySettings.afterDays !== null &&
+          !isAutoSettled(row) &&
+          activityAt >= lookupNow - policySettings.afterDays * DAY_MS
+        ) {
+          continue;
+        }
+        candidateEnvironmentIds.add(thread.environmentId);
+        const prevActivity = envActivityById.get(thread.environmentId) ?? 0;
+        if (activityAt > prevActivity) envActivityById.set(thread.environmentId, activityAt);
+      }
+      for (const cachedEnvId of pullRequestCache.keys()) {
+        if (!liveEnvironmentIds.has(cachedEnvId)) pullRequestCache.delete(cachedEnvId);
+      }
+      const pullRequests = await loadPullRequests([...candidateEnvironmentIds], envActivityById, scheduled);
       const now = Date.now();
       const decide = (keepThreadIds: ReadonlySet<string>) => {
         unanswered = new Set();
@@ -322,8 +393,10 @@ export function createServerPolicy(
       if (policyEvaluation !== settledEvaluation) return;
       policyEvaluation = null;
       if (!policyEvaluationQueued) return;
+      const nextScheduled = queuedEvaluationScheduled;
       policyEvaluationQueued = false;
-      void evaluatePolicies().catch((error) => {
+      queuedEvaluationScheduled = true;
+      void evaluatePolicies({ scheduled: nextScheduled }).catch((error) => {
         ctx.bb.log.error(
           `Queued automatic settle evaluation failed: ${error instanceof Error ? error.message : String(error)}`,
         );

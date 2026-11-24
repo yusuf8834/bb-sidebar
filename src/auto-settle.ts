@@ -2,7 +2,13 @@ import { canPark, rowParkSignals, type ThreadRowWork } from "./lifecycle";
 
 export const MIN_AUTO_SETTLE_AFTER_DAYS = 1;
 export const MAX_AUTO_SETTLE_AFTER_DAYS = 90;
-const DAY_MS = 24 * 60 * 60 * 1_000;
+export const DAY_MS = 24 * 60 * 60 * 1_000;
+
+export function threadActivityAt(
+  thread: Pick<AutoSettleThread, "createdAt" | "updatedAt" | "latestAttentionAt">,
+): number {
+  return Math.max(thread.createdAt, thread.updatedAt, thread.latestAttentionAt);
+}
 
 export type SettledOverride = "active" | "settled";
 
@@ -112,7 +118,7 @@ export function decideAutoSettle({
   // state until the next evaluation can make a safe decision.
   if (pullRequest.outcome === "unknown") return "keep";
 
-  const activityAt = Math.max(thread.createdAt, thread.updatedAt, thread.latestAttentionAt);
+  const activityAt = threadActivityAt(thread);
   let shouldSettle = false;
 
   if (pullRequest.outcome === "available") {
