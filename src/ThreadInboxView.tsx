@@ -12,10 +12,11 @@ import {
 import type { ActiveSortMode, ProjectViewUnit } from "./inbox-layout";
 import { cn } from "./lib/utils";
 import { ActiveSortPicker } from "./ActiveSortPicker";
-import { ProjectScopeControls } from "./ProjectScopeControls";
+import { usePinnedProjects } from "./usePinnedProjects";
+import { ProjectHeaderActions, ProjectScopeControls } from "./ProjectScopeControls";
 import type { ThreadReorderControls } from "./ThreadCard";
 import type { createInboxThreadRenderer } from "./InboxThreadRenderer";
-import { useInboxActions } from "./InboxContext";
+import { useInboxActions, useInboxEnvironment } from "./InboxContext";
 import { SCROLL_FADE_CLASS } from "./useScrollFade";
 import type { useInboxProjectGroups } from "./useInboxProjectGroups";
 
@@ -80,12 +81,18 @@ export function ThreadInboxView({
   sortedVisibleInbox,
   settledLimit,
 }: ThreadInboxViewProps) {
-  const { setExpandedShelves, setActiveSortMode, setSettledLimit } = useInboxActions();
+  const { setExpandedShelves, setActiveSortMode, setSettledLimit, setScope } = useInboxActions();
+  const { projects } = useInboxEnvironment();
+  const pins = usePinnedProjects({ projects, status });
+  const toggleScope = (projectId: string) =>
+    setScope((current) =>
+      current.includes(projectId) ? current.filter((id) => id !== projectId) : [...current, projectId],
+    );
   const { pinned, inbox, working, inactive, snoozed, parked, settled } = shelves;
   return (
     <div data-bb-sidebar-root="" className="flex min-h-0 flex-1 flex-col">
       {/* Project scope is plugin-owned; New thread lives in bb's chrome. */}
-      <ProjectScopeControls scope={scope} status={status} />
+      <ProjectScopeControls scope={scope} pins={pins} onToggleScope={toggleScope} />
 
       <p role="status" aria-live="polite" className="sr-only">
         {reorderAnnouncement}
@@ -153,6 +160,15 @@ export function ThreadInboxView({
                     {activeSortMode === "project" ? (
                       <ProjectGroups
                         units={inboxProjectView}
+                        renderActions={(id, name) => (
+                          <ProjectHeaderActions
+                            name={name}
+                            selected={scope.includes(id)}
+                            pinned={pins.pinnedProjects.includes(id)}
+                            onFilter={() => toggleScope(id)}
+                            onPin={() => pins.toggleProjectPin(id)}
+                          />
+                        )}
                         onToggleEnvironment={environmentGrouping.toggleEnvironmentCollapse}
                         reorderControls={(unit, name) =>
                           reorderControls(unit.key, "inbox", `${name} ${unit.environment ? "environment" : "project"}`)

@@ -34,14 +34,16 @@ export function ProjectScopeSelect({
   scope,
   projects,
   projectIconRevision,
-  onScopeChange,
+  onResetScope,
+  onToggleScope,
   pinnedProjects,
   onToggleProjectPin,
 }: {
   scope: readonly string[];
   projects: readonly PluginSidebarProject[];
   projectIconRevision: number;
-  onScopeChange: (scope: string[]) => void;
+  onResetScope: () => void;
+  onToggleScope: (id: string) => void;
   pinnedProjects: readonly string[];
   onToggleProjectPin: (projectId: string) => void;
 }) {
@@ -83,13 +85,8 @@ export function ProjectScopeSelect({
   };
 
   const select = (optionId: string) => {
-    onScopeChange(
-      optionId === ALL_PROJECTS
-        ? []
-        : scope.includes(optionId)
-          ? scope.filter((id) => id !== optionId)
-          : [...scope, optionId],
-    );
+    if (optionId === ALL_PROJECTS) onResetScope();
+    else onToggleScope(optionId);
     if (!hasCoarsePointer()) queryRef.current?.focus();
   };
 
@@ -168,7 +165,7 @@ export function ProjectScopeSelect({
               type="button"
               aria-label="Reset project filter"
               title="Reset project filter"
-              onClick={() => onScopeChange([])}
+              onClick={onResetScope}
               className="absolute right-7 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-sidebar-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
             >
               <Icon name="ArrowTurnBackward" className="size-3.5" aria-hidden />

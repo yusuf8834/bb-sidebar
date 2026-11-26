@@ -203,6 +203,7 @@ function ActiveProjectGroup({
   projectId,
   projectName,
   projectIconUrl,
+  actions,
   threadCount,
   alerts,
   expanded,
@@ -214,6 +215,7 @@ function ActiveProjectGroup({
   projectId: string;
   projectName: string;
   projectIconUrl: string | null;
+  actions: React.ReactNode;
   threadCount: number;
   alerts: readonly GroupAlert[];
   expanded: boolean;
@@ -233,39 +235,41 @@ function ActiveProjectGroup({
     >
       <section data-drag-visual="" className="relative" aria-label={`${projectName} project`}>
         <ProjectStripe projectId={projectId} view={stripeView} className="z-10" />
-        <button
-          type="button"
-          data-reorder-key={unitKey}
-          onClick={onToggle}
-          onPointerDown={reorder.onPointerDown}
-          onKeyDown={reorder.onKeyDown}
-          aria-expanded={expanded}
-          aria-label={`${projectName} (${threadCount})${groupAlertPhrase(alerts)}`}
-          aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
-          // Padded like a card, so the name lines up with every row's title and
-          // the chevron with every row's trailing glyph. Vertical panning stays
-          // with the scroller, as on a row.
-          className={cn(
-            "flex w-full touch-pan-y items-center gap-1.5 px-2.5 text-left",
-            expanded ? "pb-0.5 pt-2" : "py-1.5",
-            !reorder.disabled && "cursor-grab active:cursor-grabbing",
-          )}
-        >
-          <ProjectFavicon projectId={projectId} src={projectIconUrl} name={projectName} className="size-3" />
-          <span
-            style={projectColor}
+        <div className={cn("group/heading relative", expanded ? "[&>*]:pt-2 [&>*]:pb-0.5" : "[&>*]:py-1.5")}>
+          <button
+            type="button"
+            data-reorder-key={unitKey}
+            onClick={onToggle}
+            onPointerDown={reorder.onPointerDown}
+            onKeyDown={reorder.onKeyDown}
+            aria-expanded={expanded}
+            aria-label={`${projectName} (${threadCount})${groupAlertPhrase(alerts)}`}
+            aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
+            // Padded like a card, so the name lines up with every row's title and
+            // the chevron with every row's trailing glyph. Vertical panning stays
+            // with the scroller, as on a row.
             className={cn(
-              "min-w-0 truncate text-2xs font-medium",
-              projectColor ? "bb-sidebar-project-name" : "text-muted-foreground",
+              "flex w-full touch-pan-y items-center gap-1.5 px-2.5 text-left",
+              !reorder.disabled && "cursor-grab active:cursor-grabbing",
             )}
           >
-            {projectName}
-          </span>
-          <span className="shrink-0 text-2xs text-muted-foreground/50">{threadCount}</span>
-          <GroupAlertDots alerts={alerts} />
-          <span className="h-px flex-1 bg-sidebar-border/50" />
-          <HeaderChevron expanded={expanded} className="text-muted-foreground/50" />
-        </button>
+            <ProjectFavicon projectId={projectId} src={projectIconUrl} name={projectName} className="size-3" />
+            <span
+              style={projectColor}
+              className={cn(
+                "min-w-0 truncate text-2xs font-medium",
+                projectColor ? "bb-sidebar-project-name" : "text-muted-foreground",
+              )}
+            >
+              {projectName}
+            </span>
+            <span className="shrink-0 text-2xs text-muted-foreground/50">{threadCount}</span>
+            <GroupAlertDots alerts={alerts} />
+            <span className="h-px flex-1 bg-sidebar-border/50 group-hover/heading:mr-10 group-focus-within/heading:mr-10 [@media(hover:none)]:mr-10" />
+            <HeaderChevron expanded={expanded} className="text-muted-foreground/50" />
+          </button>
+          {actions}
+        </div>
         <ul ref={attachListMotionRef} aria-label={`${projectName} active threads`} className="flex flex-col gap-px">
           {children}
         </ul>
@@ -332,11 +336,13 @@ function EnvironmentGroup({
 /** Lone threads and whole projects, in one list so either can pass the other. */
 export function ProjectGroups({
   units,
+  renderActions,
   reorderControls,
   renderThread,
   onToggleEnvironment,
 }: {
   units: readonly ProjectViewUnit[];
+  renderActions: (projectId: string, name: string) => React.ReactNode;
   reorderControls: (unit: Extract<ProjectViewUnit, { kind: "group" }>, projectName: string) => ThreadReorderControls;
   renderThread: (thread: PluginSidebarThread, options?: InboxThreadOptions) => React.ReactNode;
   onToggleEnvironment: (key: string) => void;
@@ -356,6 +362,7 @@ export function ProjectGroups({
             unitKey={unit.key}
             projectId={unit.projectId}
             projectName={projectName}
+            actions={renderActions(unit.projectId, projectName)}
             projectIconUrl={projectIconUrl(unit.projectId, projectIconRevision)}
             threadCount={unit.threadCount}
             alerts={unit.alerts}

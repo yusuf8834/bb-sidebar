@@ -1,9 +1,9 @@
-import type { useSidebarThreads } from "./bb-sdk";
+import { Icon } from "./components/Icon";
 import { useInboxActions, useInboxEnvironment } from "./InboxContext";
 import { ProjectScopeSelect } from "./ProjectScopeSelect";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { projectIconUrl } from "./project-icons";
-import { usePinnedProjects } from "./usePinnedProjects";
+import type { usePinnedProjects } from "./usePinnedProjects";
 import { cn } from "./lib/utils";
 import { useState, type DragEvent } from "react";
 
@@ -14,14 +14,16 @@ function dropPlacement(event: DragEvent<HTMLButtonElement>) {
 
 export function ProjectScopeControls({
   scope,
-  status,
+  pins,
+  onToggleScope,
 }: {
   scope: readonly string[];
-  status: ReturnType<typeof useSidebarThreads>["status"];
+  pins: ReturnType<typeof usePinnedProjects>;
+  onToggleScope: (id: string) => void;
 }) {
   const { projects, projectIconRevision } = useInboxEnvironment();
   const { setScope } = useInboxActions();
-  const { pinnedProjects, toggleProjectPin, moveProjectPin } = usePinnedProjects({ projects, status });
+  const { pinnedProjects, toggleProjectPin, moveProjectPin } = pins;
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<{ id: string; placement: "before" | "after" } | null>(null);
   const clearDrag = () => {
@@ -38,7 +40,8 @@ export function ProjectScopeControls({
         scope={scope}
         projects={projects}
         projectIconRevision={projectIconRevision}
-        onScopeChange={setScope}
+        onResetScope={() => setScope([])}
+        onToggleScope={onToggleScope}
         pinnedProjects={pinnedProjects}
         onToggleProjectPin={toggleProjectPin}
       />
@@ -88,11 +91,7 @@ export function ProjectScopeControls({
                   const target = shortcuts[shortcuts.indexOf(project) + offset];
                   if (target) moveProjectPin(project.id, target.id, offset < 0 ? "before" : "after");
                 }}
-                onClick={() =>
-                  setScope((current) =>
-                    current.includes(project.id) ? current.filter((id) => id !== project.id) : [...current, project.id],
-                  )
-                }
+                onClick={() => onToggleScope(project.id)}
                 className={cn(
                   "relative flex min-h-7 min-w-0 max-w-full select-none items-center gap-1.5 rounded-md px-1.5 py-1 text-xs outline-none hover:bg-sidebar-accent focus-visible:ring-1 focus-visible:ring-ring [&_img]:pointer-events-none",
                   active ? "bg-sidebar-accent text-foreground" : "text-muted-foreground",
@@ -120,6 +119,48 @@ export function ProjectScopeControls({
           })}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/** Sibling controls leave collapsing and reordering on the project heading button. */
+export function ProjectHeaderActions({
+  name,
+  selected,
+  pinned,
+  onFilter,
+  onPin,
+}: {
+  name: string;
+  selected: boolean;
+  pinned: boolean;
+  onFilter: () => void;
+  onPin: () => void;
+}) {
+  const buttonClass =
+    "flex size-5 items-center justify-center rounded-sm text-muted-foreground/60 hover:bg-sidebar-accent hover:text-foreground aria-pressed:text-primary focus-visible:ring-1 focus-visible:ring-ring";
+  return (
+    <div className="pointer-events-none absolute inset-y-0 right-7 flex items-center opacity-0 group-hover/heading:pointer-events-auto group-hover/heading:opacity-100 group-focus-within/heading:pointer-events-auto group-focus-within/heading:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100">
+      <button
+        type="button"
+        className={buttonClass}
+        aria-label={`Filter by ${name}`}
+        aria-pressed={selected}
+        title={selected ? `Remove ${name} from project filter` : `Filter by ${name}`}
+        onClick={onFilter}
+      >
+        <Icon name="Filter" className="size-2.5" aria-hidden />
+      </button>
+      <button
+        type="button"
+        className={buttonClass}
+        aria-label={`Pin ${name} to top`}
+        aria-pressed={pinned}
+        title={pinned ? `Unpin ${name}` : `Pin ${name} to top`}
+        onClick={onPin}
+      >
+        <Icon name={pinned ? "PinOff" : "Pin"} className="size-2.5" aria-hidden />
+      </button>
     </div>
   );
 }

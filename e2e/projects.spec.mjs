@@ -155,6 +155,46 @@ test("project filter remembers multiple projects per window and All projects res
   await expect(page.getByRole("group", { name: "Pinned projects" })).toHaveCount(0);
 });
 
+test("project headings share filter and pin actions with the picker", async ({ page, request, secondProject }) => {
+  await reset(request);
+  await open(page, { width: 280 });
+  const name = secondProject.name;
+  const group = page.getByRole("region", { name: `${name} project`, exact: true });
+  const pin = group.getByRole("button", { name: `Pin ${name} to top` });
+  const filter = group.getByRole("button", { name: `Filter by ${name}` });
+  await expect(pin).toHaveCount(0);
+  await page.getByRole("button", { name: "Sort active threads: Manual order" }).click();
+  await page.getByRole("dialog", { name: "Sort active threads" }).getByText("Project", { exact: true }).click();
+  await page.keyboard.press("Escape");
+  const heading = group.getByRole("button", { expanded: true });
+  await heading.hover();
+  await expect(pin).toBeInViewport();
+  await expect(pin.locator("..")).toHaveCSS("opacity", "1");
+  await group.screenshot({ path: test.info().outputPath("project-header-actions.png") });
+  await pin.click();
+  await expect(page.getByRole("button", { name: "Project scope: All projects" })).toBeVisible();
+  await heading.focus();
+  await heading.press("Tab");
+  await expect(filter).toBeFocused();
+  await filter.press("Enter");
+  await expect(heading).toBeVisible();
+  await expect(link(page, fixture.threads[0].title)).toHaveCount(0);
+  const shortcut = page
+    .getByRole("group", { name: "Pinned projects" })
+    .getByRole("button", { name: `Filter by ${name}` });
+  await expect(shortcut).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Project scope: 1 project" }).click();
+  const row = page.getByRole("row", { name, exact: true });
+  await expect(row).toHaveAttribute("aria-selected", "true");
+  await row.getByRole("button", { name: `Unpin ${name}` }).click();
+  await row.click();
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(shortcut).toHaveCount(0);
+  await expect(pin).toHaveAttribute("aria-pressed", "false");
+  await expect(filter).toHaveAttribute("aria-pressed", "false");
+  await expect(link(page, fixture.threads[0].title)).toBeVisible();
+});
+
 test("custom project color styles persist after reload", async ({ page, request }) => {
   await reset(request);
   await open(page);

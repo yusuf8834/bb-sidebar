@@ -16,6 +16,7 @@ export { default as ComputerTerminal01Icon } from "@hugeicons/core-free-icons/Co
 export { default as Mail01Icon } from "@hugeicons/core-free-icons/Mail01Icon";
 export { default as MailOpen01Icon } from "@hugeicons/core-free-icons/MailOpen01Icon";
 export { default as Edit02Icon } from "@hugeicons/core-free-icons/Edit02Icon";
+export { default as FilterIcon } from "@hugeicons/core-free-icons/FilterIcon";
 export { default as FolderGitIcon } from "@hugeicons/core-free-icons/FolderGitIcon";
 export { default as GitBranchIcon } from "@hugeicons/core-free-icons/GitBranchIcon";
 export { default as GitPullRequestIcon } from "@hugeicons/core-free-icons/GitPullRequestIcon";
