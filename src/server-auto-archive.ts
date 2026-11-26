@@ -5,9 +5,12 @@ import type { createServerSettings } from "./server-settings";
 import type { SidebarSettingsValues } from "./sidebar-settings-values";
 import {
   DAY_MS,
+  type ExtraFolders,
+  extraFoldersOf,
   isValidAutoArchiveAfterDays,
   isWorkspaceSafeToRetire,
   settledArchiveTree,
+  workspaceVerdict,
   type WorkspaceStatusRow,
 } from "./auto-archive";
 
@@ -15,6 +18,8 @@ const GIT_PLUGIN_ID = "bb--git";
 /** bb's Git plugin `status` accepts at most this many environment ids per call. */
 const MAX_GIT_STATUS_KEYS = 200;
 const GIT_STATUS_TIMEOUT_MS = 60_000;
+const ENVIRONMENT_TIMEOUT_MS = 30_000;
+const ENVIRONMENT_READS_AT_ONCE = 20;
 const HOUR_MS = 60 * 60 * 1_000;
 
 /**
@@ -27,6 +32,8 @@ const MAX_ARCHIVE_ATTEMPTS = 5;
 const INELIGIBLE_RETRY_MS = 6 * HOUR_MS;
 /** Due, but its workspace has uncommitted changes. */
 const DIRTY_RETRY_MS = 6 * HOUR_MS;
+/** Due, but its workspace has extra folders that bb's Git status does not cover. */
+const EXTRA_FOLDERS_RETRY_MS = 6 * HOUR_MS;
 /** Due, but bb could not say whether its workspace is clean. */
 const UNKNOWN_RETRY_MS = HOUR_MS;
 /** Archived or deleted elsewhere; look again in case it comes back. */
@@ -182,6 +189,42 @@ export function createServerAutoArchive(
     return results;
   };
 
+  /**
+   * Which workspaces have extra folders. Read with `environments.get`, which
+   * every supported bb has; stable bb's environments have no such field.
+   * A failed read leaves the workspace out: unknown, so it is kept.
+   */
+  let environmentReadFailing = false;
+  const loadExtraFolders = async (environmentIds: readonly string[]) => {
+    const results = new Map<string, ExtraFolders>();
+    const failures: unknown[] = [];
+    for (let start = 0; start < environmentIds.length; start += ENVIRONMENT_READS_AT_ONCE) {
+      await Promise.all(
+        environmentIds.slice(start, start + ENVIRONMENT_READS_AT_ONCE).map(async (environmentId) => {
+          try {
+            const environment = await ctx.bb.sdk.environments.get({
+              environmentId,
+              signal: AbortSignal.timeout(ENVIRONMENT_TIMEOUT_MS),
+            });
+            results.set(environmentId, extraFoldersOf(environment));
+          } catch (error) {
+            failures.push(error);
+          }
+        }),
+      );
+    }
+    if (failures.length > 0 && !environmentReadFailing) {
+      const error = failures[0];
+      ctx.bb.log.warn(
+        `Auto-archive could not read a workspace's environment; those threads wait for a later pass: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+    if (environmentIds.length > 0) environmentReadFailing = failures.length > 0;
+    return results;
+  };
+
   let running: Promise<string[]> | null = null;
 
   /**
@@ -285,15 +328,27 @@ export function createServerAutoArchive(
     const statuses = await loadWorkspaceStatus([
       ...new Set(candidates.flatMap((candidate) => environmentsOf(candidate.threadIds))),
     ]);
+    // A clean status does not cover extra folders; read those only for
+    // workspaces whose status already allows retiring them.
+    const extraFolders = await loadExtraFolders(
+      [...statuses].flatMap(([id, row]) => (isWorkspaceSafeToRetire(row) ? [id] : [])),
+    );
+    const verdict = (id: string) => workspaceVerdict(statuses.get(id), extraFolders.get(id));
     const clean = candidates.filter(({ state, threadIds }) => {
-      const environments = environmentsOf(threadIds).map((id) => statuses.get(id));
-      if (environments.every(isWorkspaceSafeToRetire)) return true;
-      const unknown = environments.some((row) => row === undefined || row.outcome !== "available");
-      later(state, unknown ? UNKNOWN_RETRY_MS : DIRTY_RETRY_MS);
+      const verdicts = environmentsOf(threadIds).map(verdict);
+      if (verdicts.every((v) => v === "safe")) return true;
+      later(
+        state,
+        verdicts.includes("unknown")
+          ? UNKNOWN_RETRY_MS
+          : verdicts.includes("dirty")
+            ? DIRTY_RETRY_MS
+            : EXTRA_FOLDERS_RETRY_MS,
+      );
       return false;
     });
     if (clean.length === 0) return [];
-    const safeEnvironments = new Set([...statuses].flatMap(([id, row]) => (isWorkspaceSafeToRetire(row) ? [id] : [])));
+    const safeEnvironments = new Set([...statuses.keys()].filter((id) => verdict(id) === "safe"));
 
     // The lookups took time. Archive only what still qualifies now.
     threads = await loadPolicyThreads(true);

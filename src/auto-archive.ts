@@ -130,3 +130,36 @@ export function isWorkspaceSafeToRetire(row: WorkspaceStatusRow | undefined): bo
   const { hasUncommittedChanges, state } = row.workspace.workingTree;
   return !hasUncommittedChanges && (state === "clean" || state === "committed_unmerged");
 }
+
+/**
+ * Whether a workspace has extra folders: bb's "Also branch" adds worktrees
+ * of the project's other repositories (`additionalPaths`) and removes them
+ * with the main one. bb's Git status covers only the main repository, so
+ * uncommitted work in an extra folder would go unseen. Stable bb has no
+ * such field (`none`); early nightlies list paths, current ones
+ * `{ path, replaces }` objects (both `present`). Any other shape is `unknown`.
+ */
+export type ExtraFolders = "none" | "present" | "unknown";
+
+export function extraFoldersOf(environment: unknown): ExtraFolders {
+  if (typeof environment !== "object" || environment === null) return "unknown";
+  const paths = "additionalPaths" in environment ? environment.additionalPaths : undefined;
+  if (paths == null || (Array.isArray(paths) && paths.length === 0)) return "none";
+  return Array.isArray(paths) ? "present" : "unknown";
+}
+
+/**
+ * What keeps a workspace, if anything: a status bb cannot vouch for or an
+ * unread environment (`unknown`), uncommitted changes (`dirty`) or extra
+ * folders the status does not cover. `extraFolders` is undefined when the
+ * environment was not read.
+ */
+export function workspaceVerdict(
+  status: WorkspaceStatusRow | undefined,
+  extraFolders: ExtraFolders | undefined,
+): "safe" | "dirty" | "extraFolders" | "unknown" {
+  if (status?.outcome !== "available") return "unknown";
+  if (!isWorkspaceSafeToRetire(status)) return "dirty";
+  if (extraFolders === "none") return "safe";
+  return extraFolders === "present" ? "extraFolders" : "unknown";
+}

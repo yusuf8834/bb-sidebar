@@ -3,7 +3,14 @@ import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import { makeThreadResponse } from "@get-bb/plugin-sdk/testing";
 import plugin from "./server";
 import { DEFAULT_SIDEBAR_SETTINGS } from "./sidebar-settings-values";
-import { createFakePluginHost, disposers, projectThread, projectsWith, type ProjectThread } from "./test-server";
+import {
+  createFakePluginHost,
+  disposers,
+  type Environment,
+  projectThread,
+  projectsWith,
+  type ProjectThread,
+} from "./test-server";
 
 const DAY = 24 * 60 * 60 * 1_000;
 const HOUR = 60 * 60 * 1_000;
@@ -37,6 +44,8 @@ async function setup({
   // Most tests check the rule against real settle times; fresh start has its own tests.
   includeSettled = true,
   git = () => clean,
+  // Stable bb's environment: no `additionalPaths` field.
+  environment = (id) => ({ id }),
   archive,
 }: {
   threads: ProjectThread[];
@@ -45,6 +54,8 @@ async function setup({
   days?: number;
   includeSettled?: boolean;
   git?: (environmentId: string) => GitRow;
+  /** The environment bb reads back; an Error fails the read. */
+  environment?: (environmentId: string) => unknown;
   archive?: (threadId: string) => Promise<string[]>;
 }) {
   vi.useFakeTimers({ toFake: ["Date"] });
@@ -52,6 +63,7 @@ async function setup({
   let current = threads;
   const archived: string[] = [];
   const gitKeys: string[][] = [];
+  const environmentReads: string[] = [];
   const callRpc = (async ({ pluginId, method, input, outputSchema }) => {
     if (pluginId !== "bb--git" || method !== "status") throw new Error(`Unexpected RPC ${pluginId}.${method}`);
     const { keys } = input as { keys: string[] };
@@ -62,6 +74,15 @@ async function setup({
     pluginId: "bb-sidebar",
     sdk: {
       plugins: { callRpc },
+      environments: {
+        get: async ({ environmentId }) => {
+          environmentReads.push(environmentId);
+          const value = environment(environmentId);
+          if (value instanceof Error) throw value;
+          // Only the fields the rule reads; the rest of an environment does not matter here.
+          return value as Environment;
+        },
+      },
       projects: { list: async () => projectsWith(current.filter((thread) => thread.archivedAt === null)) },
       threads: {
         get: async ({ threadId }) => makeThreadResponse({ id: threadId }),
@@ -106,6 +127,7 @@ async function setup({
     db,
     archived,
     gitKeys,
+    environmentReads,
     listings,
     run: () => harness.behavior.runSchedule("auto-archive"),
     advance: (ms: number) => vi.setSystemTime(Date.now() + ms),
@@ -420,6 +442,95 @@ describe("auto-archive workspaces", () => {
     await t.run();
     expect(t.gitKeys).toEqual([]);
     expect(t.archived).toEqual(["t"]);
+  });
+});
+
+describe("auto-archive extra folders", () => {
+  it.each<[string, unknown, boolean]>([
+    ["no additionalPaths field (stable bb)", { id: "env_t" }, true],
+    ["an empty list", { id: "env_t", additionalPaths: [] }, true],
+    ["null", { id: "env_t", additionalPaths: null }, true],
+    ["extra folders as paths", { id: "env_t", additionalPaths: ["/workspace/other"] }, false],
+    [
+      "extra folders as objects",
+      { id: "env_t", additionalPaths: [{ path: "/workspace/other", replaces: null }] },
+      false,
+    ],
+    ["a field of another shape", { id: "env_t", additionalPaths: "/workspace/other" }, false],
+  ])("with %s, archives: %s", async (_, environment, archives) => {
+    const t = await setup({
+      threads: [quiet("t", { environmentId: "env_t" })],
+      rows: [settledFor("t", 40)],
+      environment: () => environment,
+    });
+    await t.run();
+    expect(t.environmentReads).toEqual(["env_t"]);
+    expect(t.archived).toEqual(archives ? ["t"] : []);
+  });
+
+  it("reads environments only for workspaces whose Git status allows retiring them", async () => {
+    const t = await setup({
+      threads: [quiet("p", { environmentId: "env_p" }), quiet("c", { parentThreadId: "p", environmentId: "env_c" })],
+      rows: [settledFor("p", 40)],
+      git: (id) => (id === "env_c" ? dirty : clean),
+    });
+    await t.run();
+    expect(t.environmentReads).toEqual(["env_p"]);
+    expect(t.archived).toEqual([]);
+  });
+
+  it("keeps a thread with extra folders without reading its environment every pass", async () => {
+    const t = await setup({
+      threads: [quiet("t", { environmentId: "env_t" })],
+      rows: [settledFor("t", 40)],
+      environment: (id) => ({ id, additionalPaths: ["/workspace/other"] }),
+    });
+    await t.run();
+    t.advance(HOUR);
+    await t.run();
+    expect(t.environmentReads).toEqual(["env_t"]);
+    t.advance(6 * HOUR);
+    await t.run();
+    expect(t.environmentReads).toEqual(["env_t", "env_t"]);
+    expect(t.archived).toEqual([]);
+  });
+
+  it("keeps a thread whose environment cannot be read, logs once and retries later", async () => {
+    let environment: unknown = new Error("bb is busy");
+    const t = await setup({
+      threads: [quiet("t", { environmentId: "env_t" })],
+      rows: [settledFor("t", 40)],
+      environment: () => environment,
+    });
+    await t.run();
+    t.advance(HOUR);
+    await t.run();
+    expect(t.environmentReads).toEqual(["env_t", "env_t"]);
+    expect(t.archived).toEqual([]);
+    const warnings = t.harness.inspection.logEntries.filter((entry) => entry.message.includes("environment"));
+    expect(warnings).toHaveLength(1);
+    environment = { id: "env_t" };
+    t.advance(HOUR);
+    await t.run();
+    expect(t.archived).toEqual(["t"]);
+  });
+
+  it("applies the rule again just before archiving", async () => {
+    // While its environment is read, b moves into a's workspace, which has extra folders.
+    const a = quiet("a", { environmentId: "env_a" });
+    const b = quiet("b", { environmentId: "env_b" });
+    const t = await setup({
+      threads: [a, b],
+      rows: [settledFor("a", 40), settledFor("b", 40)],
+      environment: (id) => {
+        if (id !== "env_a") return { id };
+        t.setThreads([a, { ...b, environmentId: "env_a" }]);
+        return { id, additionalPaths: ["/workspace/other"] };
+      },
+    });
+    await t.run();
+    expect(t.environmentReads.sort()).toEqual(["env_a", "env_b"]);
+    expect(t.archived).toEqual([]);
   });
 });
 

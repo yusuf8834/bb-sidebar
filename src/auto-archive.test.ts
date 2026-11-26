@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { isValidAutoArchiveAfterDays, isWorkspaceSafeToRetire, settledArchiveTree } from "./auto-archive";
+import {
+  extraFoldersOf,
+  isValidAutoArchiveAfterDays,
+  isWorkspaceSafeToRetire,
+  settledArchiveTree,
+  workspaceVerdict,
+} from "./auto-archive";
 
 const idle = {
   hasPendingInteraction: false,
@@ -82,4 +88,26 @@ it("retires only workspaces bb reports clean", () => {
   expect(isWorkspaceSafeToRetire(status(true, "dirty_and_committed_unmerged"))).toBe(false);
   expect(isWorkspaceSafeToRetire({ outcome: "unavailable" })).toBe(false);
   expect(isWorkspaceSafeToRetire(undefined)).toBe(false);
+});
+
+it("reads extra folders loosely: absent or empty is none, a list is present, anything else unknown", () => {
+  expect(extraFoldersOf({ id: "env" })).toBe("none");
+  expect(extraFoldersOf({ additionalPaths: [] })).toBe("none");
+  expect(extraFoldersOf({ additionalPaths: null })).toBe("none");
+  expect(extraFoldersOf({ additionalPaths: ["/other"] })).toBe("present");
+  expect(extraFoldersOf({ additionalPaths: [{ path: "/other", replaces: null }] })).toBe("present");
+  expect(extraFoldersOf({ additionalPaths: "/other" })).toBe("unknown");
+  expect(extraFoldersOf(null)).toBe("unknown");
+});
+
+it("retires a clean workspace only when it has no extra folders", () => {
+  const clean = { outcome: "available", workspace: { workingTree: { hasUncommittedChanges: false, state: "clean" } } };
+  const dirty = { outcome: "available", workspace: { workingTree: { hasUncommittedChanges: true, state: "dirty" } } };
+  expect(workspaceVerdict(clean, "none")).toBe("safe");
+  expect(workspaceVerdict(clean, "present")).toBe("extraFolders");
+  expect(workspaceVerdict(clean, "unknown")).toBe("unknown");
+  expect(workspaceVerdict(clean, undefined)).toBe("unknown");
+  expect(workspaceVerdict(dirty, "none")).toBe("dirty");
+  expect(workspaceVerdict({ outcome: "unavailable" }, "none")).toBe("unknown");
+  expect(workspaceVerdict(undefined, "none")).toBe("unknown");
 });

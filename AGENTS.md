@@ -48,8 +48,11 @@ live again). Snoozed, Parked and Inactive-shelf threads stay live.
   decides from lifecycle rows, its `auto_archive_state` table and the
   turn-on time in `auto_archive_rule` (written by the settings handler), lists bb's
   threads only when a row is due, and reads bb Git status only for workspaces
-  of due trees that no live thread shares. A due thread it must keep gets a
-  `retry_at`, so it costs no lookup on the next passes. Do not add other
+  of due trees that no live thread shares. For those whose status is clean it
+  also reads the environment (`environments.get`): Git status covers only the
+  main repository, so a workspace with extra folders (`additionalPaths`, bb's
+  "Also branch") or an unreadable environment keeps its thread. A due thread
+  it must keep gets a `retry_at`, so it costs no lookup on the next passes. Do not add other
   per-settled-thread work to it.
 
 ## Runtimes and imports
