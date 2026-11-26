@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [0.3.17] - 2026-11-26
+
+### Added
+
+- In the Active shelf’s Project view, hover or focus a project heading to filter by that project or pin its shortcut to the top of the sidebar. Both controls stay in sync with the project picker.
+
+### Fixed
+
+- Collapsing or expanding a project keeps its heading in place. The next group no longer slides over the threads as they appear.
+
 ## [0.3.16] - 2026-11-26
 
 ### Fixed
