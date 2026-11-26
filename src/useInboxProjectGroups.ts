@@ -32,6 +32,7 @@ function toggleId(ids: Set<string>, id: string): Set<string> {
 }
 
 export function useInboxProjectGroups({
+  skipNextMotion,
   orderedInbox,
   dragOrder,
   expanded,
@@ -41,6 +42,7 @@ export function useInboxProjectGroups({
   projectMode,
   orderReady,
 }: {
+  skipNextMotion: () => void;
   orderedInbox: PluginSidebarThread[];
   dragOrder: InboxDragOrder | null;
   expanded: boolean;
@@ -93,10 +95,19 @@ export function useInboxProjectGroups({
       return merged.length === saved.length ? saved : merged;
     });
   }, [projectMode, orderReady, orderedInbox, setProjectOrder]);
-  const toggleProjectCollapse = useCallback((id: string) => setCollapsedProjects((ids) => toggleId(ids, id)), []);
+  const toggleProjectCollapse = useCallback(
+    (id: string) => {
+      skipNextMotion();
+      setCollapsedProjects((ids) => toggleId(ids, id));
+    },
+    [skipNextMotion, setCollapsedProjects],
+  );
   const toggleEnvironmentCollapse = useCallback(
-    (id: string) => setCollapsedEnvironments((ids) => toggleId(ids, id)),
-    [],
+    (id: string) => {
+      skipNextMotion();
+      setCollapsedEnvironments((ids) => toggleId(ids, id));
+    },
+    [skipNextMotion, setCollapsedEnvironments],
   );
   const storedUnits = useMemo(
     () => layoutActiveGroups(orderedInbox, groupEnvironments, projectOrder, groupSingleThreadProjects),

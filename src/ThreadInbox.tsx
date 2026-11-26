@@ -234,6 +234,7 @@ function ThreadInboxContent({
     [attentionParentIds, activeListThreadId, expandedShelves.pinned, pinned],
   );
   const projectGroups = useInboxProjectGroups({
+    skipNextMotion: listAnimationController.skipNextMotion,
     orderedInbox,
     dragOrder,
     expanded: expandedShelves.active,

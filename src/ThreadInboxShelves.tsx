@@ -235,7 +235,7 @@ function ActiveProjectGroup({
     >
       <section data-drag-visual="" className="relative" aria-label={`${projectName} project`}>
         <ProjectStripe projectId={projectId} view={stripeView} className="z-10" />
-        <div className={cn("group/heading relative", expanded ? "[&>*]:pt-2 [&>*]:pb-0.5" : "[&>*]:py-1.5")}>
+        <div className="group/heading relative [&>*]:py-1.5">
           <button
             type="button"
             data-reorder-key={unitKey}

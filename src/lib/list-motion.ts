@@ -150,6 +150,11 @@ export function createListAnimationController(enabled = true) {
   };
   return {
     enabled,
+    // On a group fold, sliding the following group from its old position would
+    // draw it on top of the newly revealed rows. Record the new layout in place.
+    skipNextMotion() {
+      if (lists.size > 0 && holds === 0) schedule(false);
+    },
     suspend() {
       holds++;
       cancel();
