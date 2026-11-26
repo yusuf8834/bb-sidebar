@@ -74,6 +74,9 @@ export function InlineThreadTitle({
       onClick={(event) => event.stopPropagation()}
       onDoubleClick={(event) => event.stopPropagation()}
       onKeyDown={(event) => {
+        // Enter or Escape while an IME is composing picks or drops a candidate;
+        // Safari reports the keydown that ends composition as keyCode 229.
+        if (event.nativeEvent.isComposing || event.keyCode === 229) return;
         if (event.key === "Enter") {
           event.preventDefault();
           finish(true);

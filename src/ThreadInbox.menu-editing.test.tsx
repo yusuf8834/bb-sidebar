@@ -109,6 +109,29 @@ describe("row context menu", () => {
     );
   });
 
+  it("ignores Enter and Escape while an IME is composing", async () => {
+    const rendered = render([thread({ id: "thr_ime", title: "IME title" })]);
+    const row = await screen.findByRole("link", { name: "IME title" });
+
+    fireEvent.doubleClick(row);
+    const input = await screen.findByRole("textbox", { name: "Rename IME title" });
+    fireEvent.change(input, { target: { value: "にほん" } });
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+    fireEvent.keyDown(input, { key: "Escape", isComposing: true });
+    fireEvent.keyDown(input, { key: "Enter", keyCode: 229 });
+    expect(input.isConnected).toBe(true);
+    expect(rendered.sdkCalls.some((call) => call.method === "threads.update")).toBe(false);
+
+    fireEvent.change(input, { target: { value: "日本" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() =>
+      expect(rendered.sdkCalls).toContainEqual({
+        method: "threads.update",
+        args: [{ threadId: "thr_ime", title: "日本" }],
+      }),
+    );
+  });
+
   it("supports double-click rename, Escape cancel, and blur save", async () => {
     const rendered = render([thread({ id: "thr_inline", title: "Inline title" })]);
     const row = await screen.findByRole("link", { name: "Inline title" });
