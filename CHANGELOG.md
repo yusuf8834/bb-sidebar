@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.3.15] - 2026-11-25
+
+### Fixed
+
+- **Renaming a thread works with an input method.** Renaming a thread in its row treated every Enter as save and every Escape as cancel. While an input method is composing, as when typing Japanese, Chinese or Korean, those keys pick or drop a candidate, so the rename was saved or cancelled in the middle of a word. The rename field now leaves both keys to the input method until the composition ends.
+- **Automatic archive keeps a thread whose workspace has extra folders.** bb's nightlies let a worktree thread also branch the project's other repositories ("Also branch"), and bb removes those extra worktrees together with the main one. Before it archives a settled thread, the sidebar asks bb whether the workspace has uncommitted changes, and that answer covers the main repository only, so changes in an extra folder went unseen. "Archive settled threads" now keeps a thread whose workspace has extra folders, and one whose workspace bb cannot describe, on the Settled shelf and looks at it again later. You can still archive such a thread yourself. Nothing changes on bb 0.49 and 0.50.1, where a workspace has no extra folders.
+- **Still ready for bb 0.50.2.** The plugin SDK in bb's nightlies (now 0.6.202) added required fields to the thread list, to sidebar and project threads, and changed what a thread's menu actions are given. The sidebar type-checks against it again. Nothing changes in what the sidebar does, on this bb or on 0.49 and 0.50.1.
+
 ## [0.3.14] - 2026-11-21
 
 ### Fixed
