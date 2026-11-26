@@ -83,6 +83,27 @@ async function setup() {
 }
 
 describe("provider limit detection", () => {
+  const poolerError = "API Error: Request rejected (429) · No Account Pooler account is currently eligible.";
+  it.each([
+    ["at 2026-11-26T19:40:00.000Z (in 5768 seconds).", Date.UTC(2026, 10, 26, 19, 40)],
+    ["at 2026-11-26T13:40:00-06:00.", Date.UTC(2026, 10, 26, 19, 40)],
+    ["in 5768 seconds.", failedAt + 5_768_000],
+    ["at an-unknown-time (in 10 seconds).", failedAt + 10_000],
+    ["at 2026-02-30T19:40:00Z.", null],
+    ["at 2026-11-26T19:40:00.", null],
+    ["later. Request logged at 2026-11-26T19:40:00Z.", null],
+  ])("reads Account Pooler availability %s", (availability, expected) => {
+    const event: Event = {
+      ...failure,
+      data: {
+        providerThreadId: "provider_1",
+        message: "Provider error",
+        detail: `${poolerError} Next account is expected to be available ${availability}`,
+      },
+    };
+    expect(rateLimitDetails([event])).toMatchObject({ resetsAt: expected, timeZone: null });
+  });
+
   it.each([
     ["America/Chicago", "2026-10-27T06:40:00Z"],
     ["Europe/London", "2026-10-27T01:40:00Z"],

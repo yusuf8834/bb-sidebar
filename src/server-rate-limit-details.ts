@@ -1,8 +1,25 @@
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import { CronExpressionParser } from "cron-parser";
+import { z } from "zod";
 import type { ThreadLimitState } from "./contract";
 
 type Event = Awaited<ReturnType<BbPluginApi["sdk"]["threads"]["events"]["list"]>>[number];
+
+const zonedTimestamp = z.iso.datetime({ offset: true });
+
+function reportedReset(message: string, createdAt: number) {
+  // Match the recovery instruction so timestamps elsewhere in an error cannot schedule a Continue.
+  const timestamps = message.matchAll(/\b(?:available|resets?|retry|try again)\s+at\s+(\d[\w:.+-]*)/gi);
+  for (const [, token] of timestamps) {
+    const timestamp = zonedTimestamp.safeParse(token!.replace(/\.$/, "").toUpperCase());
+    if (timestamp.success) return Date.parse(timestamp.data);
+  }
+
+  const delay = /\b(?:available|resets?|retry|try again)(?:\s+at\s+\S+\s+\(|\s+)in\s+(\d+)\s+seconds?\b/i.exec(message);
+  if (!delay) return null;
+  const at = createdAt + Number(delay[1]) * 1000;
+  return Number.isFinite(new Date(at).getTime()) ? at : null;
+}
 
 function localDateReset(message: string, timeZone: string | null) {
   const match = /try again at ([a-z]{3}) (\d{1,2})(?:st|nd|rd|th)?,\s*(\d{4})\s+(\d{1,2}):(\d{2})\s*(am|pm)\b/i.exec(
@@ -36,7 +53,9 @@ function localDateReset(message: string, timeZone: string | null) {
 }
 
 function messageReset(message: string, createdAt: number, hostTimeZone: string | null) {
-  const match = /resets?\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*\(([^)]+)\)/i.exec(message);
+  const reported = reportedReset(message, createdAt);
+  if (reported !== null) return { resetsAt: reported, timeZone: null };
+  const match = /resets?\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*\(([^)]+)\)/i.exec(message);
   if (!match) return localDateReset(message, hostTimeZone);
   const [, hourText, minuteText, period, timeZone] = match;
   const hour = Number(hourText);
@@ -83,7 +102,9 @@ export function rateLimitDetails(
     category === "rate-limit" ||
     category === "budget-exceeded" ||
     ((!category || category === "unknown" || category === "internal") &&
-      /rate[_ -]?limit|(?:session|usage) limit|usage cap/i.test(message));
+      /rate[_ -]?limit|(?:session|usage) limit|usage cap|no account pooler account is currently eligible/i.test(
+        message,
+      ));
   if (!isLimit) return null;
   const reset = messageReset(message, failure.createdAt, hostTimeZone);
   const blocked = limits?.data.rateLimits.windows.filter((window) => window.status === "blocked") ?? [];
