@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.3.16] - 2026-11-26
+
+### Fixed
+
+- When Account Pooler reports when the next account will be available, the sidebar offers “Continue at” with that time in your device’s time zone. It also recognizes retry delays in seconds. The time picker appears only when the reset time is unknown.
+
 ## [0.3.15] - 2026-11-25
 
 ### Fixed
