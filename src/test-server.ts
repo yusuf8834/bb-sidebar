@@ -60,9 +60,14 @@ export type ProjectThread = Extract<
   { threads: unknown }
 >["threads"][number];
 
+// Fields SDK 0.6.202 requires on a project-list thread. Spread from a
+// variable: the pinned SDK lacks them and would reject them in the literal.
+const newerSdkProjectThreadFields = { environmentHostLifecycle: null, environmentStatus: null, statusChangedAt: 0 };
+
 /** A thread as bb's project list reports it, idle unless overridden. */
 export function projectThread(overrides: Partial<ProjectThread> & { id: string }): ProjectThread {
   return {
+    ...newerSdkProjectThreadFields,
     activity: {
       activeBackgroundAgentCount: 0,
       activeBackgroundCommandCount: 0,

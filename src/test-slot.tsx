@@ -2,7 +2,7 @@ import { createContext, useContext, type ComponentType, type ReactNode } from "r
 import { act } from "@testing-library/react";
 import { vi } from "vitest";
 import { useBbNavigate, useSdk } from "@get-bb/plugin-sdk/app";
-import type { PluginSdkApp, PluginThreadActionEntry } from "@get-bb/plugin-sdk/app";
+import type { PluginSdkApp, PluginSidebarThread, PluginThreadActionEntry } from "@get-bb/plugin-sdk/app";
 import {
   installTestPluginRuntime,
   renderSlot as sdkRenderSlot,
@@ -74,7 +74,10 @@ export function renderSlot<Props extends object>(
       ...options.sdk?.threads,
     },
   };
-  const threadActions: NonNullable<RenderSlotOptions["threadActions"]> = (thread, { requestRename }) => {
+  const threadActions: NonNullable<RenderSlotOptions["threadActions"]> = (target, { requestRename }) => {
+    // SDK 0.6.202 types the target as `{ id }`; the sidebar's `useThreadActions`
+    // passes the whole thread, so these fields are there at runtime.
+    const thread = target as typeof target & Pick<PluginSidebarThread, "projectId" | "pinnedAt" | "isUnread">;
     const client = useSdk();
     const navigate = useBbNavigate();
     const entry = (id: string, label: string, run: () => void | Promise<unknown>): PluginThreadActionEntry => ({

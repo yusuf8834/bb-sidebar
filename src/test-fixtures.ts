@@ -1,5 +1,9 @@
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 
+// Fields newer SDKs require. Spread from a variable: the pinned SDK lacks
+// them and would reject them written into a checked literal.
+const newerSdkFields = { experimental_statusChangedAt: 0 };
+
 /**
  * Sidebar-thread fields no test here varies: an idle, visible, unpinned,
  * unarchived thread. Spread first in a factory so its own defaults and the
@@ -42,6 +46,7 @@ function runtimeStatusFor(
 export function sidebarThread(overrides: Partial<PluginSidebarThread> = {}): PluginSidebarThread {
   return {
     ...idleSidebarThreadFields,
+    ...newerSdkFields,
     runtimeStatus: runtimeStatusFor(overrides),
     id: "thr_1",
     projectId: "proj_1",

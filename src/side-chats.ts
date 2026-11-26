@@ -23,7 +23,11 @@ export function sideChatTitle(row: Pick<SideChatRow, "id" | "title" | "titleFall
 function sideChatThread(row: SideChatRow): PluginSidebarThread {
   const title = sideChatTitle(row);
   const status = row.status as PluginSidebarThread["status"];
+  // Required from SDK 0.6.202, unknown to the pinned one, so spread from a
+  // variable. Nothing reads it; the row's last update stands in for it.
+  const newerSdkFields = { experimental_statusChangedAt: row.updatedAt };
   return {
+    ...newerSdkFields,
     id: row.id,
     projectId: row.projectId,
     // Rows draw `title`; a matching `displayTitle` keeps bb's own title out.

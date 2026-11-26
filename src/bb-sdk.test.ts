@@ -4,7 +4,6 @@ import { afterEach, expect, it } from "vitest";
 import { renderSlot } from "./test-slot";
 import { thread } from "./test-inbox";
 import { useThreadActions } from "./bb-sdk";
-import type { PluginThreadActionTarget } from "@get-bb/plugin-sdk/app";
 
 afterEach(cleanup);
 
@@ -20,7 +19,8 @@ it.each([null, "env_1"])("normalizes sidebar environment id %s for bound actions
       workspaceDisplayKind: null,
     },
   });
-  const targets: PluginThreadActionTarget[] = [];
+  // What reached bb; SDK 0.6.202 types it as `{ id }`, older SDKs as the full target.
+  const targets: unknown[] = [];
   renderSlot(
     {
       component: () => {

@@ -43,7 +43,11 @@ export {
 
 export function useThreadActions(thread: PluginSidebarThread, options?: PluginThreadActionsOptions) {
   const environment = thread.environment?.id ? { id: thread.environment.id, path: thread.environment.path } : null;
-  return experimental_useThreadActions({ ...thread, environment }, options);
+  // bb 0.50.2 nightlies type the target as `{ id }` and resolve the rest from
+  // the id; older bb reads the fields, including this `environment`. A
+  // variable, not a literal, so both typings accept the extra fields.
+  const target = { ...thread, environment };
+  return experimental_useThreadActions(target, options);
 }
 
 /** How many other threads bb deletes with this one, archived ones and lifecycle dependents included. */

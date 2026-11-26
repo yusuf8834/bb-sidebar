@@ -158,6 +158,10 @@ export const defaultProviders = [
 ];
 
 export const listProps = {
+  // Required from SDK 0.6.202 (bb 0.50.2 nightlies); a getter, so importing this module needs no DOM.
+  get experimental_scrollElement(): HTMLElement {
+    return document.body;
+  },
   activeThreadId: null,
   activeProjectId: null,
   isCompactViewport: false,
